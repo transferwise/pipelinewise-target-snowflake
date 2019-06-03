@@ -77,10 +77,11 @@ Running the the target connector requires a `config.json` file. Example with the
 
    ```json
    {
-     "account": "localhost",
-     "dbname": 5432,
-     "user": "my_analytics",
-     "password": "my_user",
+
+     "account": "rtxxxxx.eu-central-1",
+     "dbname": "database_name",
+     "user": "my_user",
+     "password": "password",
      "warehouse": "my_virtual_warehouse",
      "aws_access_key_id": "secret",
      "aws_secret_access_key": "secret",
