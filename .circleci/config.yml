@@ -1,0 +1,57 @@
+version: 2
+jobs:
+  # Install PipelineWise components:
+  #  Singer components
+  #  FastSync components
+  #  Command Line Interface
+  build:
+    docker:
+      - image: circleci/python:3.6.2
+    steps:
+      - checkout
+      - run: ./install.sh
+
+
+  # For documentation deployment. You'll need the following environment vars
+  # in your Circle CI settings, otherwise this will not work.
+  #
+  # GH_NAME (your git username)
+  # GH_EMAIL (your git email)
+  # GH_TOKEN (the personal Git token with pushes enabled)
+  deploy-doc:
+    docker:
+      - image: circleci/python:3.6.2
+    working_directory: ~/gh_doc_automation
+    steps:
+      - checkout
+
+      # target-snowflake
+      - run:
+          name: install dependencies
+          command: |
+            python3 -m venv venv
+            . venv/bin/activate
+            pip install --upgrade pip
+            pip install .
+            pip install pylint
+            pylint target_snowflake -d C,W,unexpected-keyword-arg,duplicate-code
+   
+      - run:
+          name: 'Unit Tests'
+          command: |
+            . venv/bin/activate
+            pip install nose
+            nosetests --where=tests/unit
+
+      - run:
+          name: 'Integration Tests'
+          command: |
+            . venv/bin/activate
+            pip install nose
+            nosetests --where=tests/integration/
+
+workflows:
+  version: 2
+  build:
+    jobs:
+      - build
