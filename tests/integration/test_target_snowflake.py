@@ -17,13 +17,9 @@ except ImportError:
 
 
 METADATA_COLUMNS = [
+    '_SDC_EXTRACTED_AT',
     '_SDC_BATCHED_AT',
     '_SDC_DELETED_AT',
-    '_SDC_EXTRACTED_AT',
-    '_SDC_PRIMARY_KEY',
-    '_SDC_RECEIVED_AT',
-    '_SDC_SEQUENCE',
-    '_SDC_TABLE_VERSION'
 ]
 
 
