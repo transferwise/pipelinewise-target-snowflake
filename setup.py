@@ -3,7 +3,7 @@
 from setuptools import setup
 
 setup(name="pipelinewise-target-snowflake",
-      version="1.0.1",
+      version="1.0.2",
       description="Singer.io target for loading data to Snowflake - PipelineWise compatible",
       author="TransferWise",
       url='https://github.com/transferwise/pipelinewise-target-snowflake',
