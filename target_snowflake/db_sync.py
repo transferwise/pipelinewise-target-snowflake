@@ -503,16 +503,13 @@ class DbSync:
         ))
 
     def get_table_columns(self, table_schema=None, table_name=None, filter_schemas=None):
-        return self.query("""SELECT LOWER(t.table_schema) table_schema, LOWER(t.table_name) table_name, c.column_name, c.data_type
-            FROM information_schema.tables t,
-                 information_schema.columns c
-            WHERE t.table_type = 'BASE TABLE'
-              AND LOWER(c.table_schema) = {} AND LOWER(c.table_name) = {}
-            {}""".format(
-                "LOWER(t.table_schema)" if table_schema is None else "'{}'".format(table_schema.lower()),
-                "LOWER(t.table_name)" if table_name is None else "'{}'".format(table_name.lower()),
-                "" if not filter_schemas else "  AND LOWER(c.table_schema) IN ({})".format(', '.join("'{0}'".format(s) for s in filter_schemas))
-        ))
+        sql = """SELECT LOWER(c.table_schema) table_schema, LOWER(c.table_name) table_name, c.column_name, c.data_type
+            FROM information_schema.columns c
+            WHERE 1=1"""
+        if table_schema is not None: sql = sql + " AND LOWER(c.table_schema) = '" + table_schema.lower() + "'"
+        if table_name is not None: sql = sql + " AND LOWER(c.table_name) = '" + table_name.lower() + "'"
+        if filter_schemas is not None: sql = sql + " AND LOWER(c.table_schema) IN (" + ', '.join("'{}'".format(s).lower() for s in filter_schemas) + ")"
+        return self.query(sql)
 
     def update_columns(self, table_columns_cache=None):
         stream_schema_message = self.stream_schema_message
