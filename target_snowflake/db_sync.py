@@ -506,12 +506,9 @@ class DbSync:
         sql = """SELECT LOWER(c.table_schema) table_schema, LOWER(c.table_name) table_name, c.column_name, c.data_type
             FROM information_schema.columns c
             WHERE 1=1"""
-
         if table_schema is not None: sql = sql + " AND LOWER(c.table_schema) = '" + table_schema.lower() + "'"
         if table_name is not None: sql = sql + " AND LOWER(c.table_name) = '" + table_name.lower() + "'"
-
         if filter_schemas is not None: sql = sql + " AND LOWER(c.table_schema) IN (" + ', '.join("'{}'".format(s).lower() for s in filter_schemas) + ")"
-
         return self.query(sql)
 
     def update_columns(self, table_columns_cache=None):
