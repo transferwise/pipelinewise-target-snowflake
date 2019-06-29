@@ -90,7 +90,7 @@ class TestUnit(unittest.TestCase):
 
 
     def test_flatten_schema(self):
-        """Test flattenning of SCHEMA messages"""
+        """Test flattening of SCHEMA messages"""
         flatten_schema = target_snowflake.db_sync.flatten_schema
 
         # Schema with no object properties should be empty dict
@@ -177,7 +177,7 @@ class TestUnit(unittest.TestCase):
 
 
     def test_flatten_record(self):
-        """Test flattenning of RECORD messages"""
+        """Test flattening of RECORD messages"""
         flatten_record = target_snowflake.db_sync.flatten_record
 
         empty_record = {}
