@@ -105,13 +105,17 @@ def flatten_key(k, parent_key, sep):
     return sep.join(inflected_key)
 
 
-def flatten_schema(d, parent_key=[], sep='__'):
+def flatten_schema(d, parent_key=[], sep='__', level=0, max_level=0):
     items = []
+
+    if 'properties' not in d:
+        return {}
+
     for k, v in d['properties'].items():
         new_key = flatten_key(k, parent_key, sep)
         if 'type' in v.keys():
-            if 'object' in v['type']:
-                items.extend(flatten_schema(v, parent_key + [k], sep=sep).items())
+            if 'object' in v['type'] and 'properties' in v and level < max_level:
+                items.extend(flatten_schema(v, parent_key + [k], sep=sep, level=level+1, max_level=max_level).items())
             else:
                 items.append((new_key, v))
         else:
@@ -121,6 +125,9 @@ def flatten_schema(d, parent_key=[], sep='__'):
                     items.append((new_key, list(v.values())[0][0]))
                 elif list(v.values())[0][0]['type'] == 'array':
                     list(v.values())[0][0]['type'] = ['null', 'array']
+                    items.append((new_key, list(v.values())[0][0]))
+                elif list(v.values())[0][0]['type'] == 'object':
+                    list(v.values())[0][0]['type'] = ['null', 'object']
                     items.append((new_key, list(v.values())[0][0]))
 
     key_func = lambda item: item[0]
@@ -132,14 +139,14 @@ def flatten_schema(d, parent_key=[], sep='__'):
     return dict(sorted_items)
 
 
-def flatten_record(d, parent_key=[], sep='__'):
+def flatten_record(d, parent_key=[], sep='__', level=0, max_level=0):
     items = []
     for k, v in d.items():
         new_key = flatten_key(k, parent_key, sep)
-        if isinstance(v, collections.MutableMapping):
-            items.extend(flatten_record(v, parent_key + [k], sep=sep).items())
+        if isinstance(v, collections.MutableMapping) and level < max_level:
+            items.extend(flatten_record(v, parent_key + [k], sep=sep, level=level+1, max_level=max_level).items())
         else:
-            items.append((new_key, json.dumps(v) if type(v) is list else v))
+            items.append((new_key, json.dumps(v) if type(v) is list or type(v) is dict else v))
     return dict(items)
 
 
@@ -244,7 +251,8 @@ class DbSync:
         self.stream_schema_message = stream_schema_message
 
         if stream_schema_message is not None:
-            self.flatten_schema = flatten_schema(stream_schema_message['schema'])
+            self.data_flattening_max_level = self.connection_config.get('data_flattening_max_level', 0)
+            self.flatten_schema = flatten_schema(stream_schema_message['schema'], max_level=self.data_flattening_max_level)
 
         self.s3 = boto3.client(
             's3',
@@ -297,7 +305,7 @@ class DbSync:
     def record_primary_key_string(self, record):
         if len(self.stream_schema_message['key_properties']) == 0:
             return None
-        flatten = flatten_record(record)
+        flatten = flatten_record(record, max_level=self.data_flattening_max_level)
         try:
             key_props = [str(flatten[p]) for p in self.stream_schema_message['key_properties']]
         except Exception as exc:
@@ -306,7 +314,7 @@ class DbSync:
         return ','.join(key_props)
 
     def record_to_csv_line(self, record):
-        flatten = flatten_record(record)
+        flatten = flatten_record(record, max_level=self.data_flattening_max_level)
         return ','.join(
             [
                 json.dumps(flatten[name], ensure_ascii=False) if name in flatten and (flatten[name] == 0 or flatten[name]) else ''
