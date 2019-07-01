@@ -88,3 +88,157 @@ class TestUnit(unittest.TestCase):
         self.assertEquals(mapper(json_obj)          , 'variant')
         self.assertEquals(mapper(json_arr)          , 'variant')
 
+
+    def test_flatten_schema(self):
+        """Test flattening of SCHEMA messages"""
+        flatten_schema = target_snowflake.db_sync.flatten_schema
+
+        # Schema with no object properties should be empty dict
+        schema_with_no_properties = {"type": "object"}
+        self.assertEquals(flatten_schema(schema_with_no_properties), {})
+
+        not_nested_schema = {
+            "type": "object",
+            "properties": {
+                "c_pk": {"type": ["null", "integer"]},
+                "c_varchar": {"type": ["null", "string"]},
+                "c_int": {"type": ["null", "integer"]}}}
+        # NO FLATTENNING - Schema with simple properties should be a plain dictionary
+        self.assertEquals(flatten_schema(not_nested_schema), not_nested_schema['properties'])
+
+        nested_schema_with_no_properties = {
+            "type": "object",
+            "properties": {
+                "c_pk": {"type": ["null", "integer"]},
+                "c_varchar": {"type": ["null", "string"]},
+                "c_int": {"type": ["null", "integer"]},
+                "c_obj": {"type": ["null", "object"]}}}
+        # NO FLATTENNING - Schema with object type property but without further properties should be a plain dictionary
+        self.assertEquals(flatten_schema(nested_schema_with_no_properties), nested_schema_with_no_properties['properties'])
+
+        nested_schema_with_properties = {
+            "type": "object",
+            "properties": {
+                "c_pk": {"type": ["null", "integer"]},
+                "c_varchar": {"type": ["null", "string"]},
+                "c_int": {"type": ["null", "integer"]},
+                "c_obj": {
+                    "type": ["null", "object"],
+                    "properties": {
+                        "nested_prop1": {"type": ["null", "string"]},
+                        "nested_prop2": {"type": ["null", "string"]},
+                        "nested_prop3": {
+                            "type": ["null", "object"],
+                            "properties": {
+                                "multi_nested_prop1": {"type": ["null", "string"]},
+                                "multi_nested_prop2": {"type": ["null", "string"]}
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        # NO FLATTENNING - Schema with object type property but without further properties should be a plain dictionary
+        # No flattening (default)
+        self.assertEquals(flatten_schema(nested_schema_with_properties), nested_schema_with_properties['properties'])
+
+        # NO FLATTENNING - Schema with object type property but without further properties should be a plain dictionary
+        #   max_level: 0 : No flattening (default)
+        self.assertEquals(flatten_schema(nested_schema_with_properties, max_level=0), nested_schema_with_properties['properties'])
+
+        # FLATTENNING - Schema with object type property but without further properties should be a dict with flattened properties
+        self.assertEquals(flatten_schema(nested_schema_with_properties, max_level=1),
+            {
+                'c_pk': {'type': ['null', 'integer']},
+                'c_varchar': {'type': ['null', 'string']},
+                'c_int': {'type': ['null', 'integer']},
+                'c_obj__nested_prop1': {'type': ['null', 'string']},
+                'c_obj__nested_prop2': {'type': ['null', 'string']},
+                'c_obj__nested_prop3': {
+                    'type': ['null', 'object'],
+                    "properties": {
+                        "multi_nested_prop1": {"type": ["null", "string"]},
+                        "multi_nested_prop2": {"type": ["null", "string"]}
+                    }
+                }
+            })
+
+        # FLATTENNING - Schema with object type property but without further properties should be a dict with flattened properties
+        self.assertEquals(flatten_schema(nested_schema_with_properties, max_level=10),
+            {
+                'c_pk': {'type': ['null', 'integer']},
+                'c_varchar': {'type': ['null', 'string']},
+                'c_int': {'type': ['null', 'integer']},
+                'c_obj__nested_prop1': {'type': ['null', 'string']},
+                'c_obj__nested_prop2': {'type': ['null', 'string']},
+                'c_obj__nested_prop3__multi_nested_prop1': {'type': ['null', 'string']},
+                'c_obj__nested_prop3__multi_nested_prop2': {'type': ['null', 'string']}
+            })
+
+
+    def test_flatten_record(self):
+        """Test flattening of RECORD messages"""
+        flatten_record = target_snowflake.db_sync.flatten_record
+
+        empty_record = {}
+        # Empty record should be empty dict
+        self.assertEquals(flatten_record(empty_record), {})
+
+        not_nested_record = {"c_pk": 1, "c_varchar": "1", "c_int": 1}
+        # NO FLATTENNING - Record with simple properties should be a plain dictionary
+        self.assertEquals(flatten_record(not_nested_record), not_nested_record)
+
+        nested_record = {
+            "c_pk": 1,
+            "c_varchar": "1",
+            "c_int": 1,
+            "c_obj": {
+                "nested_prop1": "value_1",
+                "nested_prop2": "value_2",
+                "nested_prop3": {
+                    "multi_nested_prop1": "multi_value_1",
+                    "multi_nested_prop2": "multi_value_2",
+                }}}
+
+        # NO FLATTENNING - No flattening (default)
+        self.assertEquals(flatten_record(nested_record),
+            {
+                "c_pk": 1,
+                "c_varchar": "1",
+                "c_int": 1,
+                "c_obj": '{"nested_prop1": "value_1", "nested_prop2": "value_2", "nested_prop3": {"multi_nested_prop1": "multi_value_1", "multi_nested_prop2": "multi_value_2"}}'
+            })
+
+        # NO FLATTENNING
+        #   max_level: 0 : No flattening (default)
+        self.assertEquals(flatten_record(nested_record, max_level=0),
+            {
+                "c_pk": 1,
+                "c_varchar": "1",
+                "c_int": 1,
+                "c_obj": '{"nested_prop1": "value_1", "nested_prop2": "value_2", "nested_prop3": {"multi_nested_prop1": "multi_value_1", "multi_nested_prop2": "multi_value_2"}}'
+            })
+
+        # SEMI FLATTENNING
+        #   max_level: 1 : Semi-flattening (default)
+        self.assertEquals(flatten_record(nested_record, max_level=1),
+            {
+                "c_pk": 1,
+                "c_varchar": "1",
+                "c_int": 1,
+                "c_obj__nested_prop1": "value_1",
+                "c_obj__nested_prop2": "value_2",
+                "c_obj__nested_prop3": '{"multi_nested_prop1": "multi_value_1", "multi_nested_prop2": "multi_value_2"}'
+            })
+
+        # FLATTENNING
+        self.assertEquals(flatten_record(nested_record, max_level=10),
+            {
+                "c_pk": 1,
+                "c_varchar": "1",
+                "c_int": 1,
+                "c_obj__nested_prop1": "value_1",
+                "c_obj__nested_prop2": "value_2",
+                "c_obj__nested_prop3__multi_nested_prop1": "multi_value_1",
+                "c_obj__nested_prop3__multi_nested_prop2": "multi_value_2"
+            })

@@ -280,3 +280,65 @@ class TestIntegration(unittest.TestCase):
                     {'C_PK': 4, 'CAMELCASECOLUMN': 'Dummy row 4', 'MINUS-COLUMN': 'Dummy row 4'},
                     {'C_PK': 5, 'CAMELCASECOLUMN': 'Dummy row 5', 'MINUS-COLUMN': 'Dummy row 5'},
             ])
+
+
+    def test_nested_schema_unflattening(self):
+        """Loading nested JSON objects into VARIANT columns without flattening"""
+        tap_lines = test_utils.get_test_tap_lines('messages-with-nested-schema.json')
+
+        # Load with default settings - Flattening disabled
+        target_snowflake.persist_lines(self.config, tap_lines)
+
+        # Get loaded rows from tables - Transform JSON to string at query time
+        snowflake = DbSync(self.config)
+        target_schema = self.config.get('default_target_schema', '')
+        unflattened_table = snowflake.query("""
+            SELECT c_pk
+                  ,TO_CHAR(c_array) c_array
+                  ,TO_CHAR(c_object) c_object
+                  ,TO_CHAR(c_object) c_object_with_props
+                  ,TO_CHAR(c_nested_object) c_nested_object
+              FROM {}.test_table_nested_schema
+             ORDER BY c_pk""".format(target_schema))
+
+        # Should be valid nested JSON strings
+        self.assertEqual(
+            unflattened_table,
+            [{
+                'C_PK': 1,
+                'C_ARRAY': '[1,2,3]',
+                'C_OBJECT': '{"key_1":"value_1"}',
+                'C_OBJECT_WITH_PROPS': '{"key_1":"value_1"}',
+                'C_NESTED_OBJECT': '{"nested_prop_1":"nested_value_1","nested_prop_2":"nested_value_2","nested_prop_3":{"multi_nested_prop_1":"multi_value_1","multi_nested_prop_2":"multi_value_2"}}'
+            }])
+
+
+    def test_nested_schema_flattening(self):
+        """Loading nested JSON objects with flattening and not not flattening"""
+        tap_lines = test_utils.get_test_tap_lines('messages-with-nested-schema.json')
+
+        # Turning on data flattening
+        self.config['data_flattening_max_level'] = 10
+
+        # Load with default settings - Flattening disabled
+        target_snowflake.persist_lines(self.config, tap_lines)
+
+        # Get loaded rows from tables
+        snowflake = DbSync(self.config)
+        target_schema = self.config.get('default_target_schema', '')
+        flattened_table = snowflake.query("SELECT * FROM {}.test_table_nested_schema ORDER BY c_pk".format(target_schema))
+
+        # Should be flattened columns
+        self.assertEqual(
+            flattened_table,
+            [{
+                'C_PK': 1,
+                'C_ARRAY': '[\n  1,\n  2,\n  3\n]',
+                'C_OBJECT': None,   # Cannot map RECORD to SCHEMA. SCHEMA doesn't have properties that requires for flattening
+                'C_OBJECT_WITH_PROPS__KEY_1': 'value_1',
+                'C_NESTED_OBJECT__NESTED_PROP_1': 'nested_value_1',
+                'C_NESTED_OBJECT__NESTED_PROP_2': 'nested_value_2',
+                'C_NESTED_OBJECT__NESTED_PROP_3__MULTI_NESTED_PROP_1': 'multi_value_1',
+                'C_NESTED_OBJECT__NESTED_PROP_3__MULTI_NESTED_PROP_2': 'multi_value_2',
+            }])
+
