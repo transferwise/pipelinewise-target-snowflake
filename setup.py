@@ -2,9 +2,13 @@
 
 from setuptools import setup
 
+with open('README.md') as f:
+      long_description = f.read()
+
 setup(name="pipelinewise-target-snowflake",
       version="1.0.3",
       description="Singer.io target for loading data to Snowflake - PipelineWise compatible",
+      long_description=long_description,
       author="TransferWise",
       url='https://github.com/transferwise/pipelinewise-target-snowflake',
       classifiers=["Programming Language :: Python :: 3 :: Only"],
