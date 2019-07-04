@@ -62,7 +62,7 @@ def column_type(schema_property):
     elif property_format == 'date-time':
         column_type = 'timestamp_ntz(3)'
     elif property_format == 'time':
-        column_type = 'time'
+        column_type = 'timestamp_ntz(3)'
     elif 'number' in property_type:
         column_type = 'float'
     elif 'integer' in property_type and 'string' in property_type:
