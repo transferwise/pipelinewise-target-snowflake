@@ -60,7 +60,7 @@ def column_type(schema_property):
     # TODO: Detect if timezone postfix exists in the JSON and find if TIMESTAMP_TZ or
     # TIMSTAMP_NTZ is the better column type
     elif property_format == 'date-time':
-        column_type = 'timestamp_ntz'
+        column_type = 'timestamp_ntz(3)'
     elif property_format == 'time':
         column_type = 'time'
     elif 'number' in property_type:
