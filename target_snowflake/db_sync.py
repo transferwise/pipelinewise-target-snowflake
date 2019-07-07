@@ -566,8 +566,9 @@ class DbSync:
         ]
 
         for (column_name, column) in columns_to_replace:
-            self.drop_column(column_name, stream)
-            self.add_column(column, stream)
+            # self.drop_column(column_name, stream)
+            # self.add_column(column, stream)
+            self.alter_column(column, stream)
 
     def add_column(self, column, stream):
         add_column = "ALTER TABLE {} ADD COLUMN {}".format(self.table_name(stream, False), column)
@@ -578,6 +579,11 @@ class DbSync:
         drop_column = "ALTER TABLE {} DROP COLUMN {}".format(self.table_name(stream, False), column_name)
         logger.info('Dropping column: {}'.format(drop_column))
         self.query(drop_column)
+
+    def alter_column(self, column, stream):
+        alter_column = "ALTER TABLE {} MODIFY COLUMN {}".format(self.table_name(stream, False), column)
+        logger.info('Altering column: {}'.format(alter_column))
+        self.query(alter_column)
 
     def sync_table(self, table_columns_cache=None):
         stream_schema_message = self.stream_schema_message
