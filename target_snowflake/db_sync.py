@@ -567,23 +567,23 @@ class DbSync:
 
         for (column_name, column) in columns_to_replace:
             # self.drop_column(column_name, stream)
-            # self.add_column(column, stream)
-            self.alter_column(column, stream)
-
-    def add_column(self, column, stream):
-        add_column = "ALTER TABLE {} ADD COLUMN {}".format(self.table_name(stream, False), column)
-        logger.info('Adding column: {}'.format(add_column))
-        self.query(add_column)
+            self.rename_column(column_name, stream)
+            self.add_column(column, stream)
 
     def drop_column(self, column_name, stream):
         drop_column = "ALTER TABLE {} DROP COLUMN {}".format(self.table_name(stream, False), column_name)
         logger.info('Dropping column: {}'.format(drop_column))
         self.query(drop_column)
 
-    def alter_column(self, column, stream):
-        alter_column = "ALTER TABLE {} MODIFY COLUMN {}".format(self.table_name(stream, False), column)
-        logger.info('Altering column: {}'.format(alter_column))
-        self.query(alter_column)
+    def rename_column(self, column_name, stream):
+        rename_column = "ALTER TABLE {} RENAME COLUMN {} TO {}_{}".format(self.table_name(stream, False), column_name, column_name, time.strftime("%Y%m%d-%H%M%S"))
+        logger.info('Dropping column: {}'.format(rename_column))
+        self.query(rename_column)
+
+    def add_column(self, column, stream):
+        add_column = "ALTER TABLE {} ADD COLUMN {}".format(self.table_name(stream, False), column)
+        logger.info('Adding column: {}'.format(add_column))
+        self.query(add_column)
 
     def sync_table(self, table_columns_cache=None):
         stream_schema_message = self.stream_schema_message
