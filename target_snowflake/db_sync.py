@@ -567,7 +567,7 @@ class DbSync:
 
         for (column_name, column) in columns_to_replace:
             # self.drop_column(column_name, stream)
-            self.rename_column(column_name, stream)
+            self.version_column(column_name, stream)
             self.add_column(column, stream)
 
     def drop_column(self, column_name, stream):
@@ -575,10 +575,10 @@ class DbSync:
         logger.info('Dropping column: {}'.format(drop_column))
         self.query(drop_column)
 
-    def rename_column(self, column_name, stream):
-        rename_column = "ALTER TABLE {} RENAME COLUMN {} TO {}_{}".format(self.table_name(stream, False), column_name, column_name, time.strftime("%Y%m%d-%H%M%S"))
-        logger.info('Dropping column: {}'.format(rename_column))
-        self.query(rename_column)
+    def version_column(self, column_name, stream):
+        version_column = "ALTER TABLE {} RENAME COLUMN {} TO {}_{}".format(self.table_name(stream, False), column_name, column_name, time.strftime("%Y%m%d-%H%M%S"))
+        logger.info('Dropping column: {}'.format(version_column))
+        self.query(version_column)
 
     def add_column(self, column, stream):
         add_column = "ALTER TABLE {} ADD COLUMN {}".format(self.table_name(stream, False), column)
