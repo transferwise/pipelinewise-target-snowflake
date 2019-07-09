@@ -576,7 +576,7 @@ class DbSync:
         self.query(drop_column)
 
     def version_column(self, column_name, stream):
-        version_column = "ALTER TABLE {} RENAME COLUMN {} TO {}_{}".format(self.table_name(stream, False), column_name, column_name, time.strftime("%Y%m%d-%H%M%S"))
+        version_column = "ALTER TABLE {} RENAME COLUMN {} TO \"{}_{}\"".format(self.table_name(stream, False), column_name, column_name.replace("\"",""), time.strftime("%Y%m%d-%H%M"))
         logger.info('Dropping column: {}'.format(version_column))
         self.query(version_column)
 
