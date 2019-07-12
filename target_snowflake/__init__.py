@@ -90,14 +90,6 @@ def persist_lines(config, lines):
     row_count = {}
     stream_to_sync = {}
     batch_size_rows = config.get('batch_size_rows', 100000)
-    table_columns_cache = None
-
-    # Cache the available schemas, tables and columns from snowflake if not disabled in config
-    # The cache will be used later use to avoid lot of small queries hitting snowflake
-    if not ('disable_table_cache' in config and config['disable_table_cache'] == True):
-        logger.info("Caching available catalog objects in snowflake...")
-        filter_schemas = get_schema_names_from_config(config)
-        table_columns_cache = DbSync(config).get_table_columns(filter_schemas=filter_schemas)
 
     # Loop over lines from stdin
     for line in lines:
@@ -189,8 +181,18 @@ def persist_lines(config, lines):
             else:
                 stream_to_sync[stream] = DbSync(config, o)
 
-            stream_to_sync[stream].create_schema_if_not_exists(table_columns_cache)
-            stream_to_sync[stream].sync_table(table_columns_cache)
+            try:
+                stream_to_sync[stream].create_schema_if_not_exists()
+                stream_to_sync[stream].sync_table()
+            except Exception as e:
+                logger.error("""
+                    Cannot sync table structure in Snowflake schema: {} .
+                    Try to delete {}.COLUMNS table to reset information_schema cache. Maybe it's outdated.
+                """.format(
+                    stream_to_sync[stream].schema_name,
+                    stream_to_sync[stream].pipelinewise_schema.upper()))
+                raise e
+
             row_count[stream] = 0
             csv_files_to_load[stream] = NamedTemporaryFile(mode='w+b')
         elif t == 'ACTIVATE_VERSION':
@@ -231,7 +233,15 @@ def flush_records(stream, records_to_load, row_count, db_sync):
             f.write(bytes(csv_line + '\n', 'UTF-8'))
 
     s3_key = db_sync.put_to_stage(csv_file, stream, row_count)
-    db_sync.load_csv(s3_key, row_count)
+    try:
+        db_sync.load_csv(s3_key, row_count)
+    except Exception as e:
+        logger.error("""
+            Cannot load data from S3 into Snowflake schema: {} .
+            Try to delete {}.COLUMNS table to reset information_schema cache. Maybe it's outdated.
+        """.format(db_sync.schema_name, db_sync.pipelinewise_schema.upper()))
+        raise e
+
     os.remove(csv_file)
     db_sync.delete_from_stage(s3_key)
 
