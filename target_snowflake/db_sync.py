@@ -401,10 +401,7 @@ class DbSync:
 
         # Create empty columns cache table if not exists
         self.query("""
-            CREATE TABLE IF NOT EXISTS {}.columns AS
-            SELECT table_schema, table_name, column_name, data_type
-              FROM information_schema.columns
-             WHERE 1 = 2
+            CREATE TABLE IF NOT EXISTS {}.columns (table_schema VARCHAR, table_name VARCHAR, column_name VARCHAR, data_type VARCHAR)
         """.format(self.pipelinewise_schema))
 
         if not create_only:

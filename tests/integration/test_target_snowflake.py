@@ -463,10 +463,7 @@ class TestIntegration(unittest.TestCase):
         # Table is in cache but not exists in database
         snowflake = DbSync(self.config)
         snowflake.query("""
-            CREATE TABLE IF NOT EXISTS {}.columns AS
-            SELECT table_schema, table_name, column_name, data_type
-              FROM information_schema.columns
-             WHERE 1 = 2
+            CREATE TABLE IF NOT EXISTS {}.columns (table_schema VARCHAR, table_name VARCHAR, column_name VARCHAR, data_type VARCHAR)
         """.format(snowflake.pipelinewise_schema))
         snowflake.query("""
             INSERT INTO {}.columns (table_schema, table_name, column_name, data_type)
