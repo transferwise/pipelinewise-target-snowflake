@@ -89,6 +89,39 @@ class TestUnit(unittest.TestCase):
         self.assertEquals(mapper(json_arr)          , 'variant')
 
 
+    def test_stream_name_to_dict(self):
+        """Test identifying catalog, schema and table names from fully qualified stream and table names"""
+        # Singer stream name format (Default '-' separator)
+        self.assertEquals(
+            target_snowflake.db_sync.stream_name_to_dict('my_table'),
+            {"catalog_name": None, "schema_name": None, "table_name": "my_table"})
+
+        # Singer stream name format (Default '-' separator)
+        self.assertEquals(
+            target_snowflake.db_sync.stream_name_to_dict('my_schema-my_table'),
+            {"catalog_name": None, "schema_name": "my_schema", "table_name": "my_table"})
+
+        # Singer stream name format (Default '-' separator)
+        self.assertEquals(
+            target_snowflake.db_sync.stream_name_to_dict('my_catalog-my_schema-my_table'),
+            {"catalog_name": "my_catalog", "schema_name": "my_schema", "table_name": "my_table"})
+
+        # Snowflake table format (Custom '.' separator)
+        self.assertEquals(
+            target_snowflake.db_sync.stream_name_to_dict('my_table', separator='.'),
+            {"catalog_name": None, "schema_name": None, "table_name": "my_table"})
+
+        # Snowflake table format (Custom '.' separator)
+        self.assertEquals(
+            target_snowflake.db_sync.stream_name_to_dict('my_schema.my_table', separator='.'),
+            {"catalog_name": None, "schema_name": "my_schema", "table_name": "my_table"})
+
+        # Snowflake table format (Custom '.' separator)
+        self.assertEquals(
+            target_snowflake.db_sync.stream_name_to_dict('my_catalog.my_schema.my_table', separator='.'),
+            {"catalog_name": "my_catalog", "schema_name": "my_schema", "table_name": "my_table"})
+
+
     def test_flatten_schema(self):
         """Test flattening of SCHEMA messages"""
         flatten_schema = target_snowflake.db_sync.flatten_schema

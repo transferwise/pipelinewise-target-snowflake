@@ -31,8 +31,14 @@ class TestIntegration(unittest.TestCase):
     def setUp(self):
         self.config = test_utils.get_test_config()
         snowflake = DbSync(self.config)
+
+        # Drop target schema
         if self.config['default_target_schema']:
             snowflake.query("DROP SCHEMA IF EXISTS {}".format(self.config['default_target_schema']))
+
+        # Drop pipelinewise schema with information_schema cache
+        if self.config['stage']:
+            snowflake.query("DROP TABLE IF EXISTS {}.columns".format(snowflake.pipelinewise_schema))
 
 
     def remove_metadata_columns_from_rows(self, rows):
@@ -395,3 +401,87 @@ class TestIntegration(unittest.TestCase):
                 {'C_INT': 3, 'C_PK': 3, 'C_TIME': datetime.time(23, 0, 3), 'C_VARCHAR': '3', 'C_TIME_RENAMED': datetime.time(8, 15)},
                 {'C_INT': 4, 'C_PK': 4, 'C_TIME': None, 'C_VARCHAR': '4', 'C_TIME_RENAMED': datetime.time(23, 0, 3)}
             ])
+
+
+    def test_information_schema_cache_create_and_update(self):
+        """Newly created and altered tables must be cached automatically for later use.
+
+        Information_schema_columns cache is a copy of snowflake INFORMATION_SCHAME.COLUMNS table to avoid the error of
+        'Information schema query returned too much data. Please repeat query with more selective predicates.'.
+        """
+        tap_lines_before_column_name_change = test_utils.get_test_tap_lines('messages-with-three-streams.json')
+        tap_lines_after_column_name_change = test_utils.get_test_tap_lines('messages-with-three-streams-modified-column.json')
+
+        # Load with default settings
+        target_snowflake.persist_lines(self.config, tap_lines_before_column_name_change)
+        target_snowflake.persist_lines(self.config, tap_lines_after_column_name_change)
+
+        # Get data form information_schema cache table
+        snowflake = DbSync(self.config)
+        target_schema = self.config.get('default_target_schema', '')
+        information_schema_cache = snowflake.query("SELECT * FROM {}.columns ORDER BY table_schema, table_name, column_name".format(snowflake.pipelinewise_schema))
+
+        # Get the previous column name from information schema in test_table_two
+        previous_column_name = snowflake.query("""
+            SELECT column_name
+              FROM information_schema.columns
+             WHERE table_catalog = '{}'
+               AND table_schema = '{}'
+               AND table_name = 'TEST_TABLE_TWO'
+               AND ordinal_position = 1
+            """.format(
+                self.config.get('dbname', '').upper(),
+                target_schema.upper()))[0]["COLUMN_NAME"]
+
+        # Every column has to be in the cached information_schema with the latest versions
+        self.assertEqual(
+            information_schema_cache,
+            [
+                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_ONE', 'COLUMN_NAME': 'C_INT', 'DATA_TYPE': 'NUMBER'},
+                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_ONE', 'COLUMN_NAME': 'C_PK', 'DATA_TYPE': 'NUMBER'},
+                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_ONE', 'COLUMN_NAME': 'C_VARCHAR', 'DATA_TYPE': 'TEXT'},
+
+                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_THREE', 'COLUMN_NAME': 'C_INT', 'DATA_TYPE': 'NUMBER'},
+                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_THREE', 'COLUMN_NAME': 'C_PK', 'DATA_TYPE': 'NUMBER'},
+                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_THREE', 'COLUMN_NAME': 'C_TIME', 'DATA_TYPE': 'TIME'},
+                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_THREE', 'COLUMN_NAME': 'C_TIME_RENAMED', 'DATA_TYPE':'TIME'},
+                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_THREE', 'COLUMN_NAME': 'C_VARCHAR', 'DATA_TYPE': 'TEXT'},
+
+                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_TWO', 'COLUMN_NAME': 'C_DATE', 'DATA_TYPE': 'TEXT'},
+                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_TWO', 'COLUMN_NAME': previous_column_name, 'DATA_TYPE': 'TIMESTAMP_NTZ'},
+                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_TWO', 'COLUMN_NAME': 'C_INT', 'DATA_TYPE': 'NUMBER'},
+                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_TWO', 'COLUMN_NAME': 'C_PK', 'DATA_TYPE': 'NUMBER'},
+                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_TWO', 'COLUMN_NAME': 'C_VARCHAR', 'DATA_TYPE': 'TEXT'}
+            ])
+
+
+    def test_information_schema_cache_outdate(self):
+        """If informations schema cache is not up to date then it should fail"""
+        tap_lines_with_multi_streams = test_utils.get_test_tap_lines('messages-with-three-streams.json')
+
+        # 1) Simulate an out of data cache:
+        # Table is in cache but not exists in database
+        snowflake = DbSync(self.config)
+        snowflake.query("""
+            CREATE TABLE IF NOT EXISTS {}.columns (table_schema VARCHAR, table_name VARCHAR, column_name VARCHAR, data_type VARCHAR)
+        """.format(snowflake.pipelinewise_schema))
+        snowflake.query("""
+            INSERT INTO {}.columns (table_schema, table_name, column_name, data_type)
+            SELECT 'LOCAL_DEV1', 'TEST_TABLE_ONE', 'DUMMY_COLUMN_1', 'TEXT' UNION
+            SELECT 'LOCAL_DEV1', 'TEST_TABLE_ONE', 'DUMMY_COLUMN_2', 'TEXT' UNION
+            SELECT 'LOCAL_DEV1', 'TEST_TABLE_TWO', 'DUMMY_COLUMN_3', 'TEXT'
+        """.format(snowflake.pipelinewise_schema))
+
+        # Loading into an outdated information_schema cache should fail with table not exists
+        with self.assertRaises(Exception):
+            target_snowflake.persist_lines(self.config, tap_lines_with_multi_streams)
+
+        # 2) Simulate an out of data cache:
+        # Table is in cache structure is not in sync with the actual table in the database
+        snowflake.query("CREATE SCHEMA IF NOT EXISTS local_dev1")
+        snowflake.query("CREATE OR REPLACE TABLE local_dev1.test_table_one (C_PK NUMBER, C_INT NUMBER, C_VARCHAR TEXT)")
+
+        # Loading into an outdated information_schema cache should fail with columns exists
+        # It should try adding the new column based on the values in cache but the column already exists
+        with self.assertRaises(Exception):
+            target_snowflake.persist_lines(self.config, tap_lines_with_multi_streams)
