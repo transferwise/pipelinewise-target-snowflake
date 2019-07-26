@@ -79,8 +79,20 @@ def get_schema_names_from_config(config):
 
     return schema_names
 
+def load_information_schema_cache(config):
+    information_schema_cache = []
+    if not ('disable_table_cache' in config and config['disable_table_cache'] == True):
+        logger.info("Getting catalog objects from information_schema cache table...")
+
+        db = DbSync(config)
+        information_schema_cache = db.get_table_columns(
+            table_schemas=get_schema_names_from_config(config),
+            from_information_schema_cache_table=True)
+
+    return information_schema_cache
+
 # pylint: disable=too-many-locals,too-many-branches,too-many-statements
-def persist_lines(config, lines):
+def persist_lines(config, lines, information_schema_cache=None):
     state = None
     schemas = {}
     key_properties = {}
@@ -177,9 +189,9 @@ def persist_lines(config, lines):
             key_properties[stream] = o['key_properties']
 
             if config.get('add_metadata_columns') or config.get('hard_delete'):
-                stream_to_sync[stream] = DbSync(config, add_metadata_columns_to_schema(o))
+                stream_to_sync[stream] = DbSync(config, add_metadata_columns_to_schema(o), information_schema_cache)
             else:
-                stream_to_sync[stream] = DbSync(config, o)
+                stream_to_sync[stream] = DbSync(config, o, information_schema_cache)
 
             try:
                 stream_to_sync[stream].create_schema_if_not_exists()
@@ -257,8 +269,12 @@ def main():
     else:
         config = {}
 
+    # Init information schema cache
+    information_schema_cache = load_information_schema_cache(config)
+
+    # Consume singer messages
     input = io.TextIOWrapper(sys.stdin.buffer, encoding='utf-8')
-    state = persist_lines(config, input)
+    state = persist_lines(config, input, information_schema_cache)
 
     emit_state(state)
     logger.debug("Exiting normally")
