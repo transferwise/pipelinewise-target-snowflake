@@ -41,6 +41,21 @@ class TestIntegration(unittest.TestCase):
             snowflake.query("DROP TABLE IF EXISTS {}.columns".format(snowflake.pipelinewise_schema))
 
 
+    def persist_lines_with_cache(self, lines):
+        """Enables table caching option and loads singer messages into snowflake.
+
+        Table caching mechanism is creating and maintaining an extra table in snowflake about
+        the table structures. It's very similar to the INFORMATION_SCHEMA.COLUMNS system views
+        but querying INFORMATION_SCHEMA is slow especially when lot of taps running
+        in parallel.
+
+        Selecting from a real table instead of INFORMATION_SCHEMA and keeping it
+        in memory while the target-snowflake is running results better load performance.
+        """
+        information_schema_cache = target_snowflake.load_information_schema_cache(self.config)
+        target_snowflake.persist_lines(self.config, lines, information_schema_cache)
+
+
     def remove_metadata_columns_from_rows(self, rows):
         """Removes metadata columns from a list of rows"""
         d_rows = []
@@ -158,14 +173,14 @@ class TestIntegration(unittest.TestCase):
         """Receiving invalid JSONs should raise an exception"""
         tap_lines = test_utils.get_test_tap_lines('invalid-json.json')
         with assert_raises(json.decoder.JSONDecodeError):
-            target_snowflake.persist_lines(self.config, tap_lines)
+            self.persist_lines_with_cache(tap_lines)
 
 
     def test_message_order(self):
         """RECORD message without a previously received SCHEMA message should raise an exception"""
         tap_lines = test_utils.get_test_tap_lines('invalid-message-order.json')
         with assert_raises(Exception):
-            target_snowflake.persist_lines(self.config, tap_lines)
+            self.persist_lines_with_cache(tap_lines)
 
 
     def test_loading_tables_with_no_encryption(self):
@@ -174,7 +189,7 @@ class TestIntegration(unittest.TestCase):
 
         # Turning off client-side encryption and load
         self.config['client_side_encryption_master_key'] = ''
-        target_snowflake.persist_lines(self.config, tap_lines)
+        self.persist_lines_with_cache(tap_lines)
 
         self.assert_three_streams_are_into_snowflake()
 
@@ -185,7 +200,7 @@ class TestIntegration(unittest.TestCase):
 
         # Turning on client-side encryption and load
         self.config['client_side_encryption_master_key'] = os.environ.get('CLIENT_SIDE_ENCRYPTION_MASTER_KEY')
-        target_snowflake.persist_lines(self.config, tap_lines)
+        self.persist_lines_with_cache(tap_lines)
 
         self.assert_three_streams_are_into_snowflake()
 
@@ -197,7 +212,7 @@ class TestIntegration(unittest.TestCase):
         # Turning on client-side encryption and load but using a well formatted but wrong master key
         self.config['client_side_encryption_master_key'] = "Wr0n6m45t3rKeY0123456789a0123456789a0123456="
         with assert_raises(snowflake.connector.errors.ProgrammingError):
-            target_snowflake.persist_lines(self.config, tap_lines)
+            self.persist_lines_with_cache(tap_lines)
 
 
     def test_loading_tables_with_metadata_columns(self):
@@ -206,7 +221,7 @@ class TestIntegration(unittest.TestCase):
 
         # Turning on adding metadata columns
         self.config['add_metadata_columns'] = True
-        target_snowflake.persist_lines(self.config, tap_lines)
+        self.persist_lines_with_cache(tap_lines)
 
         # Check if data loaded correctly and metadata columns exist
         self.assert_three_streams_are_into_snowflake(should_metadata_columns_exist=True)
@@ -218,7 +233,7 @@ class TestIntegration(unittest.TestCase):
 
         # Turning on hard delete mode
         self.config['hard_delete'] = True
-        target_snowflake.persist_lines(self.config, tap_lines)
+        self.persist_lines_with_cache(tap_lines)
 
         # Check if data loaded correctly and metadata columns exist
         self.assert_three_streams_are_into_snowflake(
@@ -232,7 +247,7 @@ class TestIntegration(unittest.TestCase):
         tap_lines = test_utils.get_test_tap_lines('messages-with-multi-schemas.json')
 
         # Load with default settings
-        target_snowflake.persist_lines(self.config, tap_lines)
+        self.persist_lines_with_cache(tap_lines)
 
         # Check if data loaded correctly
         self.assert_three_streams_are_into_snowflake(
@@ -246,7 +261,7 @@ class TestIntegration(unittest.TestCase):
         tap_lines = test_utils.get_test_tap_lines('messages-with-unicode-characters.json')
 
         # Load with default settings
-        target_snowflake.persist_lines(self.config, tap_lines)
+        self.persist_lines_with_cache(tap_lines)
 
         # Get loaded rows from tables
         snowflake = DbSync(self.config)
@@ -270,7 +285,7 @@ class TestIntegration(unittest.TestCase):
         tap_lines = test_utils.get_test_tap_lines('messages-with-non-db-friendly-columns.json')
 
         # Load with default settings
-        target_snowflake.persist_lines(self.config, tap_lines)
+        self.persist_lines_with_cache(tap_lines)
 
         # Get loaded rows from tables
         snowflake = DbSync(self.config)
@@ -293,7 +308,7 @@ class TestIntegration(unittest.TestCase):
         tap_lines = test_utils.get_test_tap_lines('messages-with-nested-schema.json')
 
         # Load with default settings - Flattening disabled
-        target_snowflake.persist_lines(self.config, tap_lines)
+        self.persist_lines_with_cache(tap_lines)
 
         # Get loaded rows from tables - Transform JSON to string at query time
         snowflake = DbSync(self.config)
@@ -327,7 +342,7 @@ class TestIntegration(unittest.TestCase):
         self.config['data_flattening_max_level'] = 10
 
         # Load with default settings - Flattening disabled
-        target_snowflake.persist_lines(self.config, tap_lines)
+        self.persist_lines_with_cache(tap_lines)
 
         # Get loaded rows from tables
         snowflake = DbSync(self.config)
@@ -355,8 +370,8 @@ class TestIntegration(unittest.TestCase):
         tap_lines_after_column_name_change = test_utils.get_test_tap_lines('messages-with-three-streams-modified-column.json')
 
         # Load with default settings
-        target_snowflake.persist_lines(self.config, tap_lines_before_column_name_change)
-        target_snowflake.persist_lines(self.config, tap_lines_after_column_name_change)
+        self.persist_lines_with_cache(tap_lines_before_column_name_change)
+        self.persist_lines_with_cache(tap_lines_after_column_name_change)
 
         # Get loaded rows from tables
         snowflake = DbSync(self.config)
@@ -413,8 +428,8 @@ class TestIntegration(unittest.TestCase):
         tap_lines_after_column_name_change = test_utils.get_test_tap_lines('messages-with-three-streams-modified-column.json')
 
         # Load with default settings
-        target_snowflake.persist_lines(self.config, tap_lines_before_column_name_change)
-        target_snowflake.persist_lines(self.config, tap_lines_after_column_name_change)
+        self.persist_lines_with_cache(tap_lines_before_column_name_change)
+        self.persist_lines_with_cache(tap_lines_after_column_name_change)
 
         # Get data form information_schema cache table
         snowflake = DbSync(self.config)
@@ -474,7 +489,7 @@ class TestIntegration(unittest.TestCase):
 
         # Loading into an outdated information_schema cache should fail with table not exists
         with self.assertRaises(Exception):
-            target_snowflake.persist_lines(self.config, tap_lines_with_multi_streams)
+            self.persist_lines_with_cache(tap_lines_with_multi_streams)
 
         # 2) Simulate an out of data cache:
         # Table is in cache structure is not in sync with the actual table in the database
@@ -484,4 +499,4 @@ class TestIntegration(unittest.TestCase):
         # Loading into an outdated information_schema cache should fail with columns exists
         # It should try adding the new column based on the values in cache but the column already exists
         with self.assertRaises(Exception):
-            target_snowflake.persist_lines(self.config, tap_lines_with_multi_streams)
+            self.persist_lines_with_cache(tap_lines_with_multi_streams)
