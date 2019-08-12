@@ -306,7 +306,7 @@ class DbSync:
                     queries = [query]
 
                 for q in queries:
-                    logger.info("SNOWFLAKE - Running query: {}".format(q))
+                    logger.debug("SNOWFLAKE - Running query: {}".format(q))
                     cur.execute(q, params)
 
                     if cur.rowcount > 0:
@@ -470,7 +470,7 @@ class DbSync:
                         ', '.join([c['name'] for c in columns_with_trans]),
                         ', '.join(['s.{}'.format(c['name']) for c in columns_with_trans])
                     )
-                    logger.info("SNOWFLAKE - {}".format(merge_sql))
+                    logger.debug("SNOWFLAKE - {}".format(merge_sql))
                     cur.execute(merge_sql)
 
                 # Insert only with COPY command if no primary key
@@ -484,7 +484,7 @@ class DbSync:
                         s3_key,
                         self.connection_config['file_format'],
                     )
-                    logger.info("SNOWFLAKE - {}".format(copy_sql))
+                    logger.debug("SNOWFLAKE - {}".format(copy_sql))
                     cur.execute(copy_sql)
 
                 logger.info("SNOWFLAKE - Merge into {}: {}".format(self.table_name(stream, False), cur.fetchall()))
