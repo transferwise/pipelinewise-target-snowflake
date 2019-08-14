@@ -375,7 +375,7 @@ class DbSync:
 
             with self.open_connection() as connection:
                 with connection.cursor(snowflake.connector.DictCursor) as cur:
-                    cur.execute("USE SCHEMA public")
+                    cur.execute("USE SCHEMA {}".format(self.connection_config['default_target_schema'])
                     put_sql = "PUT file:///{} @{}/{}".format(file, stage, file_key)
                     logger.info("SNOWFLAKE - {}".format(put_sql))
                     cur.execute(put_sql)
@@ -430,9 +430,10 @@ class DbSync:
 
             with self.open_connection() as connection:
                 with connection.cursor(snowflake.connector.DictCursor) as cur:
-                    cur.execute("USE SCHEMA public")
+                    cur.execute("USE SCHEMA {}".format(self.connection_config['default_target_schema'])
                     rm_sql = "rm @{}/{}".format(stage, s3_key)
                     cur.execute(rm_sql)
+        # external staging
         else:
             logger.info("Deleting {} from external snowflake stage on S3".format(s3_key))
             bucket = self.connection_config['s3_bucket']
