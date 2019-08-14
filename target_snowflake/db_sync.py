@@ -24,11 +24,15 @@ def validate_config(config):
         'user',
         'password',
         'warehouse',
+        'stage',
+        'file_format'
+    ]
+    optional_config_keys = [
         'aws_access_key_id',
         'aws_secret_access_key',
         's3_bucket',
-        'stage',
-        'file_format'
+        's3_region',
+        's3_endpoint'
     ]
 
     # Check if mandatory keys exist
@@ -44,6 +48,11 @@ def validate_config(config):
 
     # Check client-side encryption config
     config_cse_key = config.get('client_side_encryption_master_key', None)
+
+    # notify that we're using an internal stage
+    config_aws_access_key_id = config.get('aws_access_key_id', None)
+    if not config_aws_access_key_id:
+        logger.info("Using internal stage")
 
     return errors
 
@@ -212,8 +221,9 @@ class DbSync:
         if stage['schema_name']:
             self.pipelinewise_schema = stage['schema_name']
         else:
-            logger.error("The named external stage object in config has to use the <schema>.<stage_name> format.")
-            exit(1)
+            self.pipelinewise_schema = 'public'
+            logger.warn("The named external stage object in config has to use the <schema>.<stage_name> format.")
+            #exit(1)
 
         self.schema_name = None
         self.grantees = None
@@ -271,11 +281,16 @@ class DbSync:
             self.data_flattening_max_level = self.connection_config.get('data_flattening_max_level', 0)
             self.flatten_schema = flatten_schema(stream_schema_message['schema'], max_level=self.data_flattening_max_level)
 
-        self.s3 = boto3.client(
-            's3',
-            aws_access_key_id=self.connection_config['aws_access_key_id'],
-            aws_secret_access_key=self.connection_config['aws_secret_access_key']
-        )
+        # setup s3 connection if parameters included, otherwise use internal stage
+        if 'aws_access_key_id' in self.connection_config:
+
+            self.s3 = boto3.client(
+                's3',
+                region_name=self.connection_config['s3_region'],
+                endpoint_url=self.connection_config['s3_endpoint'],
+                aws_access_key_id=self.connection_config['aws_access_key_id'],
+                aws_secret_access_key=self.connection_config['aws_secret_access_key']
+            )
 
 
     def open_connection(self):
@@ -350,49 +365,78 @@ class DbSync:
     def put_to_stage(self, file, stream, count):
         logger.info("Uploading {} rows to external snowflake stage on S3".format(count))
 
-        # Generating key in S3 bucket 
-        bucket = self.connection_config['s3_bucket']
         s3_key_prefix = self.connection_config.get('s3_key_prefix', '')
-        s3_key = "{}pipelinewise_{}_{}.csv".format(s3_key_prefix, stream, datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f"))
+        file_key = "{}pipelinewise_{}_{}.csv".format(s3_key_prefix, stream, datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f"))
 
-        logger.info("Target S3 bucket: {}, local file: {}, S3 key: {}".format(bucket, file, s3_key))
+        # internal staging
+        if not 'aws_access_key_id' in self.connection_config:
+            stage = self.connection_config['stage']
+            logger.info("Target internal staging: {} ".format(stage))
 
-        # Encrypt csv if client side encryption enabled
-        master_key = self.connection_config.get('client_side_encryption_master_key', '')
-        if master_key != '':
-            # Encrypt the file
-            encryption_material = SnowflakeFileEncryptionMaterial(
-                query_stage_master_key=master_key,
-                query_id='',
-                smk_id=0
-            )
-            encryption_metadata, encrypted_file = SnowflakeEncryptionUtil.encrypt_file(
-                encryption_material,
-                file
-            )
+            with self.open_connection() as connection:
+                with connection.cursor(snowflake.connector.DictCursor) as cur:
+                    cur.execute("USE SCHEMA public")
+                    put_sql = "PUT file:///{} @{}/{}".format(file, stage, file_key)
+                    logger.info("SNOWFLAKE - {}".format(put_sql))
+                    cur.execute(put_sql)
+                    logger.info("PUT complete")
 
-            # Upload to s3
-            # Send key and iv in the metadata, that will be required to decrypt and upload the encrypted file
-            metadata = {
-                'x-amz-key': encryption_metadata.key,
-                'x-amz-iv': encryption_metadata.iv
-            }
-            self.s3.upload_file(encrypted_file, bucket, s3_key, ExtraArgs={'Metadata': metadata})
-
-            # Remove the uploaded encrypted file
-            os.remove(encrypted_file)
-
-        # Upload to S3 without encrypting
         else:
-            self.s3.upload_file(file, bucket, s3_key)
+            # Generating key in S3 bucket 
+            bucket = self.connection_config['s3_bucket']
+            endpoint = self.connection_config['s3_endpoint']
+            region = self.connection_config['s3_region']
 
-        return s3_key
+            logger.info("Target S3 bucket: {}, local file: {}, S3 key: {}, endpoint: {}, region: {} ".format(bucket, file, file_key, endpoint, region))
+
+            # Encrypt csv if client side encryption enabled
+            master_key = self.connection_config.get('client_side_encryption_master_key', '')
+            if master_key != '':
+                # Encrypt the file
+                encryption_material = SnowflakeFileEncryptionMaterial(
+                    query_stage_master_key=master_key,
+                    query_id='',
+                    smk_id=0
+                )
+                encryption_metadata, encrypted_file = SnowflakeEncryptionUtil.encrypt_file(
+                    encryption_material,
+                    file
+                )
+
+                # Upload to s3
+                # Send key and iv in the metadata, that will be required to decrypt and upload the encrypted file
+                metadata = {
+                    'x-amz-key': encryption_metadata.key,
+                    'x-amz-iv': encryption_metadata.iv
+                }
+                self.s3.upload_file(encrypted_file, bucket, s3_key, ExtraArgs={'Metadata': metadata})
+
+                # Remove the uploaded encrypted file
+                os.remove(encrypted_file)
+
+            # Upload to S3 without encrypting
+            else:
+                self.s3.upload_file(file, bucket, s3_key)
+
+        return file_key
 
 
     def delete_from_stage(self, s3_key):
-        logger.info("Deleting {} from external snowflake stage on S3".format(s3_key))
-        bucket = self.connection_config['s3_bucket']
-        self.s3.delete_object(Bucket=bucket, Key=s3_key)
+        # internal staging
+        if not 'aws_access_key_id' in self.connection_config:
+            logger.info("Deleting {} from internal snowflake stage".format(s3_key))
+            stage = self.connection_config['stage']
+            logger.info("Target internal staging: {} ".format(stage))
+
+            with self.open_connection() as connection:
+                with connection.cursor(snowflake.connector.DictCursor) as cur:
+                    cur.execute("USE SCHEMA public")
+                    rm_sql = "rm @{}/{}".format(stage, s3_key)
+                    cur.execute(rm_sql)
+        else:
+            logger.info("Deleting {} from external snowflake stage on S3".format(s3_key))
+            bucket = self.connection_config['s3_bucket']
+            self.s3.delete_object(Bucket=bucket, Key=s3_key)
 
 
     def cache_information_schema_columns(self, table_schemas=[], create_only=False):
@@ -448,6 +492,7 @@ class DbSync:
 
                 # Insert or Update with MERGE command if primary key defined
                 if len(self.stream_schema_message['key_properties']) > 0:
+                    logger.info("stage: {}".format(self.connection_config['stage']))
                     merge_sql = """MERGE INTO {} t
                         USING (
                             SELECT {}
@@ -463,6 +508,7 @@ class DbSync:
                         self.table_name(stream, False),
                         ', '.join(["{}(${}) {}".format(c['trans'], i + 1, c['name']) for i, c in enumerate(columns_with_trans)]),
                         self.connection_config['stage'],
+#                        '%visits',
                         s3_key,
                         self.connection_config['file_format'],
                         self.primary_key_merge_condition(),
@@ -471,6 +517,7 @@ class DbSync:
                         ', '.join(['s.{}'.format(c['name']) for c in columns_with_trans])
                     )
                     logger.debug("SNOWFLAKE - {}".format(merge_sql))
+                    cur.execute("USE SCHEMA public")    # TODO don't hardcode this
                     cur.execute(merge_sql)
 
                 # Insert only with COPY command if no primary key
