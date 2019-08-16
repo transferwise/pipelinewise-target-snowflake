@@ -169,3 +169,9 @@ Full list of options in `config.json`:
   pip install pylint
   pylint target_snowflake -d C,W,unexpected-keyword-arg,duplicate-code
 ```
+
+## License
+
+Apache License Version 2.0
+
+See [LICENSE](LICENSE) to see the full text.
