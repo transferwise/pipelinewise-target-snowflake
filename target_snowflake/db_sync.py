@@ -510,7 +510,6 @@ class DbSync:
                         self.table_name(stream, False),
                         ', '.join(["{}(${}) {}".format(c['trans'], i + 1, c['name']) for i, c in enumerate(columns_with_trans)]),
                         self.connection_config['stage'],
-#                        '%visits',
                         s3_key,
                         self.connection_config['file_format'],
                         self.primary_key_merge_condition(),
@@ -518,8 +517,8 @@ class DbSync:
                         ', '.join([c['name'] for c in columns_with_trans]),
                         ', '.join(['s.{}'.format(c['name']) for c in columns_with_trans])
                     )
-                    logger.debug("SNOWFLAKE - {}".format(merge_sql))
-                    cur.execute("USE SCHEMA public")    # TODO don't hardcode this
+                    logger.info("SNOWFLAKE - {}".format(merge_sql))
+                    cur.execute("USE SCHEMA {}".format(self.connection_config['default_target_schema']))
                     cur.execute(merge_sql)
 
                 # Insert only with COPY command if no primary key
