@@ -321,7 +321,7 @@ class DbSync:
                     queries = [query]
 
                 for q in queries:
-                    logger.debug("SNOWFLAKE - Running query: {}".format(q))
+                    logger.info("SNOWFLAKE - Running query: {}".format(q))
                     cur.execute(q, params)
 
                     if cur.rowcount > 0:
