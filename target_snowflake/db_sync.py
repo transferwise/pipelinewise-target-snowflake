@@ -366,7 +366,7 @@ class DbSync:
         logger.info("Uploading {} rows to external snowflake stage on S3".format(count))
 
         s3_key_prefix = self.connection_config.get('s3_key_prefix', '')
-        file_key = "{}pipelinewise_{}_{}.csv".format(s3_key_prefix, stream, datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f"))
+        s3_key = "{}pipelinewise_{}_{}.csv".format(s3_key_prefix, stream, datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f"))
 
         # internal staging
         if not 'aws_access_key_id' in self.connection_config:
@@ -375,8 +375,9 @@ class DbSync:
 
             with self.open_connection() as connection:
                 with connection.cursor(snowflake.connector.DictCursor) as cur:
-                    cur.execute("USE SCHEMA {}".format(self.connection_config['default_target_schema'])
-                    put_sql = "PUT file:///{} @{}/{}".format(file, stage, file_key)
+                    cur.execute("USE SCHEMA {}".format(self.connection_config['default_target_schema']))
+                    logger.info("file: {}, stage: {}, s3_key: {}".format(file, stage, s3_key))
+                    put_sql = "PUT file:///{} @{}/{}".format(file, stage, s3_key)
                     logger.info("SNOWFLAKE - {}".format(put_sql))
                     cur.execute(put_sql)
                     logger.info("PUT complete")
@@ -387,7 +388,7 @@ class DbSync:
             endpoint = self.connection_config['s3_endpoint']
             region = self.connection_config['s3_region']
 
-            logger.info("Target S3 bucket: {}, local file: {}, S3 key: {}, endpoint: {}, region: {} ".format(bucket, file, file_key, endpoint, region))
+            logger.info("Target S3 bucket: {}, local file: {}, S3 key: {}, endpoint: {}, region: {} ".format(bucket, file, s3_key, endpoint, region))
 
             # Encrypt csv if client side encryption enabled
             master_key = self.connection_config.get('client_side_encryption_master_key', '')
@@ -418,7 +419,7 @@ class DbSync:
             else:
                 self.s3.upload_file(file, bucket, s3_key)
 
-        return file_key
+        return s3_key
 
 
     def delete_from_stage(self, s3_key):
@@ -430,7 +431,7 @@ class DbSync:
 
             with self.open_connection() as connection:
                 with connection.cursor(snowflake.connector.DictCursor) as cur:
-                    cur.execute("USE SCHEMA {}".format(self.connection_config['default_target_schema'])
+                    cur.execute("USE SCHEMA {}".format(self.connection_config['default_target_schema']))
                     rm_sql = "rm @{}/{}".format(stage, s3_key)
                     cur.execute(rm_sql)
         # external staging
