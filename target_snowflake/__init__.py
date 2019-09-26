@@ -2,31 +2,25 @@
 
 import argparse
 import io
+import json
 import os
 import sys
-import json
-import threading
-import http.client
-import urllib
-from datetime import datetime
-import time
-import collections
-from tempfile import NamedTemporaryFile
-from decimal import Decimal
-from joblib import Parallel, delayed, parallel_backend
 import tempfile
+from datetime import datetime
+from decimal import Decimal
+from tempfile import NamedTemporaryFile
 
-import pkg_resources
-from jsonschema import ValidationError, Draft4Validator, FormatChecker
 import singer
+from joblib import Parallel, delayed, parallel_backend
+from jsonschema import Draft4Validator, FormatChecker
+
 from target_snowflake.db_sync import DbSync
 
 logger = singer.get_logger()
 
 
 def float_to_decimal(value):
-    '''Walk the given data structure and turn all instances of float into
-    double.'''
+    """Walk the given data structure and turn all instances of float into double."""
     if isinstance(value, float):
         return Decimal(str(value))
     if isinstance(value, list):
