@@ -23,6 +23,7 @@ from target_snowflake.db_sync import DbSync
 
 logger = singer.get_logger()
 
+
 def float_to_decimal(value):
     '''Walk the given data structure and turn all instances of float into
     double.'''
@@ -34,6 +35,7 @@ def float_to_decimal(value):
         return {k: float_to_decimal(v) for k, v in value.items()}
     return value
 
+
 def add_metadata_columns_to_schema(schema_message):
     """Metadata _sdc columns according to the stitch documentation at
     https://www.stitchdata.com/docs/data-structure/integration-schemas#sdc-columns
@@ -41,11 +43,14 @@ def add_metadata_columns_to_schema(schema_message):
     Metadata columns gives information about data injections
     """
     extended_schema_message = schema_message
-    extended_schema_message['schema']['properties']['_sdc_extracted_at'] = { 'type': ['null', 'string'], 'format': 'date-time' }
-    extended_schema_message['schema']['properties']['_sdc_batched_at'] = { 'type': ['null', 'string'], 'format': 'date-time' }
-    extended_schema_message['schema']['properties']['_sdc_deleted_at'] = { 'type': ['null', 'string'] }
+    extended_schema_message['schema']['properties']['_sdc_extracted_at'] = {'type': ['null', 'string'],
+                                                                            'format': 'date-time'}
+    extended_schema_message['schema']['properties']['_sdc_batched_at'] = {'type': ['null', 'string'],
+                                                                          'format': 'date-time'}
+    extended_schema_message['schema']['properties']['_sdc_deleted_at'] = {'type': ['null', 'string']}
 
     return extended_schema_message
+
 
 def add_metadata_values_to_record(record_message, stream_to_sync):
     """Populate metadata _sdc columns from incoming record message
@@ -58,12 +63,14 @@ def add_metadata_values_to_record(record_message, stream_to_sync):
 
     return extended_record
 
+
 def emit_state(state):
     if state is not None:
         line = json.dumps(state)
         logger.debug('Emitting state {}'.format(line))
         sys.stdout.write("{}\n".format(line))
         sys.stdout.flush()
+
 
 def get_schema_names_from_config(config):
     default_target_schema = config.get('default_target_schema')
@@ -79,6 +86,7 @@ def get_schema_names_from_config(config):
 
     return schema_names
 
+
 def load_information_schema_cache(config):
     information_schema_cache = []
     if not ('disable_table_cache' in config and config['disable_table_cache'] == True):
@@ -91,8 +99,9 @@ def load_information_schema_cache(config):
 
     return information_schema_cache
 
+
 # pylint: disable=too-many-locals,too-many-branches,too-many-statements
-def persist_lines(config, lines, information_schema_cache=None):
+def persist_lines(config, lines, information_schema_cache=None) -> None:
     state = None
     schemas = {}
     key_properties = {}
@@ -101,6 +110,7 @@ def persist_lines(config, lines, information_schema_cache=None):
     csv_files_to_load = {}
     row_count = {}
     stream_to_sync = {}
+    total_row_count = {}
     batch_size_rows = config.get('batch_size_rows', 100000)
 
     # Loop over lines from stdin
@@ -113,6 +123,7 @@ def persist_lines(config, lines, information_schema_cache=None):
 
         if 'type' not in o:
             raise Exception("Line is missing required key 'type': {}".format(line))
+
         t = o['type']
 
         if t == 'RECORD':
@@ -130,36 +141,34 @@ def persist_lines(config, lines, information_schema_cache=None):
                 validators[stream].validate(float_to_decimal(o['record']))
             except Exception as ex:
                 if type(ex).__name__ == "InvalidOperation":
-                    logger.error("Data validation failed and cannot load to destination. RECORD: {}\n'multipleOf' validations that allows long precisions are not supported (i.e. with 15 digits or more). Try removing 'multipleOf' methods from JSON schema."
-                    .format(o['record']))
+                    logger.error(
+                        "Data validation failed and cannot load to destination. RECORD: {}\n'multipleOf' validations that allows long precisions are not supported (i.e. with 15 digits or more). Try removing 'multipleOf' methods from JSON schema."
+                            .format(o['record']))
                     raise ex
 
-            primary_key_string = stream_to_sync[stream].record_primary_key_string(o['record'])
-            if not primary_key_string:
-                primary_key_string = 'RID-{}'.format(row_count[stream])
-
             if stream not in records_to_load:
-                records_to_load[stream] = {}
+                records_to_load[stream] = []
 
+            # append record
             if config.get('add_metadata_columns') or config.get('hard_delete'):
-                records_to_load[stream][primary_key_string] = add_metadata_values_to_record(o, stream_to_sync[stream])
+                records_to_load[stream].append(add_metadata_values_to_record(o, stream_to_sync[stream]))
             else:
-                records_to_load[stream][primary_key_string] = o['record']
+                records_to_load[stream].append(o['record'])
 
-            row_count[stream] = len(records_to_load[stream])
+            # increment record count
+            row_count[stream] += 1
+            total_row_count[stream] += 1
 
             if row_count[stream] >= batch_size_rows:
-                flush_records(stream, records_to_load[stream], row_count[stream], stream_to_sync[stream])
-                row_count[stream] = 0
-                records_to_load[stream] = {}
+                # flush all streams, delete records if needed, reset counts and then emit current state
+                flush_all_streams(records_to_load, row_count, stream_to_sync, config)
+                # emit last encountered state
+                emit_state(state)
 
-            state = None
-        elif t == 'STATE':
-            logger.debug('Setting state to {}'.format(o['value']))
-            state = o['value']
         elif t == 'SCHEMA':
             if 'stream' not in o:
                 raise Exception("Line is missing required key 'stream': {}".format(line))
+
             stream = o['stream']
 
             schemas[stream] = o
@@ -167,8 +176,12 @@ def persist_lines(config, lines, information_schema_cache=None):
             validators[stream] = Draft4Validator(schema, format_checker=FormatChecker())
 
             # flush records from previous stream SCHEMA
+            # if same stream has been encountered again, it means the schema might have been altered
+            # so previous records need to be flushed
             if row_count.get(stream, 0) > 0:
-                flush_records(stream, records_to_load[stream], row_count[stream], stream_to_sync[stream])
+                flush_all_streams(records_to_load, row_count, stream_to_sync, config)
+                # emit latest encountered state
+                emit_state(state)
 
             # key_properties key must be available in the SCHEMA message.
             if 'key_properties' not in o:
@@ -206,41 +219,71 @@ def persist_lines(config, lines, information_schema_cache=None):
                 raise e
 
             row_count[stream] = 0
+            total_row_count[stream] = 0
             csv_files_to_load[stream] = NamedTemporaryFile(mode='w+b')
+
         elif t == 'ACTIVATE_VERSION':
             logger.debug('ACTIVATE_VERSION message')
+
+        elif t == 'STATE':
+            logger.debug('Setting state to {}'.format(o['value']))
+            state = o['value']
+
         else:
             raise Exception("Unknown message type {} in message {}"
                             .format(o['type'], o))
 
+    # if some bucket has records that need to be flushed but haven't reached batch size
+    # then flush all buckets.
+    if len(row_count.values()) > 0:
+        # flush all streams one last time, delete records if needed, reset counts and then emit current state
+        flush_all_streams(records_to_load, row_count, stream_to_sync, config)
 
+    # emit latest state
+    emit_state(state)
+
+
+def flush_all_streams(records_to_load, row_count, stream_to_sync, config) -> None:
+    """
+    Flushes all buckets and resets records count to 0 as well as empties records to load list
+    :param records_to_load: dictionary with records to load per stream
+    :param row_count: dictionary with row count per stream
+    :param stream_to_sync: Snowflake db sync instance per stream
+    :param config: dictionary containing the configuration
+    :return:
+    """
     # Single-host, thread-based parallelism
     with parallel_backend('threading', n_jobs=-1):
         Parallel()(delayed(load_stream_batch)(
             stream=stream,
             records_to_load=records_to_load[stream],
-            row_count=row_count[stream],
+            row_count=row_count,
             db_sync=stream_to_sync[stream],
             delete_rows=config.get('hard_delete')
         ) for (stream) in records_to_load.keys())
 
-    return state
+        # for each stream, reset the records to load to empty list to avoid flushing already flushed records.
+        for (stream) in records_to_load.keys():
+            records_to_load[stream] = []
 
 
 def load_stream_batch(stream, records_to_load, row_count, db_sync, delete_rows=False):
-    #Load into snowflake
-    if row_count > 0:
-        flush_records(stream, records_to_load, row_count, db_sync)
+    # Load into snowflake
+    if row_count[stream] > 0:
+        flush_records(stream, records_to_load, row_count[stream], db_sync)
 
     # Delete soft-deleted, flagged rows - where _sdc_deleted at is not null
     if delete_rows:
         db_sync.delete_rows(stream)
 
+    # reset row count for the current stream
+    row_count[stream] = 0
+
 
 def flush_records(stream, records_to_load, row_count, db_sync):
     csv_fd, csv_file = tempfile.mkstemp()
     with open(csv_fd, 'w+b') as f:
-        for record in records_to_load.values():
+        for record in records_to_load:
             csv_line = db_sync.record_to_csv_line(record)
             f.write(bytes(csv_line + '\n', 'UTF-8'))
 
@@ -274,9 +317,8 @@ def main():
 
     # Consume singer messages
     input = io.TextIOWrapper(sys.stdin.buffer, encoding='utf-8')
-    state = persist_lines(config, input, information_schema_cache)
+    persist_lines(config, input, information_schema_cache)
 
-    emit_state(state)
     logger.debug("Exiting normally")
 
 
