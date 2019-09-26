@@ -301,8 +301,8 @@ def main():
     args = parser.parse_args()
 
     if args.config:
-        with open(args.config) as input:
-            config = json.load(input)
+        with open(args.config) as config_input:
+            config = json.load(config_input)
     else:
         config = {}
 
@@ -310,8 +310,8 @@ def main():
     information_schema_cache = load_information_schema_cache(config)
 
     # Consume singer messages
-    input = io.TextIOWrapper(sys.stdin.buffer, encoding='utf-8')
-    persist_lines(config, input, information_schema_cache)
+    singer_messages = io.TextIOWrapper(sys.stdin.buffer, encoding='utf-8')
+    persist_lines(config, singer_messages, information_schema_cache)
 
     logger.debug("Exiting normally")
 
