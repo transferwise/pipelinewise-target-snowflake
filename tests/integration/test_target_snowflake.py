@@ -421,42 +421,47 @@ class TestIntegration(unittest.TestCase):
         # Get loaded rows from tables
         snowflake = DbSync(self.config)
         target_schema = self.config.get('default_target_schema', '')
-        table_one = snowflake.query("SELECT * FROM {}.logical1_table1 ORDER BY cid".format(target_schema))
-        table_two = snowflake.query("SELECT * FROM {}.logical1_table2 ORDER BY cid".format(target_schema))
-        table_three = snowflake.query("SELECT * FROM {}.logical2_table1 ORDER BY cid".format(target_schema))
+        table_one = snowflake.query("SELECT * FROM {}.logical1_table1 ORDER BY CID".format(target_schema))
+        table_two = snowflake.query("SELECT * FROM {}.logical1_table2 ORDER BY CID".format(target_schema))
+        table_three = snowflake.query("SELECT * FROM {}.logical2_table1 ORDER BY CID".format(target_schema))
 
         # ----------------------------------------------------------------------
         # Check rows in table_one
         # ----------------------------------------------------------------------
         expected_table_one = [
-            {'cid': 1, 'cvarchar': "inserted row", 'cvarchar2': None},
-            {'cid': 2, 'cvarchar': 'inserted row', "cvarchar2": "inserted row"},
-            {'cid': 3, 'cvarchar': "inserted row", 'cvarchar2': "inserted row"},
-            {'cid': 4, 'cvarchar': "inserted row", 'cvarchar2': "inserted row"}
+            {'CID': 1, 'CVARCHAR': "inserted row", 'CVARCHAR2': None},
+            {'CID': 2, 'CVARCHAR': 'inserted row', "CVARCHAR2": "inserted row"},
+            {'CID': 3, 'CVARCHAR': "inserted row", 'CVARCHAR2': "inserted row"},
+            {'CID': 4, 'CVARCHAR': "inserted row", 'CVARCHAR2': "inserted row"}
         ]
 
         # ----------------------------------------------------------------------
         # Check rows in table_tow
         # ----------------------------------------------------------------------
         expected_table_two = [
-            {'cid': 1, 'cvarchar': "updated row"},
-            {'cid': 2, 'cvarchar': 'updated row'},
-            {'cid': 3, 'cvarchar': "updated row"},
-            {'cid': 5, 'cvarchar': "updated row"},
-            {'cid': 7, 'cvarchar': "updated row"},
-            {'cid': 8, 'cvarchar': 'updated row'},
-            {'cid': 9, 'cvarchar': "updated row"},
-            {'cid': 10, 'cvarchar': 'updated row'}
+            {'CID': 1, 'CVARCHAR': "updated row"},
+            {'CID': 2, 'CVARCHAR': 'updated row'},
+            {'CID': 3, 'CVARCHAR': "updated row"},
+            {'CID': 5, 'CVARCHAR': "updated row"},
+            {'CID': 7, 'CVARCHAR': "updated row"},
+            {'CID': 8, 'CVARCHAR': 'updated row'},
+            {'CID': 9, 'CVARCHAR': "updated row"},
+            {'CID': 10, 'CVARCHAR': 'updated row'}
         ]
 
         # ----------------------------------------------------------------------
         # Check rows in table_three
         # ----------------------------------------------------------------------
         expected_table_three = [
-            {'cid': 1, 'cvarchar': "updated row"},
-            {'cid': 2, 'cvarchar': 'updated row'},
-            {'cid': 3, 'cvarchar': "updated row"},
+            {'CID': 1, 'CVARCHAR': "updated row"},
+            {'CID': 2, 'CVARCHAR': 'updated row'},
+            {'CID': 3, 'CVARCHAR': "updated row"},
         ]
+
+        self.assertEqual(self.remove_metadata_columns_from_rows(table_one), expected_table_one)
+        self.assertEqual(self.remove_metadata_columns_from_rows(table_two), expected_table_two)
+        self.assertEqual(self.remove_metadata_columns_from_rows(table_three), expected_table_three)
+
 
     def test_information_schema_cache_create_and_update(self):
         """Newly created and altered tables must be cached automatically for later use.
