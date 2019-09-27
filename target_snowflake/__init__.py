@@ -140,18 +140,24 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
                             .format(o['record']))
                     raise ex
 
+            primary_key_string = stream_to_sync[stream].record_primary_key_string(o['record'])
+            if not primary_key_string:
+                primary_key_string = 'RID-{}'.format(total_row_count[stream])
+
             if stream not in records_to_load:
-                records_to_load[stream] = []
+                records_to_load[stream] = {}
+
+            # If primary key doesn't exist in stream records
+            # it means we're encountering a new record thus increment counts
+            if primary_key_string not in records_to_load[stream]:
+                row_count[stream] += 1
+                total_row_count[stream] += 1
 
             # append record
             if config.get('add_metadata_columns') or config.get('hard_delete'):
-                records_to_load[stream].append(add_metadata_values_to_record(o, stream_to_sync[stream]))
+                records_to_load[stream][primary_key_string] = add_metadata_values_to_record(o, stream_to_sync[stream])
             else:
-                records_to_load[stream].append(o['record'])
-
-            # increment record count
-            row_count[stream] += 1
-            total_row_count[stream] += 1
+                records_to_load[stream][primary_key_string] = o['record']
 
             if row_count[stream] >= batch_size_rows:
                 # flush all streams, delete records if needed, reset counts and then emit current state
@@ -256,10 +262,6 @@ def flush_all_streams(records_to_load, row_count, stream_to_sync, config) -> Non
             delete_rows=config.get('hard_delete')
         ) for (stream) in records_to_load.keys())
 
-        # for each stream, reset the records to load to empty list to avoid flushing already flushed records.
-        for (stream) in records_to_load.keys():
-            records_to_load[stream] = []
-
 
 def load_stream_batch(stream, records_to_load, row_count, db_sync, delete_rows=False):
     # Load into snowflake
@@ -277,7 +279,7 @@ def load_stream_batch(stream, records_to_load, row_count, db_sync, delete_rows=F
 def flush_records(stream, records_to_load, row_count, db_sync):
     csv_fd, csv_file = tempfile.mkstemp()
     with open(csv_fd, 'w+b') as f:
-        for record in records_to_load:
+        for record in records_to_load.values():
             csv_line = db_sync.record_to_csv_line(record)
             f.write(bytes(csv_line + '\n', 'UTF-8'))
 
