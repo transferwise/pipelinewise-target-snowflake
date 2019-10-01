@@ -147,11 +147,9 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
             if stream not in records_to_load:
                 records_to_load[stream] = {}
 
-            # If primary key doesn't exist in stream records
-            # it means we're encountering a new record thus increment counts
-            if primary_key_string not in records_to_load[stream]:
-                row_count[stream] += 1
-                total_row_count[stream] += 1
+            # increment row count with every record line
+            row_count[stream] += 1
+            total_row_count[stream] += 1
 
             # append record
             if config.get('add_metadata_columns') or config.get('hard_delete'):
@@ -262,18 +260,22 @@ def flush_all_streams(records_to_load, row_count, stream_to_sync, config) -> Non
             delete_rows=config.get('hard_delete')
         ) for (stream) in records_to_load.keys())
 
+    # reset all stream records to empty to avoid flushing same records
+    for stream in records_to_load.keys():
+        records_to_load[stream] = {}
+
 
 def load_stream_batch(stream, records_to_load, row_count, db_sync, delete_rows=False):
     # Load into snowflake
     if row_count[stream] > 0:
         flush_records(stream, records_to_load, row_count[stream], db_sync)
 
-    # Delete soft-deleted, flagged rows - where _sdc_deleted at is not null
-    if delete_rows:
-        db_sync.delete_rows(stream)
+        # Delete soft-deleted, flagged rows - where _sdc_deleted at is not null
+        if delete_rows:
+            db_sync.delete_rows(stream)
 
-    # reset row count for the current stream
-    row_count[stream] = 0
+        # reset row count for the current stream
+        row_count[stream] = 0
 
 
 def flush_records(stream, records_to_load, row_count, db_sync):
