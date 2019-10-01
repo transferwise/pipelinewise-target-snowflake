@@ -1,20 +1,19 @@
+import datetime
+import json
 import unittest
 import os
-import json
-import datetime
-import target_snowflake
-import snowflake
 
-from nose.tools import assert_raises 
+from nose.tools import assert_raises
+
+import target_snowflake
 from target_snowflake.db_sync import DbSync
-from snowflake.connector.encryption_util import SnowflakeEncryptionUtil
-from snowflake.connector.remote_storage_util import SnowflakeFileEncryptionMaterial
+
+from snowflake.connector.errors import ProgrammingError
 
 try:
     import tests.utils as test_utils
 except ImportError:
     import utils as test_utils
-
 
 METADATA_COLUMNS = [
     '_SDC_EXTRACTED_AT',
@@ -27,7 +26,7 @@ class TestIntegration(unittest.TestCase):
     """
     Integration Tests
     """
-    @classmethod
+
     def setUp(self):
         self.config = test_utils.get_test_config()
         snowflake = DbSync(self.config)
@@ -39,7 +38,6 @@ class TestIntegration(unittest.TestCase):
         # Drop pipelinewise schema with information_schema cache
         if self.config['stage']:
             snowflake.query("DROP TABLE IF EXISTS {}.columns".format(snowflake.pipelinewise_schema))
-
 
     def persist_lines_with_cache(self, lines):
         """Enables table caching option and loads singer messages into snowflake.
@@ -54,7 +52,6 @@ class TestIntegration(unittest.TestCase):
         """
         information_schema_cache = target_snowflake.load_information_schema_cache(self.config)
         target_snowflake.persist_lines(self.config, lines, information_schema_cache)
-
 
     def remove_metadata_columns_from_rows(self, rows):
         """Removes metadata columns from a list of rows"""
@@ -71,13 +68,11 @@ class TestIntegration(unittest.TestCase):
 
         return d_rows
 
-
     def assert_metadata_columns_exist(self, rows):
         """This is a helper assertion that checks if every row in a list has metadata columns"""
         for r in rows:
             for md_c in METADATA_COLUMNS:
                 self.assertTrue(md_c in r)
-
 
     def assert_metadata_columns_not_exist(self, rows):
         """This is a helper assertion that checks metadata columns don't exist in any row"""
@@ -85,8 +80,8 @@ class TestIntegration(unittest.TestCase):
             for md_c in METADATA_COLUMNS:
                 self.assertFalse(md_c in r)
 
-
-    def assert_three_streams_are_into_snowflake(self, should_metadata_columns_exist=False, should_hard_deleted_rows=False):
+    def assert_three_streams_are_into_snowflake(self, should_metadata_columns_exist=False,
+                                                should_hard_deleted_rows=False):
         """
         This is a helper assertion that checks if every data from the message-with-three-streams.json
         file is available in Snowflake tables correctly.
@@ -108,7 +103,6 @@ class TestIntegration(unittest.TestCase):
         table_one = snowflake.query("SELECT * FROM {}.test_table_one ORDER BY c_pk".format(target_schema))
         table_two = snowflake.query("SELECT * FROM {}.test_table_two ORDER BY c_pk".format(target_schema))
         table_three = snowflake.query("SELECT * FROM {}.test_table_three ORDER BY c_pk".format(target_schema))
-
 
         # ----------------------------------------------------------------------
         # Check rows in table_one
@@ -143,9 +137,9 @@ class TestIntegration(unittest.TestCase):
         expected_table_three = []
         if not should_hard_deleted_rows:
             expected_table_three = [
-                    {'C_INT': 1, 'C_PK': 1, 'C_VARCHAR': '1', 'C_TIME': datetime.time(4, 0, 0)},
-                    {'C_INT': 2, 'C_PK': 2, 'C_VARCHAR': '2', 'C_TIME': datetime.time(7, 15, 0)},
-                    {'C_INT': 3, 'C_PK': 3, 'C_VARCHAR': '3', 'C_TIME': datetime.time(23, 0, 3)}
+                {'C_INT': 1, 'C_PK': 1, 'C_VARCHAR': '1', 'C_TIME': datetime.time(4, 0, 0)},
+                {'C_INT': 2, 'C_PK': 2, 'C_VARCHAR': '2', 'C_TIME': datetime.time(7, 15, 0)},
+                {'C_INT': 3, 'C_PK': 3, 'C_VARCHAR': '3', 'C_TIME': datetime.time(23, 0, 3)}
             ]
         else:
             expected_table_three = [
@@ -168,6 +162,59 @@ class TestIntegration(unittest.TestCase):
             self.assert_metadata_columns_not_exist(table_two)
             self.assert_metadata_columns_not_exist(table_three)
 
+    def assert_logical_streams_are_in_snowflake(self, should_metadata_columns_exist=False):
+        # Get loaded rows from tables
+        snowflake = DbSync(self.config)
+        target_schema = self.config.get('default_target_schema', '')
+        table_one = snowflake.query("SELECT * FROM {}.logical1_table1 ORDER BY CID".format(target_schema))
+        table_two = snowflake.query("SELECT * FROM {}.logical1_table2 ORDER BY CID".format(target_schema))
+        table_three = snowflake.query("SELECT * FROM {}.logical2_table1 ORDER BY CID".format(target_schema))
+
+        # ----------------------------------------------------------------------
+        # Check rows in table_one
+        # ----------------------------------------------------------------------
+        expected_table_one = [
+            {'CID': 1, 'CVARCHAR': "inserted row", 'CVARCHAR2': None},
+            {'CID': 2, 'CVARCHAR': 'inserted row', "CVARCHAR2": "inserted row"},
+            {'CID': 3, 'CVARCHAR': "inserted row", 'CVARCHAR2': "inserted row"},
+            {'CID': 4, 'CVARCHAR': "inserted row", 'CVARCHAR2': "inserted row"}
+        ]
+
+        # ----------------------------------------------------------------------
+        # Check rows in table_tow
+        # ----------------------------------------------------------------------
+        expected_table_two = [
+            {'CID': 1, 'CVARCHAR': "updated row"},
+            {'CID': 2, 'CVARCHAR': 'updated row'},
+            {'CID': 3, 'CVARCHAR': "updated row"},
+            {'CID': 5, 'CVARCHAR': "updated row"},
+            {'CID': 7, 'CVARCHAR': "updated row"},
+            {'CID': 8, 'CVARCHAR': 'updated row'},
+            {'CID': 9, 'CVARCHAR': "updated row"},
+            {'CID': 10, 'CVARCHAR': 'updated row'}
+        ]
+
+        # ----------------------------------------------------------------------
+        # Check rows in table_three
+        # ----------------------------------------------------------------------
+        expected_table_three = [
+            {'CID': 1, 'CVARCHAR': "updated row"},
+            {'CID': 2, 'CVARCHAR': 'updated row'},
+            {'CID': 3, 'CVARCHAR': "updated row"},
+        ]
+
+        if should_metadata_columns_exist:
+            self.assertEqual(self.remove_metadata_columns_from_rows(table_one), expected_table_one)
+            self.assertEqual(self.remove_metadata_columns_from_rows(table_two), expected_table_two)
+            self.assertEqual(self.remove_metadata_columns_from_rows(table_three), expected_table_three)
+        else:
+            self.assertEqual(table_one, expected_table_one)
+            self.assertEqual(table_two, expected_table_two)
+            self.assertEqual(table_three, expected_table_three)
+
+    #################################
+    #           TESTS               #
+    #################################
 
     def test_invalid_json(self):
         """Receiving invalid JSONs should raise an exception"""
@@ -175,13 +222,11 @@ class TestIntegration(unittest.TestCase):
         with assert_raises(json.decoder.JSONDecodeError):
             self.persist_lines_with_cache(tap_lines)
 
-
     def test_message_order(self):
         """RECORD message without a previously received SCHEMA message should raise an exception"""
         tap_lines = test_utils.get_test_tap_lines('invalid-message-order.json')
         with assert_raises(Exception):
             self.persist_lines_with_cache(tap_lines)
-
 
     def test_loading_tables_with_no_encryption(self):
         """Loading multiple tables from the same input tap with various columns types"""
@@ -193,7 +238,6 @@ class TestIntegration(unittest.TestCase):
 
         self.assert_three_streams_are_into_snowflake()
 
-
     def test_loading_tables_with_client_side_encryption(self):
         """Loading multiple tables from the same input tap with various columns types"""
         tap_lines = test_utils.get_test_tap_lines('messages-with-three-streams.json')
@@ -204,16 +248,14 @@ class TestIntegration(unittest.TestCase):
 
         self.assert_three_streams_are_into_snowflake()
 
-
     def test_loading_tables_with_client_side_encryption_and_wrong_master_key(self):
         """Loading multiple tables from the same input tap with various columns types"""
         tap_lines = test_utils.get_test_tap_lines('messages-with-three-streams.json')
 
         # Turning on client-side encryption and load but using a well formatted but wrong master key
         self.config['client_side_encryption_master_key'] = "Wr0n6m45t3rKeY0123456789a0123456789a0123456="
-        with assert_raises(snowflake.connector.errors.ProgrammingError):
+        with assert_raises(ProgrammingError):
             self.persist_lines_with_cache(tap_lines)
-
 
     def test_loading_tables_with_metadata_columns(self):
         """Loading multiple tables from the same input tap with various columns types"""
@@ -225,7 +267,6 @@ class TestIntegration(unittest.TestCase):
 
         # Check if data loaded correctly and metadata columns exist
         self.assert_three_streams_are_into_snowflake(should_metadata_columns_exist=True)
-
 
     def test_loading_tables_with_hard_delete(self):
         """Loading multiple tables from the same input tap with deleted rows"""
@@ -241,7 +282,6 @@ class TestIntegration(unittest.TestCase):
             should_hard_deleted_rows=True
         )
 
-
     def test_loading_with_multiple_schema(self):
         """Loading table with multiple SCHEMA messages"""
         tap_lines = test_utils.get_test_tap_lines('messages-with-multi-schemas.json')
@@ -255,7 +295,6 @@ class TestIntegration(unittest.TestCase):
             should_hard_deleted_rows=False
         )
 
-
     def test_loading_unicode_characters(self):
         """Loading unicode encoded characters"""
         tap_lines = test_utils.get_test_tap_lines('messages-with-unicode-characters.json')
@@ -266,19 +305,19 @@ class TestIntegration(unittest.TestCase):
         # Get loaded rows from tables
         snowflake = DbSync(self.config)
         target_schema = self.config.get('default_target_schema', '')
-        table_unicode = snowflake.query("SELECT * FROM {}.test_table_unicode".format(target_schema))
+        table_unicode = snowflake.query("SELECT * FROM {}.test_table_unicode ORDER BY C_INT".format(target_schema))
 
         self.assertEqual(
             table_unicode,
             [
-                    {'C_INT': 1, 'C_PK': 1, 'C_VARCHAR': 'Hello world, Καλημέρα κόσμε, コンニチハ'},
-                    {'C_INT': 2, 'C_PK': 2, 'C_VARCHAR': 'Chinese: 和毛泽东 <<重上井冈山>>. 严永欣, 一九八八年.'},
-                    {'C_INT': 3, 'C_PK': 3, 'C_VARCHAR': 'Russian: Зарегистрируйтесь сейчас на Десятую Международную Конференцию по'},
-                    {'C_INT': 4, 'C_PK': 4, 'C_VARCHAR': 'Thai: แผ่นดินฮั่นเสื่อมโทรมแสนสังเวช'},
-                    {'C_INT': 5, 'C_PK': 5, 'C_VARCHAR': 'Arabic: لقد لعبت أنت وأصدقاؤك لمدة وحصلتم علي من إجمالي النقاط'},
-                    {'C_INT': 6, 'C_PK': 6, 'C_VARCHAR': 'Special Characters: [",\'!@£$%^&*()]'}
+                {'C_INT': 1, 'C_PK': 1, 'C_VARCHAR': 'Hello world, Καλημέρα κόσμε, コンニチハ'},
+                {'C_INT': 2, 'C_PK': 2, 'C_VARCHAR': 'Chinese: 和毛泽东 <<重上井冈山>>. 严永欣, 一九八八年.'},
+                {'C_INT': 3, 'C_PK': 3,
+                 'C_VARCHAR': 'Russian: Зарегистрируйтесь сейчас на Десятую Международную Конференцию по'},
+                {'C_INT': 4, 'C_PK': 4, 'C_VARCHAR': 'Thai: แผ่นดินฮั่นเสื่อมโทรมแสนสังเวช'},
+                {'C_INT': 5, 'C_PK': 5, 'C_VARCHAR': 'Arabic: لقد لعبت أنت وأصدقاؤك لمدة وحصلتم علي من إجمالي النقاط'},
+                {'C_INT': 6, 'C_PK': 6, 'C_VARCHAR': 'Special Characters: [",\'!@£$%^&*()]'}
             ])
-
 
     def test_non_db_friendly_columns(self):
         """Loading non-db friendly columns like, camelcase, minus signs, etc."""
@@ -290,18 +329,18 @@ class TestIntegration(unittest.TestCase):
         # Get loaded rows from tables
         snowflake = DbSync(self.config)
         target_schema = self.config.get('default_target_schema', '')
-        table_non_db_friendly_columns = snowflake.query("SELECT * FROM {}.test_table_non_db_friendly_columns ORDER BY c_pk".format(target_schema))
+        table_non_db_friendly_columns = snowflake.query(
+            "SELECT * FROM {}.test_table_non_db_friendly_columns ORDER BY c_pk".format(target_schema))
 
         self.assertEqual(
             table_non_db_friendly_columns,
             [
-                    {'C_PK': 1, 'CAMELCASECOLUMN': 'Dummy row 1', 'MINUS-COLUMN': 'Dummy row 1'},
-                    {'C_PK': 2, 'CAMELCASECOLUMN': 'Dummy row 2', 'MINUS-COLUMN': 'Dummy row 2'},
-                    {'C_PK': 3, 'CAMELCASECOLUMN': 'Dummy row 3', 'MINUS-COLUMN': 'Dummy row 3'},
-                    {'C_PK': 4, 'CAMELCASECOLUMN': 'Dummy row 4', 'MINUS-COLUMN': 'Dummy row 4'},
-                    {'C_PK': 5, 'CAMELCASECOLUMN': 'Dummy row 5', 'MINUS-COLUMN': 'Dummy row 5'},
+                {'C_PK': 1, 'CAMELCASECOLUMN': 'Dummy row 1', 'MINUS-COLUMN': 'Dummy row 1'},
+                {'C_PK': 2, 'CAMELCASECOLUMN': 'Dummy row 2', 'MINUS-COLUMN': 'Dummy row 2'},
+                {'C_PK': 3, 'CAMELCASECOLUMN': 'Dummy row 3', 'MINUS-COLUMN': 'Dummy row 3'},
+                {'C_PK': 4, 'CAMELCASECOLUMN': 'Dummy row 4', 'MINUS-COLUMN': 'Dummy row 4'},
+                {'C_PK': 5, 'CAMELCASECOLUMN': 'Dummy row 5', 'MINUS-COLUMN': 'Dummy row 5'},
             ])
-
 
     def test_nested_schema_unflattening(self):
         """Loading nested JSON objects into VARIANT columns without flattening"""
@@ -333,7 +372,6 @@ class TestIntegration(unittest.TestCase):
                 'C_NESTED_OBJECT': '{"nested_prop_1":"nested_value_1","nested_prop_2":"nested_value_2","nested_prop_3":{"multi_nested_prop_1":"multi_value_1","multi_nested_prop_2":"multi_value_2"}}'
             }])
 
-
     def test_nested_schema_flattening(self):
         """Loading nested JSON objects with flattening and not not flattening"""
         tap_lines = test_utils.get_test_tap_lines('messages-with-nested-schema.json')
@@ -347,7 +385,8 @@ class TestIntegration(unittest.TestCase):
         # Get loaded rows from tables
         snowflake = DbSync(self.config)
         target_schema = self.config.get('default_target_schema', '')
-        flattened_table = snowflake.query("SELECT * FROM {}.test_table_nested_schema ORDER BY c_pk".format(target_schema))
+        flattened_table = snowflake.query(
+            "SELECT * FROM {}.test_table_nested_schema ORDER BY c_pk".format(target_schema))
 
         # Should be flattened columns
         self.assertEqual(
@@ -355,7 +394,8 @@ class TestIntegration(unittest.TestCase):
             [{
                 'C_PK': 1,
                 'C_ARRAY': '[\n  1,\n  2,\n  3\n]',
-                'C_OBJECT': None,   # Cannot map RECORD to SCHEMA. SCHEMA doesn't have properties that requires for flattening
+                'C_OBJECT': None,
+                # Cannot map RECORD to SCHEMA. SCHEMA doesn't have properties that requires for flattening
                 'C_OBJECT_WITH_PROPS__KEY_1': 'value_1',
                 'C_NESTED_OBJECT__NESTED_PROP_1': 'nested_value_1',
                 'C_NESTED_OBJECT__NESTED_PROP_2': 'nested_value_2',
@@ -363,11 +403,11 @@ class TestIntegration(unittest.TestCase):
                 'C_NESTED_OBJECT__NESTED_PROP_3__MULTI_NESTED_PROP_2': 'multi_value_2',
             }])
 
-
     def test_column_name_change(self):
         """Tests correct renaming of snowflake columns after source change"""
         tap_lines_before_column_name_change = test_utils.get_test_tap_lines('messages-with-three-streams.json')
-        tap_lines_after_column_name_change = test_utils.get_test_tap_lines('messages-with-three-streams-modified-column.json')
+        tap_lines_after_column_name_change = test_utils.get_test_tap_lines(
+            'messages-with-three-streams-modified-column.json')
 
         # Load with default settings
         self.persist_lines_with_cache(tap_lines_before_column_name_change)
@@ -389,8 +429,8 @@ class TestIntegration(unittest.TestCase):
                AND table_name = 'TEST_TABLE_TWO'
                AND ordinal_position = 1
             """.format(
-                self.config.get('dbname', '').upper(),
-                target_schema.upper()))[0]["COLUMN_NAME"]
+            self.config.get('dbname', '').upper(),
+            target_schema.upper()))[0]["COLUMN_NAME"]
 
         # Table one should have no changes
         self.assertEqual(
@@ -401,8 +441,10 @@ class TestIntegration(unittest.TestCase):
         self.assertEquals(
             table_two,
             [
-                {previous_column_name: datetime.datetime(2019, 2, 1, 15, 12, 45), 'C_INT': 1, 'C_PK': 1, 'C_VARCHAR': '1', 'C_DATE': None},
-                {previous_column_name: datetime.datetime(2019, 2, 10, 2), 'C_INT': 2, 'C_PK': 2, 'C_VARCHAR': '2', 'C_DATE': '2019-02-12 02:00:00'},
+                {previous_column_name: datetime.datetime(2019, 2, 1, 15, 12, 45), 'C_INT': 1, 'C_PK': 1,
+                 'C_VARCHAR': '1', 'C_DATE': None},
+                {previous_column_name: datetime.datetime(2019, 2, 10, 2), 'C_INT': 2, 'C_PK': 2, 'C_VARCHAR': '2',
+                 'C_DATE': '2019-02-12 02:00:00'},
                 {previous_column_name: None, 'C_INT': 3, 'C_PK': 3, 'C_VARCHAR': '2', 'C_DATE': '2019-02-15 02:00:00'}
             ]
         )
@@ -413,10 +455,31 @@ class TestIntegration(unittest.TestCase):
             [
                 {'C_INT': 1, 'C_PK': 1, 'C_TIME': datetime.time(4, 0), 'C_VARCHAR': '1', 'C_TIME_RENAMED': None},
                 {'C_INT': 2, 'C_PK': 2, 'C_TIME': datetime.time(7, 15), 'C_VARCHAR': '2', 'C_TIME_RENAMED': None},
-                {'C_INT': 3, 'C_PK': 3, 'C_TIME': datetime.time(23, 0, 3), 'C_VARCHAR': '3', 'C_TIME_RENAMED': datetime.time(8, 15)},
+                {'C_INT': 3, 'C_PK': 3, 'C_TIME': datetime.time(23, 0, 3), 'C_VARCHAR': '3',
+                 'C_TIME_RENAMED': datetime.time(8, 15)},
                 {'C_INT': 4, 'C_PK': 4, 'C_TIME': None, 'C_VARCHAR': '4', 'C_TIME_RENAMED': datetime.time(23, 0, 3)}
             ])
 
+    def test_logical_streams_from_pg_with_hard_delete_and_default_batch_size(self):
+        """Tests logical streams from pg with inserts, updates and deletes"""
+        tap_lines = test_utils.get_test_tap_lines('messages-logical-streams.json')
+
+        # Turning on hard delete mode
+        self.config['hard_delete'] = True
+        self.persist_lines_with_cache(tap_lines)
+
+        self.assert_logical_streams_are_in_snowflake(True)
+
+    def test_logical_streams_from_pg_with_hard_delete_and_batch_size_of_5(self):
+        """Tests logical streams from pg with inserts, updates and deletes"""
+        tap_lines = test_utils.get_test_tap_lines('messages-logical-streams.json')
+
+        # Turning on hard delete mode
+        self.config['hard_delete'] = True
+        self.config['batch_size_rows'] = 5
+        self.persist_lines_with_cache(tap_lines)
+
+        self.assert_logical_streams_are_in_snowflake(True)
 
     def test_information_schema_cache_create_and_update(self):
         """Newly created and altered tables must be cached automatically for later use.
@@ -425,7 +488,8 @@ class TestIntegration(unittest.TestCase):
         'Information schema query returned too much data. Please repeat query with more selective predicates.'.
         """
         tap_lines_before_column_name_change = test_utils.get_test_tap_lines('messages-with-three-streams.json')
-        tap_lines_after_column_name_change = test_utils.get_test_tap_lines('messages-with-three-streams-modified-column.json')
+        tap_lines_after_column_name_change = test_utils.get_test_tap_lines(
+            'messages-with-three-streams-modified-column.json')
 
         # Load with default settings
         self.persist_lines_with_cache(tap_lines_before_column_name_change)
@@ -434,7 +498,9 @@ class TestIntegration(unittest.TestCase):
         # Get data form information_schema cache table
         snowflake = DbSync(self.config)
         target_schema = self.config.get('default_target_schema', '')
-        information_schema_cache = snowflake.query("SELECT * FROM {}.columns ORDER BY table_schema, table_name, column_name".format(snowflake.pipelinewise_schema))
+        information_schema_cache = snowflake.query(
+            "SELECT * FROM {}.columns ORDER BY table_schema, table_name, column_name".format(
+                snowflake.pipelinewise_schema))
 
         # Get the previous column name from information schema in test_table_two
         previous_column_name = snowflake.query("""
@@ -445,32 +511,44 @@ class TestIntegration(unittest.TestCase):
                AND table_name = 'TEST_TABLE_TWO'
                AND ordinal_position = 1
             """.format(
-                self.config.get('dbname', '').upper(),
-                target_schema.upper()))[0]["COLUMN_NAME"]
+            self.config.get('dbname', '').upper(),
+            target_schema.upper()))[0]["COLUMN_NAME"]
 
         # Every column has to be in the cached information_schema with the latest versions
         self.assertEqual(
             information_schema_cache,
             [
-                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_ONE', 'COLUMN_NAME': 'C_INT', 'DATA_TYPE': 'NUMBER'},
-                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_ONE', 'COLUMN_NAME': 'C_PK', 'DATA_TYPE': 'NUMBER'},
-                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_ONE', 'COLUMN_NAME': 'C_VARCHAR', 'DATA_TYPE': 'TEXT'},
+                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_ONE', 'COLUMN_NAME': 'C_INT',
+                 'DATA_TYPE': 'NUMBER'},
+                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_ONE', 'COLUMN_NAME': 'C_PK',
+                 'DATA_TYPE': 'NUMBER'},
+                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_ONE', 'COLUMN_NAME': 'C_VARCHAR',
+                 'DATA_TYPE': 'TEXT'},
 
-                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_THREE', 'COLUMN_NAME': 'C_INT', 'DATA_TYPE': 'NUMBER'},
-                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_THREE', 'COLUMN_NAME': 'C_PK', 'DATA_TYPE': 'NUMBER'},
-                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_THREE', 'COLUMN_NAME': 'C_TIME', 'DATA_TYPE': 'TIME'},
-                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_THREE', 'COLUMN_NAME': 'C_TIME_RENAMED', 'DATA_TYPE':'TIME'},
-                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_THREE', 'COLUMN_NAME': 'C_VARCHAR', 'DATA_TYPE': 'TEXT'},
+                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_THREE', 'COLUMN_NAME': 'C_INT',
+                 'DATA_TYPE': 'NUMBER'},
+                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_THREE', 'COLUMN_NAME': 'C_PK',
+                 'DATA_TYPE': 'NUMBER'},
+                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_THREE', 'COLUMN_NAME': 'C_TIME',
+                 'DATA_TYPE': 'TIME'},
+                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_THREE', 'COLUMN_NAME': 'C_TIME_RENAMED',
+                 'DATA_TYPE': 'TIME'},
+                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_THREE', 'COLUMN_NAME': 'C_VARCHAR',
+                 'DATA_TYPE': 'TEXT'},
 
-                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_TWO', 'COLUMN_NAME': 'C_DATE', 'DATA_TYPE': 'TEXT'},
-                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_TWO', 'COLUMN_NAME': previous_column_name, 'DATA_TYPE': 'TIMESTAMP_NTZ'},
-                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_TWO', 'COLUMN_NAME': 'C_INT', 'DATA_TYPE': 'NUMBER'},
-                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_TWO', 'COLUMN_NAME': 'C_PK', 'DATA_TYPE': 'NUMBER'},
-                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_TWO', 'COLUMN_NAME': 'C_VARCHAR', 'DATA_TYPE': 'TEXT'}
+                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_TWO', 'COLUMN_NAME': 'C_DATE',
+                 'DATA_TYPE': 'TEXT'},
+                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_TWO', 'COLUMN_NAME': previous_column_name,
+                 'DATA_TYPE': 'TIMESTAMP_NTZ'},
+                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_TWO', 'COLUMN_NAME': 'C_INT',
+                 'DATA_TYPE': 'NUMBER'},
+                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_TWO', 'COLUMN_NAME': 'C_PK',
+                 'DATA_TYPE': 'NUMBER'},
+                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_TWO', 'COLUMN_NAME': 'C_VARCHAR',
+                 'DATA_TYPE': 'TEXT'}
             ])
 
-
-    def test_information_schema_cache_outdate(self):
+    def test_information_schema_cache_outdated(self):
         """If informations schema cache is not up to date then it should fail"""
         tap_lines_with_multi_streams = test_utils.get_test_tap_lines('messages-with-three-streams.json')
 
