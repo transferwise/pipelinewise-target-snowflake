@@ -162,6 +162,56 @@ class TestIntegration(unittest.TestCase):
             self.assert_metadata_columns_not_exist(table_two)
             self.assert_metadata_columns_not_exist(table_three)
 
+    def assert_logical_streams_are_in_snowflake(self, should_metadata_columns_exist=False):
+        # Get loaded rows from tables
+        snowflake = DbSync(self.config)
+        target_schema = self.config.get('default_target_schema', '')
+        table_one = snowflake.query("SELECT * FROM {}.logical1_table1 ORDER BY CID".format(target_schema))
+        table_two = snowflake.query("SELECT * FROM {}.logical1_table2 ORDER BY CID".format(target_schema))
+        table_three = snowflake.query("SELECT * FROM {}.logical2_table1 ORDER BY CID".format(target_schema))
+
+        # ----------------------------------------------------------------------
+        # Check rows in table_one
+        # ----------------------------------------------------------------------
+        expected_table_one = [
+            {'CID': 1, 'CVARCHAR': "inserted row", 'CVARCHAR2': None},
+            {'CID': 2, 'CVARCHAR': 'inserted row', "CVARCHAR2": "inserted row"},
+            {'CID': 3, 'CVARCHAR': "inserted row", 'CVARCHAR2': "inserted row"},
+            {'CID': 4, 'CVARCHAR': "inserted row", 'CVARCHAR2': "inserted row"}
+        ]
+
+        # ----------------------------------------------------------------------
+        # Check rows in table_tow
+        # ----------------------------------------------------------------------
+        expected_table_two = [
+            {'CID': 1, 'CVARCHAR': "updated row"},
+            {'CID': 2, 'CVARCHAR': 'updated row'},
+            {'CID': 3, 'CVARCHAR': "updated row"},
+            {'CID': 5, 'CVARCHAR': "updated row"},
+            {'CID': 7, 'CVARCHAR': "updated row"},
+            {'CID': 8, 'CVARCHAR': 'updated row'},
+            {'CID': 9, 'CVARCHAR': "updated row"},
+            {'CID': 10, 'CVARCHAR': 'updated row'}
+        ]
+
+        # ----------------------------------------------------------------------
+        # Check rows in table_three
+        # ----------------------------------------------------------------------
+        expected_table_three = [
+            {'CID': 1, 'CVARCHAR': "updated row"},
+            {'CID': 2, 'CVARCHAR': 'updated row'},
+            {'CID': 3, 'CVARCHAR': "updated row"},
+        ]
+
+        if should_metadata_columns_exist:
+            self.assertEqual(self.remove_metadata_columns_from_rows(table_one), expected_table_one)
+            self.assertEqual(self.remove_metadata_columns_from_rows(table_two), expected_table_two)
+            self.assertEqual(self.remove_metadata_columns_from_rows(table_three), expected_table_three)
+        else:
+            self.assertEqual(table_one, expected_table_one)
+            self.assertEqual(table_two, expected_table_two)
+            self.assertEqual(table_three, expected_table_three)
+
     #################################
     #           TESTS               #
     #################################
@@ -255,7 +305,7 @@ class TestIntegration(unittest.TestCase):
         # Get loaded rows from tables
         snowflake = DbSync(self.config)
         target_schema = self.config.get('default_target_schema', '')
-        table_unicode = snowflake.query("SELECT * FROM {}.test_table_unicode".format(target_schema))
+        table_unicode = snowflake.query("SELECT * FROM {}.test_table_unicode ORDER BY C_INT".format(target_schema))
 
         self.assertEqual(
             table_unicode,
@@ -410,7 +460,7 @@ class TestIntegration(unittest.TestCase):
                 {'C_INT': 4, 'C_PK': 4, 'C_TIME': None, 'C_VARCHAR': '4', 'C_TIME_RENAMED': datetime.time(23, 0, 3)}
             ])
 
-    def test_logical_streams_from_pg(self):
+    def test_logical_streams_from_pg_with_hard_delete_and_default_batch_size(self):
         """Tests logical streams from pg with inserts, updates and deletes"""
         tap_lines = test_utils.get_test_tap_lines('messages-logical-streams.json')
 
@@ -418,50 +468,18 @@ class TestIntegration(unittest.TestCase):
         self.config['hard_delete'] = True
         self.persist_lines_with_cache(tap_lines)
 
-        # Get loaded rows from tables
-        snowflake = DbSync(self.config)
-        target_schema = self.config.get('default_target_schema', '')
-        table_one = snowflake.query("SELECT * FROM {}.logical1_table1 ORDER BY CID".format(target_schema))
-        table_two = snowflake.query("SELECT * FROM {}.logical1_table2 ORDER BY CID".format(target_schema))
-        table_three = snowflake.query("SELECT * FROM {}.logical2_table1 ORDER BY CID".format(target_schema))
+        self.assert_logical_streams_are_in_snowflake(True)
 
-        # ----------------------------------------------------------------------
-        # Check rows in table_one
-        # ----------------------------------------------------------------------
-        expected_table_one = [
-            {'CID': 1, 'CVARCHAR': "inserted row", 'CVARCHAR2': None},
-            {'CID': 2, 'CVARCHAR': 'inserted row', "CVARCHAR2": "inserted row"},
-            {'CID': 3, 'CVARCHAR': "inserted row", 'CVARCHAR2': "inserted row"},
-            {'CID': 4, 'CVARCHAR': "inserted row", 'CVARCHAR2': "inserted row"}
-        ]
+    def test_logical_streams_from_pg_with_hard_delete_and_batch_size_of_5(self):
+        """Tests logical streams from pg with inserts, updates and deletes"""
+        tap_lines = test_utils.get_test_tap_lines('messages-logical-streams.json')
 
-        # ----------------------------------------------------------------------
-        # Check rows in table_tow
-        # ----------------------------------------------------------------------
-        expected_table_two = [
-            {'CID': 1, 'CVARCHAR': "updated row"},
-            {'CID': 2, 'CVARCHAR': 'updated row'},
-            {'CID': 3, 'CVARCHAR': "updated row"},
-            {'CID': 5, 'CVARCHAR': "updated row"},
-            {'CID': 7, 'CVARCHAR': "updated row"},
-            {'CID': 8, 'CVARCHAR': 'updated row'},
-            {'CID': 9, 'CVARCHAR': "updated row"},
-            {'CID': 10, 'CVARCHAR': 'updated row'}
-        ]
+        # Turning on hard delete mode
+        self.config['hard_delete'] = True
+        self.config['batch_size_rows'] = 5
+        self.persist_lines_with_cache(tap_lines)
 
-        # ----------------------------------------------------------------------
-        # Check rows in table_three
-        # ----------------------------------------------------------------------
-        expected_table_three = [
-            {'CID': 1, 'CVARCHAR': "updated row"},
-            {'CID': 2, 'CVARCHAR': 'updated row'},
-            {'CID': 3, 'CVARCHAR': "updated row"},
-        ]
-
-        self.assertEqual(self.remove_metadata_columns_from_rows(table_one), expected_table_one)
-        self.assertEqual(self.remove_metadata_columns_from_rows(table_two), expected_table_two)
-        self.assertEqual(self.remove_metadata_columns_from_rows(table_three), expected_table_three)
-
+        self.assert_logical_streams_are_in_snowflake(True)
 
     def test_information_schema_cache_create_and_update(self):
         """Newly created and altered tables must be cached automatically for later use.
@@ -530,7 +548,7 @@ class TestIntegration(unittest.TestCase):
                  'DATA_TYPE': 'TEXT'}
             ])
 
-    def test_information_schema_cache_outdate(self):
+    def test_information_schema_cache_outdated(self):
         """If informations schema cache is not up to date then it should fail"""
         tap_lines_with_multi_streams = test_utils.get_test_tap_lines('messages-with-three-streams.json')
 
