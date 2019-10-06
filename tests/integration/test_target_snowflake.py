@@ -208,22 +208,22 @@ class TestIntegration(unittest.TestCase):
         # Check rows in table_four
         # ----------------------------------------------------------------------
         expected_table_four = [
-            {'CID': 1, 'CTIMENTZ': None ,'CTIMETZ': None},
-            {'CID': 2, 'CTIMENTZ': '23:00:15' ,'CTIMETZ': '23:00:15'},
-            {'CID': 3, 'CTIMENTZ': '12:00:15' ,'CTIMETZ': '12:00:15'},
-            {'CID': 4, 'CTIMENTZ': '12:00:15' ,'CTIMETZ': '09:00:15'},
-            {'CID': 5, 'CTIMENTZ': '12:00:15' ,'CTIMETZ': '15:00:15'},
-            {'CID': 6, 'CTIMENTZ': '00:00:00' ,'CTIMETZ': '00:00:00'},
-            {'CID': 7, 'CTIMENTZ': '00:00:00' ,'CTIMETZ': '00:00:00'},
-            {'CID': 8, 'CTIMENTZ': '00:00:00' ,'CTIMETZ': '01:00:00'},
-            {'CID': 9, 'CTIMENTZ': '00:00:00' ,'CTIMETZ': '00:00:00'}
+            {'CID': 1, 'CTIMENTZ': None, 'CTIMETZ': None},
+            {'CID': 2, 'CTIMENTZ': '23:00:15', 'CTIMETZ': '23:00:15'},
+            {'CID': 3, 'CTIMENTZ': '12:00:15', 'CTIMETZ': '12:00:15'},
+            {'CID': 4, 'CTIMENTZ': '12:00:15', 'CTIMETZ': '09:00:15'},
+            {'CID': 5, 'CTIMENTZ': '12:00:15', 'CTIMETZ': '15:00:15'},
+            {'CID': 6, 'CTIMENTZ': '00:00:00', 'CTIMETZ': '00:00:00'},
+            {'CID': 7, 'CTIMENTZ': '00:00:00', 'CTIMETZ': '00:00:00'},
+            {'CID': 8, 'CTIMENTZ': '00:00:00', 'CTIMETZ': '01:00:00'},
+            {'CID': 9, 'CTIMENTZ': '00:00:00', 'CTIMETZ': '00:00:00'}
         ]
 
         if should_metadata_columns_exist:
             self.assertEqual(self.remove_metadata_columns_from_rows(table_one), expected_table_one)
             self.assertEqual(self.remove_metadata_columns_from_rows(table_two), expected_table_two)
             self.assertEqual(self.remove_metadata_columns_from_rows(table_three), expected_table_three)
-            self.assertEqual(self.remove_metadata_columns_from_rows(table_four), expected_table_four)
+            self.assertEqual(table_four, expected_table_four)
         else:
             self.assertEqual(table_one, expected_table_one)
             self.assertEqual(table_two, expected_table_two)
