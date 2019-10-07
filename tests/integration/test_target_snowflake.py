@@ -37,7 +37,7 @@ class TestIntegration(unittest.TestCase):
 
         # Drop pipelinewise schema with information_schema cache
         if self.config['stage']:
-            snowflake.query("DROP TABLE IF EXISTS {}.columns".format(snowflake.pipelinewise_schema))
+            snowflake.query("DELETE FROM {}.COLUMNS WHERE TABLE_SCHEMA = '{}'".format(snowflake.pipelinewise_schema, self.config['default_target_schema']))
 
     def persist_lines_with_cache(self, lines):
         """Enables table caching option and loads singer messages into snowflake.
