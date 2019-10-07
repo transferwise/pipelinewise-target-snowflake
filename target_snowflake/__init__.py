@@ -264,6 +264,7 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
     emit_state(flushed_state)
 
 
+# pylint: disable=too-many-arguments
 def flush_streams(
     streams,
     row_count,
