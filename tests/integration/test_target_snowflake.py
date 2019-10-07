@@ -213,10 +213,9 @@ class TestIntegration(unittest.TestCase):
             {'CID': 3, 'CTIMENTZ': datetime.time(12, 0, 15), 'CTIMETZ': datetime.time(12, 0, 15)},
             {'CID': 4, 'CTIMENTZ': datetime.time(12, 0, 15), 'CTIMETZ': datetime.time(9, 0, 15)},
             {'CID': 5, 'CTIMENTZ': datetime.time(12, 0, 15), 'CTIMETZ': datetime.time(15, 0, 15)},
-            {'CID': 6, 'CTIMENTZ': datetime.time(0, 0, 0), 'CTIMETZ': datetime.time(0, 0, 0)},
-            {'CID': 7, 'CTIMENTZ': datetime.time(0, 0, 0), 'CTIMETZ': datetime.time(0, 0, 0)},
-            {'CID': 8, 'CTIMENTZ': datetime.time(0, 0, 0), 'CTIMETZ': datetime.time(1, 0, 0)},
-            {'CID': 9, 'CTIMENTZ': datetime.time(0, 0, 0), 'CTIMETZ': datetime.time(0, 0, 0)}
+            {'CID': 6, 'CTIMENTZ': datetime.time(0, 0), 'CTIMETZ': datetime.time(0, 0)},
+            {'CID': 8, 'CTIMENTZ': datetime.time(0, 0), 'CTIMETZ': datetime.time(1, 0)},
+            {'CID': 9, 'CTIMENTZ': datetime.time(0, 0), 'CTIMETZ': datetime.time(0, 0)}
         ]
 
         if should_metadata_columns_exist:
