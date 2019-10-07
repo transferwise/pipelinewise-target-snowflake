@@ -536,33 +536,33 @@ class TestIntegration(unittest.TestCase):
         self.assertEqual(
             information_schema_cache,
             [
-                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_ONE', 'COLUMN_NAME': 'C_INT',
+                {'TABLE_SCHEMA': target_schema.upper(), 'TABLE_NAME': 'TEST_TABLE_ONE', 'COLUMN_NAME': 'C_INT',
                  'DATA_TYPE': 'NUMBER'},
-                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_ONE', 'COLUMN_NAME': 'C_PK',
+                {'TABLE_SCHEMA': target_schema.upper(), 'TABLE_NAME': 'TEST_TABLE_ONE', 'COLUMN_NAME': 'C_PK',
                  'DATA_TYPE': 'NUMBER'},
-                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_ONE', 'COLUMN_NAME': 'C_VARCHAR',
+                {'TABLE_SCHEMA': target_schema.upper(), 'TABLE_NAME': 'TEST_TABLE_ONE', 'COLUMN_NAME': 'C_VARCHAR',
                  'DATA_TYPE': 'TEXT'},
 
-                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_THREE', 'COLUMN_NAME': 'C_INT',
+                {'TABLE_SCHEMA': target_schema.upper(), 'TABLE_NAME': 'TEST_TABLE_THREE', 'COLUMN_NAME': 'C_INT',
                  'DATA_TYPE': 'NUMBER'},
-                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_THREE', 'COLUMN_NAME': 'C_PK',
+                {'TABLE_SCHEMA': target_schema.upper(), 'TABLE_NAME': 'TEST_TABLE_THREE', 'COLUMN_NAME': 'C_PK',
                  'DATA_TYPE': 'NUMBER'},
-                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_THREE', 'COLUMN_NAME': 'C_TIME',
+                {'TABLE_SCHEMA': target_schema.upper(), 'TABLE_NAME': 'TEST_TABLE_THREE', 'COLUMN_NAME': 'C_TIME',
                  'DATA_TYPE': 'TIME'},
-                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_THREE', 'COLUMN_NAME': 'C_TIME_RENAMED',
+                {'TABLE_SCHEMA': target_schema.upper(), 'TABLE_NAME': 'TEST_TABLE_THREE', 'COLUMN_NAME': 'C_TIME_RENAMED',
                  'DATA_TYPE': 'TIME'},
-                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_THREE', 'COLUMN_NAME': 'C_VARCHAR',
+                {'TABLE_SCHEMA': target_schema.upper(), 'TABLE_NAME': 'TEST_TABLE_THREE', 'COLUMN_NAME': 'C_VARCHAR',
                  'DATA_TYPE': 'TEXT'},
 
-                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_TWO', 'COLUMN_NAME': 'C_DATE',
+                {'TABLE_SCHEMA': target_schema.upper(), 'TABLE_NAME': 'TEST_TABLE_TWO', 'COLUMN_NAME': 'C_DATE',
                  'DATA_TYPE': 'TEXT'},
-                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_TWO', 'COLUMN_NAME': previous_column_name,
+                {'TABLE_SCHEMA': target_schema.upper(), 'TABLE_NAME': 'TEST_TABLE_TWO', 'COLUMN_NAME': previous_column_name,
                  'DATA_TYPE': 'TIMESTAMP_NTZ'},
-                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_TWO', 'COLUMN_NAME': 'C_INT',
+                {'TABLE_SCHEMA': target_schema.upper(), 'TABLE_NAME': 'TEST_TABLE_TWO', 'COLUMN_NAME': 'C_INT',
                  'DATA_TYPE': 'NUMBER'},
-                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_TWO', 'COLUMN_NAME': 'C_PK',
+                {'TABLE_SCHEMA': target_schema.upper(), 'TABLE_NAME': 'TEST_TABLE_TWO', 'COLUMN_NAME': 'C_PK',
                  'DATA_TYPE': 'NUMBER'},
-                {'TABLE_SCHEMA': 'LOCAL_DEV1', 'TABLE_NAME': 'TEST_TABLE_TWO', 'COLUMN_NAME': 'C_VARCHAR',
+                {'TABLE_SCHEMA': target_schema.upper(), 'TABLE_NAME': 'TEST_TABLE_TWO', 'COLUMN_NAME': 'C_VARCHAR',
                  'DATA_TYPE': 'TEXT'}
             ])
 
@@ -573,15 +573,16 @@ class TestIntegration(unittest.TestCase):
         # 1) Simulate an out of data cache:
         # Table is in cache but not exists in database
         snowflake = DbSync(self.config)
+        target_schema = self.config.get('default_target_schema', '').upper()
         snowflake.query("""
             CREATE TABLE IF NOT EXISTS {}.columns (table_schema VARCHAR, table_name VARCHAR, column_name VARCHAR, data_type VARCHAR)
         """.format(snowflake.pipelinewise_schema))
         snowflake.query("""
-            INSERT INTO {}.columns (table_schema, table_name, column_name, data_type)
-            SELECT 'LOCAL_DEV1', 'TEST_TABLE_ONE', 'DUMMY_COLUMN_1', 'TEXT' UNION
-            SELECT 'LOCAL_DEV1', 'TEST_TABLE_ONE', 'DUMMY_COLUMN_2', 'TEXT' UNION
-            SELECT 'LOCAL_DEV1', 'TEST_TABLE_TWO', 'DUMMY_COLUMN_3', 'TEXT'
-        """.format(snowflake.pipelinewise_schema))
+            INSERT INTO {0}.columns (table_schema, table_name, column_name, data_type)
+            SELECT '{1}', 'TEST_TABLE_ONE', 'DUMMY_COLUMN_1', 'TEXT' UNION
+            SELECT '{1}', 'TEST_TABLE_ONE', 'DUMMY_COLUMN_2', 'TEXT' UNION
+            SELECT '{1}', 'TEST_TABLE_TWO', 'DUMMY_COLUMN_3', 'TEXT'
+        """.format(snowflake.pipelinewise_schema, target_schema))
 
         # Loading into an outdated information_schema cache should fail with table not exists
         with self.assertRaises(Exception):
@@ -589,8 +590,8 @@ class TestIntegration(unittest.TestCase):
 
         # 2) Simulate an out of data cache:
         # Table is in cache structure is not in sync with the actual table in the database
-        snowflake.query("CREATE SCHEMA IF NOT EXISTS local_dev1")
-        snowflake.query("CREATE OR REPLACE TABLE local_dev1.test_table_one (C_PK NUMBER, C_INT NUMBER, C_VARCHAR TEXT)")
+        snowflake.query("CREATE SCHEMA IF NOT EXISTS {}".format(target_schema))
+        snowflake.query("CREATE OR REPLACE TABLE {}.test_table_one (C_PK NUMBER, C_INT NUMBER, C_VARCHAR TEXT)".format(target_schema))
 
         # Loading into an outdated information_schema cache should fail with columns exists
         # It should try adding the new column based on the values in cache but the column already exists
