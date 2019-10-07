@@ -209,14 +209,14 @@ class TestIntegration(unittest.TestCase):
         # ----------------------------------------------------------------------
         expected_table_four = [
             {'CID': 1, 'CTIMENTZ': None, 'CTIMETZ': None},
-            {'CID': 2, 'CTIMENTZ': '23:00:15', 'CTIMETZ': '23:00:15'},
-            {'CID': 3, 'CTIMENTZ': '12:00:15', 'CTIMETZ': '12:00:15'},
-            {'CID': 4, 'CTIMENTZ': '12:00:15', 'CTIMETZ': '09:00:15'},
-            {'CID': 5, 'CTIMENTZ': '12:00:15', 'CTIMETZ': '15:00:15'},
-            {'CID': 6, 'CTIMENTZ': '00:00:00', 'CTIMETZ': '00:00:00'},
-            {'CID': 7, 'CTIMENTZ': '00:00:00', 'CTIMETZ': '00:00:00'},
-            {'CID': 8, 'CTIMENTZ': '00:00:00', 'CTIMETZ': '01:00:00'},
-            {'CID': 9, 'CTIMENTZ': '00:00:00', 'CTIMETZ': '00:00:00'}
+            {'CID': 2, 'CTIMENTZ': datetime.time(23, 0, 15), 'CTIMETZ': datetime.time(23, 0, 15)},
+            {'CID': 3, 'CTIMENTZ': datetime.time(12, 0, 15), 'CTIMETZ': datetime.time(12, 0, 15)},
+            {'CID': 4, 'CTIMENTZ': datetime.time(12, 0, 15), 'CTIMETZ': datetime.time(9, 0, 15)},
+            {'CID': 5, 'CTIMENTZ': datetime.time(12, 0, 15), 'CTIMETZ': datetime.time(15, 0, 15)},
+            {'CID': 6, 'CTIMENTZ': datetime.time(0, 0, 0), 'CTIMETZ': datetime.time(0, 0, 0)},
+            {'CID': 7, 'CTIMENTZ': datetime.time(0, 0, 0), 'CTIMETZ': datetime.time(0, 0, 0)},
+            {'CID': 8, 'CTIMENTZ': datetime.time(0, 0, 0), 'CTIMETZ': datetime.time(1, 0, 0)},
+            {'CID': 9, 'CTIMENTZ': datetime.time(0, 0, 0), 'CTIMETZ': datetime.time(0, 0, 0)}
         ]
 
         if should_metadata_columns_exist:
