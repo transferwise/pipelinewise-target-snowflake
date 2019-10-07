@@ -279,6 +279,18 @@ class TestIntegration(unittest.TestCase):
         # Check if data loaded correctly and metadata columns exist
         self.assert_three_streams_are_into_snowflake()
 
+    def test_loading_tables_with_flush_only_full_batches(self):
+        """Loading tables with flush only fully batched table mode"""
+        tap_lines = test_utils.get_test_tap_lines('messages-with-three-streams.json')
+
+        # Using small batch sizes to test flushing full batches mode
+        self.config['batch_size_rows'] = 2
+        self.config['flush_only_fully_batched_table'] = True
+        self.persist_lines_with_cache(tap_lines)
+
+        # Check if data loaded correctly and metadata columns exist
+        self.assert_three_streams_are_into_snowflake()
+
     def test_loading_tables_with_hard_delete(self):
         """Loading multiple tables from the same input tap with deleted rows"""
         tap_lines = test_utils.get_test_tap_lines('messages-with-three-streams.json')

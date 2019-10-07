@@ -39,6 +39,7 @@ def get_db_config():
     config['schema_mapping'] = None
     config['add_metadata_columns'] = None
     config['hard_delete'] = None
+    config['flush_only_fully_batched_table'] = None
 
 
     return config

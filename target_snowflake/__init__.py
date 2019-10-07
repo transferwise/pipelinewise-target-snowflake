@@ -162,7 +162,12 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
 
             if row_count[stream] >= batch_size_rows:
                 # flush all streams, delete records if needed, reset counts and then emit current state
-                flush_all_streams(records_to_load, row_count, stream_to_sync, config)
+                if config.get('flush_only_fully_batched_table'):
+                    filter_keys = [stream]
+                else:
+                    filter_keys = []
+                flush_streams(records_to_load, row_count, stream_to_sync, config, filter_keys=filter_keys)
+                
                 # emit last encountered state
                 emit_state(state)
 
@@ -180,7 +185,7 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
             # if same stream has been encountered again, it means the schema might have been altered
             # so previous records need to be flushed
             if row_count.get(stream, 0) > 0:
-                flush_all_streams(records_to_load, row_count, stream_to_sync, config)
+                flush_streams(records_to_load, row_count, stream_to_sync, config)
                 # emit latest encountered state
                 emit_state(state)
 
@@ -238,19 +243,25 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
     # then flush all buckets.
     if len(row_count.values()) > 0:
         # flush all streams one last time, delete records if needed, reset counts and then emit current state
-        flush_all_streams(records_to_load, row_count, stream_to_sync, config)
+        flush_streams(records_to_load, row_count, stream_to_sync, config)
 
     # emit latest state
     emit_state(state)
 
 
-def flush_all_streams(streams, row_count, stream_to_sync, config) -> None:
+def flush_streams(
+    streams,
+    row_count,
+    stream_to_sync,
+    config,
+    filter_keys=[]) -> None:
     """
     Flushes all buckets and resets records count to 0 as well as empties records to load list
     :param streams: dictionary with records to load per stream
     :param row_count: dictionary with row count per stream
     :param stream_to_sync: Snowflake db sync instance per stream
     :param config: dictionary containing the configuration
+    :param filter_keys: Keys of streams to flush from the streams dict. Default is every stream
     :return:
     """
     parallelism = config.get("parallelism", DEFAULT_PARALLELISM)
@@ -268,6 +279,12 @@ def flush_all_streams(streams, row_count, stream_to_sync, config) -> None:
         else:
             parallelism = n_streams_to_flush
 
+    # Select the required streams to flush
+    if filter_keys:
+        streams_to_flush = {k: v for k, v in streams.items() if k in filter_keys}
+    else:
+        streams_to_flush = streams
+
     # Single-host, thread-based parallelism
     with parallel_backend('threading', n_jobs=parallelism):
         Parallel()(delayed(load_stream_batch)(
@@ -276,10 +293,10 @@ def flush_all_streams(streams, row_count, stream_to_sync, config) -> None:
             row_count=row_count,
             db_sync=stream_to_sync[stream],
             delete_rows=config.get('hard_delete')
-        ) for (stream) in streams.keys())
+        ) for (stream) in streams_to_flush.keys())
 
-    # reset all stream records to empty to avoid flushing same records
-    for stream in streams.keys():
+    # reset flushed stream records to empty to avoid flushing same records
+    for stream in streams_to_flush.keys():
         streams[stream] = {}
 
 
