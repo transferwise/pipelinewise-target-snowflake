@@ -18,6 +18,9 @@ from target_snowflake.db_sync import DbSync
 
 logger = singer.get_logger()
 
+DEFAULT_BATCH_SIZE_ROWS = 100000
+DEFAULT_PARALLELISM     = -1        # -1 is auto parallelism
+DEFAULT_MAX_PARALLELISM = 32        # Don't use more than 32 threads by default
 
 def float_to_decimal(value):
     """Walk the given data structure and turn all instances of float into double."""
@@ -105,7 +108,7 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
     row_count = {}
     stream_to_sync = {}
     total_row_count = {}
-    batch_size_rows = config.get('batch_size_rows', 100000)
+    batch_size_rows = config.get('batch_size_rows', DEFAULT_BATCH_SIZE_ROWS)
 
     # Loop over lines from stdin
     for line in lines:
@@ -241,28 +244,43 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
     emit_state(state)
 
 
-def flush_all_streams(records_to_load, row_count, stream_to_sync, config) -> None:
+def flush_all_streams(streams, row_count, stream_to_sync, config) -> None:
     """
     Flushes all buckets and resets records count to 0 as well as empties records to load list
-    :param records_to_load: dictionary with records to load per stream
+    :param streams: dictionary with records to load per stream
     :param row_count: dictionary with row count per stream
     :param stream_to_sync: Snowflake db sync instance per stream
     :param config: dictionary containing the configuration
     :return:
     """
+    parallelism = config.get("parallelism", DEFAULT_PARALLELISM)
+    max_parallelism = config.get("max_parallelism", DEFAULT_MAX_PARALLELISM)
+
+    # Parallelism -1 means auto parallelism:
+    #
+    # Auto parallelism trying to flush streams efficiently with auto defined number
+    # of threads where the number of threads is the number of streams that need to
+    # be loaded but it's not greater than the value of max_parallelism
+    if parallelism == -1:
+        n_streams_to_flush = len(streams.keys())
+        if n_streams_to_flush > max_parallelism:
+            parallelism = max_parallelism
+        else:
+            parallelism = n_streams_to_flush
+
     # Single-host, thread-based parallelism
-    with parallel_backend('threading', n_jobs=-1):
+    with parallel_backend('threading', n_jobs=parallelism):
         Parallel()(delayed(load_stream_batch)(
             stream=stream,
-            records_to_load=records_to_load[stream],
+            records_to_load=streams[stream],
             row_count=row_count,
             db_sync=stream_to_sync[stream],
             delete_rows=config.get('hard_delete')
-        ) for (stream) in records_to_load.keys())
+        ) for (stream) in streams.keys())
 
     # reset all stream records to empty to avoid flushing same records
-    for stream in records_to_load.keys():
-        records_to_load[stream] = {}
+    for stream in streams.keys():
+        streams[stream] = {}
 
 
 def load_stream_batch(stream, records_to_load, row_count, db_sync, delete_rows=False):

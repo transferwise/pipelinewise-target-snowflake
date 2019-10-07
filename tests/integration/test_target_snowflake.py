@@ -268,6 +268,17 @@ class TestIntegration(unittest.TestCase):
         # Check if data loaded correctly and metadata columns exist
         self.assert_three_streams_are_into_snowflake(should_metadata_columns_exist=True)
 
+    def test_loading_tables_with_defined_parallelism(self):
+        """Loading multiple tables from the same input tap with various columns types"""
+        tap_lines = test_utils.get_test_tap_lines('messages-with-three-streams.json')
+
+        # Using fixed 1 thread parallelism
+        self.config['parallelism'] = 1
+        self.persist_lines_with_cache(tap_lines)
+
+        # Check if data loaded correctly and metadata columns exist
+        self.assert_three_streams_are_into_snowflake()
+
     def test_loading_tables_with_hard_delete(self):
         """Loading multiple tables from the same input tap with deleted rows"""
         tap_lines = test_utils.get_test_tap_lines('messages-with-three-streams.json')
