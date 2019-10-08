@@ -37,7 +37,7 @@ class TestIntegration(unittest.TestCase):
 
         # Delete target schema entries from PIPELINEWISE.COLUMNS
         if self.config['stage']:
-            snowflake.query("DELETE FROM {}.COLUMNS WHERE TABLE_SCHEMA = '{}'".format(snowflake.pipelinewise_schema, self.config['default_target_schema'].upper()))
+            snowflake.query("DELETE FROM {}.columns WHERE TABLE_SCHEMA ilike '{}'".format(snowflake.pipelinewise_schema, self.config['default_target_schema']))
 
     def persist_lines_with_cache(self, lines):
         """Enables table caching option and loads singer messages into snowflake.
