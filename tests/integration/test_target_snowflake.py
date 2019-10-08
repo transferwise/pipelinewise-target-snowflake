@@ -35,7 +35,7 @@ class TestIntegration(unittest.TestCase):
         if self.config['default_target_schema']:
             snowflake.query("DROP SCHEMA IF EXISTS {}".format(self.config['default_target_schema']))
 
-        # Drop pipelinewise schema with information_schema cache
+        # Delete target schema entries from PIPELINEWISE.COLUMNS
         if self.config['stage']:
             snowflake.query("DELETE FROM {}.COLUMNS WHERE TABLE_SCHEMA = '{}'".format(snowflake.pipelinewise_schema, self.config['default_target_schema'].upper()))
 
