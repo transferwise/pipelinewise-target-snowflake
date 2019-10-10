@@ -56,7 +56,8 @@ def column_type(schema_property):
     column_type = 'text'
     if 'object' in property_type or 'array' in property_type:
         column_type = 'variant'
-
+    elif 'json' in name.lower():
+        column_type = 'variant'
     # Every date-time JSON value is currently mapped to TIMESTAMP_NTZ
     #
     # TODO: Detect if timezone postfix exists in the JSON and find if TIMESTAMP_TZ or
@@ -82,7 +83,8 @@ def column_trans(schema_property):
     column_trans = ''
     if 'object' in property_type or 'array' in property_type:
         column_trans = 'parse_json'
-
+    elif 'json' in name.lower():
+        column_trans = 'parse_json'
     return column_trans
 
 
