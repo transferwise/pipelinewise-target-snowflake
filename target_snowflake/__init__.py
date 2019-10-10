@@ -134,11 +134,7 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
             try:
                 validators[stream].validate(float_to_decimal(o['record']))
             except Exception as ex:
-                if type(ex).__name__ == "InvalidOperation":
-                    logger.error(
-                        "Data validation failed and cannot load to destination. RECORD: {}\n'multipleOf' validations that allows long precisions are not supported (i.e. with 15 digits or more). Try removing 'multipleOf' methods from JSON schema."
-                            .format(o['record']))
-                    raise ex
+                pass
 
             primary_key_string = stream_to_sync[stream].record_primary_key_string(o['record'])
             if not primary_key_string:
