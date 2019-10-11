@@ -515,9 +515,17 @@ class TestIntegration(unittest.TestCase):
         # Get data form information_schema cache table
         snowflake = DbSync(self.config)
         target_schema = self.config.get('default_target_schema', '')
-        information_schema_cache = snowflake.query(
-            "SELECT * FROM {}.columns ORDER BY table_schema, table_name, column_name".format(
-                snowflake.pipelinewise_schema))
+        information_schema_cache = snowflake.query("""
+            SELECT table_schema
+                  ,table_name
+                  ,column_name
+                  ,data_type
+              FROM {}.columns
+             WHERE table_schema = '{}'
+             ORDER BY table_schema, table_name, column_name
+            """.format(
+                snowflake.pipelinewise_schema,
+                target_schema.upper()))
 
         # Get the previous column name from information schema in test_table_two
         previous_column_name = snowflake.query("""

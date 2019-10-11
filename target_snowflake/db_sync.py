@@ -286,12 +286,7 @@ class DbSync:
             password=self.connection_config['password'],
             account=self.connection_config['account'],
             database=self.connection_config['dbname'],
-            warehouse=self.connection_config['warehouse'],
-            # Use insecure mode to avoid "Failed to get OCSP response" warnings
-            #
-            # Further info: https://snowflakecommunity.force.com/s/question/0D50Z00008AEhWbSAL/python-snowflake-connector-ocsp-response-warning-message
-            # Snowflake is changing certificate authority
-            insecure_mode=True
+            warehouse=self.connection_config['warehouse']
         )
 
     def query(self, query, params=None):
