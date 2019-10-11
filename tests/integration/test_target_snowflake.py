@@ -480,7 +480,7 @@ class TestIntegration(unittest.TestCase):
 
     def test_logical_streams_from_pg_with_hard_delete_and_default_batch_size(self):
         """Tests logical streams from pg with inserts, updates and deletes"""
-        tap_lines = test_utils.get_test_tap_lines('messages-logical-streams.json')
+        tap_lines = test_utils.get_test_tap_lines('messages-pg-logical-streams.json')
 
         # Turning on hard delete mode
         self.config['hard_delete'] = True
@@ -490,7 +490,7 @@ class TestIntegration(unittest.TestCase):
 
     def test_logical_streams_from_pg_with_hard_delete_and_batch_size_of_5(self):
         """Tests logical streams from pg with inserts, updates and deletes"""
-        tap_lines = test_utils.get_test_tap_lines('messages-logical-streams.json')
+        tap_lines = test_utils.get_test_tap_lines('messages-pg-logical-streams.json')
 
         # Turning on hard delete mode
         self.config['hard_delete'] = True
