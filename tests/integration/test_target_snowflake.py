@@ -37,6 +37,7 @@ class TestIntegration(unittest.TestCase):
 
         # Delete target schema entries from PIPELINEWISE.COLUMNS
         if self.config['stage']:
+            snowflake.query("CREATE TABLE IF NOT EXISTS {}.columns (table_schema VARCHAR, table_name VARCHAR, column_name VARCHAR, data_type VARCHAR)".format(snowflake.pipelinewise_schema))
             snowflake.query("DELETE FROM {}.columns WHERE TABLE_SCHEMA ilike '{}'".format(snowflake.pipelinewise_schema, self.config['default_target_schema']))
 
     def persist_lines_with_cache(self, lines):
