@@ -20,7 +20,7 @@ from target_snowflake.db_sync import DbSync
 logger = singer.get_logger()
 
 DEFAULT_BATCH_SIZE_ROWS = 100000
-DEFAULT_PARALLELISM = -1  # -1 is auto parallelism
+DEFAULT_PARALLELISM = 0  # 0 The number of threads used to flush tables
 DEFAULT_MAX_PARALLELISM = 16  # Don't use more than this number of threads by default when flushing streams in parallel
 
 def float_to_decimal(value):
@@ -288,12 +288,12 @@ def flush_streams(
     parallelism = config.get("parallelism", DEFAULT_PARALLELISM)
     max_parallelism = config.get("max_parallelism", DEFAULT_MAX_PARALLELISM)
 
-    # Parallelism -1 means auto parallelism:
+    # Parallelism 0 means auto parallelism:
     #
     # Auto parallelism trying to flush streams efficiently with auto defined number
     # of threads where the number of threads is the number of streams that need to
     # be loaded but it's not greater than the value of max_parallelism
-    if parallelism == -1:
+    if parallelism == 0:
         n_streams_to_flush = len(streams.keys())
         if n_streams_to_flush > max_parallelism:
             parallelism = max_parallelism
