@@ -29,6 +29,7 @@ setup(name="pipelinewise-target-snowflake",
           "test": [
               "nose==1.3.7",
               "mock==3.0.5",
+              "pylint==2.4.2"
           ]
       },
       entry_points="""
