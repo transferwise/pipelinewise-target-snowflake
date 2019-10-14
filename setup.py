@@ -25,6 +25,12 @@ setup(name="pipelinewise-target-snowflake",
           'inflection==0.3.1',
           'joblib==0.13.2'
       ],
+      extras_require={
+          "test": [
+              "nose==1.3.7",
+              "mock==3.0.5",
+          ]
+      },
       entry_points="""
           [console_scripts]
           target-snowflake=target_snowflake:main

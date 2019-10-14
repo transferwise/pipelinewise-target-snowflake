@@ -107,8 +107,8 @@ Full list of options in `config.json`:
 | s3_key_prefix                       | String  |            | (Default: None) A static prefix before the generated S3 key names. Using prefixes you can upload files into specific directories in the S3 bucket. |
 | stage                               | String  | Yes        | Named external stage name created at pre-requirements section. Has to be a fully qualified name including the schema name |
 | file_format                         | String  | Yes        | Named file format name created at pre-requirements section. Has to be a fully qualified name including the schema name. |
-| batch_size                          | Integer |            | (Default: 100000) Maximum number of rows in each batch. At the end of each batch, the rows in the batch are loaded into Snowflake. |
-| flush_only_fully_batched_table      | Boolean |            | (Default: False) |
+| batch_size_rows                     | Integer |            | (Default: 100000) Maximum number of rows in each batch. At the end of each batch, the rows in the batch are loaded into Snowflake. |
+| flush_all_streams                   | Boolean |            | (Default: False) Flush and load every stream into Snowflake when one batch is full. Warning: This may trigger the COPY command to use files with low number of records, and may cause performance problems. |
 | parallelism                         | Integer |            | (Default: no. of streams required to flush) The level of parallelism when loading streams into Snowflake. When not set it's using auto-parallelism where the number of threads is the number of streams that need to be loaded but it's not greater than the max_parallelism value. |
 | max_parallelism                     | Integer |            | (Default: 32) Max number of parallel threads to use when flushing tables |
 | default_target_schema               | String  |            | Name of the schema where the tables will be created. If `schema_mapping` is not defined then every stream sent by the tap is loaded into this schema.    |
@@ -142,13 +142,12 @@ Full list of options in `config.json`:
   export CLIENT_SIDE_ENCRYPTION_STAGE_OBJECT=<client_side_encryption_stage_object>
 ```
 
-2. Install python dependencies in a virtual env and run nose unit and integration tests
+2. Install python test dependencies in a virtual env and run nose unit and integration tests
 ```
   python3 -m venv venv
   . venv/bin/activate
   pip install --upgrade pip
-  pip install .
-  pip install nose
+  pip install .[test]
 ```
 
 3. To run unit tests:

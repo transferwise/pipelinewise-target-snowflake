@@ -5,6 +5,7 @@ import io
 import json
 import os
 import sys
+import copy
 import tempfile
 from datetime import datetime
 from decimal import Decimal
@@ -64,7 +65,7 @@ def add_metadata_values_to_record(record_message, stream_to_sync):
 def emit_state(state):
     if state is not None:
         line = json.dumps(state)
-        logger.debug('Emitting state {}'.format(line))
+        logger.info('Emitting state {}'.format(line))
         sys.stdout.write("{}\n".format(line))
         sys.stdout.flush()
 
@@ -163,10 +164,10 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
 
             if row_count[stream] >= batch_size_rows:
                 # flush all streams, delete records if needed, reset counts and then emit current state
-                if config.get('flush_only_fully_batched_table'):
-                    filter_keys = [stream]
+                if config.get('flush_all_streams'):
+                    filter_streams = None
                 else:
-                    filter_keys = []
+                    filter_streams = [stream]
 
                 # Flush and return a new state dict with new positions only for the flushed streams
                 flushed_state = flush_streams(
@@ -176,10 +177,10 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
                     config,
                     state,
                     flushed_state,
-                    filter_keys=filter_keys)
-                
+                    filter_streams=filter_streams)
+
                 # emit last encountered state
-                emit_state(flushed_state)
+                emit_state(copy.deepcopy(flushed_state))
 
         elif t == 'SCHEMA':
             if 'stream' not in o:
@@ -246,9 +247,9 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
             logger.debug('Setting state to {}'.format(o['value']))
             state = o['value']
 
-            # Initially set flushed state
+            # Initially set flushed state
             if not flushed_state:
-                flushed_state = state
+                flushed_state = copy.deepcopy(state)
 
         else:
             raise Exception("Unknown message type {} in message {}"
@@ -261,25 +262,27 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
         flushed_state = flush_streams(records_to_load, row_count, stream_to_sync, config, state, flushed_state)
 
     # emit latest state
-    emit_state(flushed_state)
+    emit_state(copy.deepcopy(flushed_state))
 
 
 # pylint: disable=too-many-arguments
 def flush_streams(
-    streams,
-    row_count,
-    stream_to_sync,
-    config,
-    state,
-    flushed_state,
-    filter_keys=[]):
+        streams,
+        row_count,
+        stream_to_sync,
+        config,
+        state,
+        flushed_state,
+        filter_streams=None):
     """
     Flushes all buckets and resets records count to 0 as well as empties records to load list
     :param streams: dictionary with records to load per stream
     :param row_count: dictionary with row count per stream
     :param stream_to_sync: Snowflake db sync instance per stream
     :param config: dictionary containing the configuration
-    :param filter_keys: Keys of streams to flush from the streams dict. Default is every stream
+    :param state: dictionary containing the original state from tap
+    :param flushed_state: dictionary containing updated states only when streams got flushed
+    :param filter_streams: Keys of streams to flush from the streams dict. Default is every stream
     :return: State dict with flushed positions
     """
     parallelism = config.get("parallelism", DEFAULT_PARALLELISM)
@@ -298,8 +301,8 @@ def flush_streams(
             parallelism = n_streams_to_flush
 
     # Select the required streams to flush
-    if filter_keys:
-        streams_to_flush = {k: v for k, v in streams.items() if k in filter_keys}
+    if filter_streams:
+        streams_to_flush = {k: v for k, v in streams.items() if k in filter_streams}
     else:
         streams_to_flush = streams
 
@@ -314,12 +317,22 @@ def flush_streams(
         ) for (stream) in streams_to_flush.keys())
 
     # reset flushed stream records to empty to avoid flushing same records
-    for stream in streams_to_flush.keys():
-        streams[stream] = {}
+    # Update flushed streams
+    if filter_streams:
+        for stream in streams_to_flush.keys():
+            streams[stream] = {}
 
-        # update flushed_state position if we have state information for the stream
-        if stream in state:
-            flushed_state[stream] = state[stream]
+            # update flushed_state position if we have state information for the stream
+            if stream in state.get('bookmarks', {}):
+                # Create bookmark key if not exists
+                if 'bookmarks' not in flushed_state:
+                    flushed_state['bookmarks'] = {}
+                # Copy the stream bookmark from the latest state
+                flushed_state['bookmarks'][stream] = copy.deepcopy(state['bookmarks'][stream])
+
+    # If we flush every bucket use the latest state
+    else:
+        flushed_state = copy.deepcopy(state)
 
     # Return with state message with flushed positions
     return flushed_state
