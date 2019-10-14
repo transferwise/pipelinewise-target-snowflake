@@ -5,6 +5,7 @@ import io
 import json
 import os
 import sys
+import copy
 import tempfile
 from datetime import datetime
 from decimal import Decimal
@@ -18,6 +19,9 @@ from target_snowflake.db_sync import DbSync
 
 logger = singer.get_logger()
 
+DEFAULT_BATCH_SIZE_ROWS = 100000
+DEFAULT_PARALLELISM = 0  # 0 The number of threads used to flush tables
+DEFAULT_MAX_PARALLELISM = 16  # Don't use more than this number of threads by default when flushing streams in parallel
 
 def float_to_decimal(value):
     """Walk the given data structure and turn all instances of float into double."""
@@ -61,7 +65,7 @@ def add_metadata_values_to_record(record_message, stream_to_sync):
 def emit_state(state):
     if state is not None:
         line = json.dumps(state)
-        logger.debug('Emitting state {}'.format(line))
+        logger.info('Emitting state {}'.format(line))
         sys.stdout.write("{}\n".format(line))
         sys.stdout.flush()
 
@@ -97,6 +101,7 @@ def load_information_schema_cache(config):
 # pylint: disable=too-many-locals,too-many-branches,too-many-statements
 def persist_lines(config, lines, information_schema_cache=None) -> None:
     state = None
+    flushed_state = None
     schemas = {}
     key_properties = {}
     validators = {}
@@ -105,7 +110,7 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
     row_count = {}
     stream_to_sync = {}
     total_row_count = {}
-    batch_size_rows = config.get('batch_size_rows', 100000)
+    batch_size_rows = config.get('batch_size_rows', DEFAULT_BATCH_SIZE_ROWS)
 
     # Loop over lines from stdin
     for line in lines:
@@ -159,9 +164,23 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
 
             if row_count[stream] >= batch_size_rows:
                 # flush all streams, delete records if needed, reset counts and then emit current state
-                flush_all_streams(records_to_load, row_count, stream_to_sync, config)
+                if config.get('flush_all_streams'):
+                    filter_streams = None
+                else:
+                    filter_streams = [stream]
+
+                # Flush and return a new state dict with new positions only for the flushed streams
+                flushed_state = flush_streams(
+                    records_to_load,
+                    row_count,
+                    stream_to_sync,
+                    config,
+                    state,
+                    flushed_state,
+                    filter_streams=filter_streams)
+
                 # emit last encountered state
-                emit_state(state)
+                emit_state(copy.deepcopy(flushed_state))
 
         elif t == 'SCHEMA':
             if 'stream' not in o:
@@ -177,9 +196,10 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
             # if same stream has been encountered again, it means the schema might have been altered
             # so previous records need to be flushed
             if row_count.get(stream, 0) > 0:
-                flush_all_streams(records_to_load, row_count, stream_to_sync, config)
+                flushed_state = flush_streams(records_to_load, row_count, stream_to_sync, config, state, flushed_state)
+
                 # emit latest encountered state
-                emit_state(state)
+                emit_state(flushed_state)
 
             # key_properties key must be available in the SCHEMA message.
             if 'key_properties' not in o:
@@ -227,6 +247,10 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
             logger.debug('Setting state to {}'.format(o['value']))
             state = o['value']
 
+            # Initially set flushed state
+            if not flushed_state:
+                flushed_state = copy.deepcopy(state)
+
         else:
             raise Exception("Unknown message type {} in message {}"
                             .format(o['type'], o))
@@ -235,34 +259,83 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
     # then flush all buckets.
     if len(row_count.values()) > 0:
         # flush all streams one last time, delete records if needed, reset counts and then emit current state
-        flush_all_streams(records_to_load, row_count, stream_to_sync, config)
+        flushed_state = flush_streams(records_to_load, row_count, stream_to_sync, config, state, flushed_state)
 
     # emit latest state
-    emit_state(state)
+    emit_state(copy.deepcopy(flushed_state))
 
 
-def flush_all_streams(records_to_load, row_count, stream_to_sync, config) -> None:
+# pylint: disable=too-many-arguments
+def flush_streams(
+        streams,
+        row_count,
+        stream_to_sync,
+        config,
+        state,
+        flushed_state,
+        filter_streams=None):
     """
     Flushes all buckets and resets records count to 0 as well as empties records to load list
-    :param records_to_load: dictionary with records to load per stream
+    :param streams: dictionary with records to load per stream
     :param row_count: dictionary with row count per stream
     :param stream_to_sync: Snowflake db sync instance per stream
     :param config: dictionary containing the configuration
-    :return:
+    :param state: dictionary containing the original state from tap
+    :param flushed_state: dictionary containing updated states only when streams got flushed
+    :param filter_streams: Keys of streams to flush from the streams dict. Default is every stream
+    :return: State dict with flushed positions
     """
+    parallelism = config.get("parallelism", DEFAULT_PARALLELISM)
+    max_parallelism = config.get("max_parallelism", DEFAULT_MAX_PARALLELISM)
+
+    # Parallelism 0 means auto parallelism:
+    #
+    # Auto parallelism trying to flush streams efficiently with auto defined number
+    # of threads where the number of threads is the number of streams that need to
+    # be loaded but it's not greater than the value of max_parallelism
+    if parallelism == 0:
+        n_streams_to_flush = len(streams.keys())
+        if n_streams_to_flush > max_parallelism:
+            parallelism = max_parallelism
+        else:
+            parallelism = n_streams_to_flush
+
+    # Select the required streams to flush
+    if filter_streams:
+        streams_to_flush = {k: v for k, v in streams.items() if k in filter_streams}
+    else:
+        streams_to_flush = streams
+
     # Single-host, thread-based parallelism
-    with parallel_backend('threading', n_jobs=-1):
+    with parallel_backend('threading', n_jobs=parallelism):
         Parallel()(delayed(load_stream_batch)(
             stream=stream,
-            records_to_load=records_to_load[stream],
+            records_to_load=streams[stream],
             row_count=row_count,
             db_sync=stream_to_sync[stream],
             delete_rows=config.get('hard_delete')
-        ) for (stream) in records_to_load.keys())
+        ) for (stream) in streams_to_flush.keys())
 
-    # reset all stream records to empty to avoid flushing same records
-    for stream in records_to_load.keys():
-        records_to_load[stream] = {}
+    # reset flushed stream records to empty to avoid flushing same records
+    # Update flushed streams
+    if filter_streams:
+        for stream in streams_to_flush.keys():
+            streams[stream] = {}
+
+            # update flushed_state position if we have state information for the stream
+            if stream in state.get('bookmarks', {}):
+                # Create bookmark key if not exists
+                if 'bookmarks' not in flushed_state:
+                    flushed_state['bookmarks'] = {}
+                # Copy the stream bookmark from the latest state
+                flushed_state['bookmarks'][stream] = copy.deepcopy(state['bookmarks'][stream])
+
+    # If we flush every bucket use the latest state
+    else:
+        flushed_state = copy.deepcopy(state)
+
+    # Return with state message with flushed positions
+    return flushed_state
 
 
 def load_stream_batch(stream, records_to_load, row_count, db_sync, delete_rows=False):

@@ -30,7 +30,6 @@ def get_db_config():
     # External stage in snowflake with client side encryption details
     config['client_side_encryption_master_key'] = os.environ.get('CLIENT_SIDE_ENCRYPTION_MASTER_KEY')
 
-
     # --------------------------------------------------------------------------
     # The following variables needs to be empty.
     # The tests cases will set them automatically whenever it's needed
@@ -39,7 +38,7 @@ def get_db_config():
     config['schema_mapping'] = None
     config['add_metadata_columns'] = None
     config['hard_delete'] = None
-
+    config['flush_all_streams'] = None
 
     return config
 
@@ -57,4 +56,3 @@ def get_test_tap_lines(filename):
             lines.append(line)
 
     return lines
-
