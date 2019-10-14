@@ -21,7 +21,7 @@ logger = singer.get_logger()
 
 DEFAULT_BATCH_SIZE_ROWS = 100000
 DEFAULT_PARALLELISM = -1  # -1 is auto parallelism
-DEFAULT_MAX_PARALLELISM = 16  # Don't use more than 32 threads by default
+DEFAULT_MAX_PARALLELISM = 16  # Don't use more than this number of threads by default when flushing streams in parallel
 
 def float_to_decimal(value):
     """Walk the given data structure and turn all instances of float into double."""
