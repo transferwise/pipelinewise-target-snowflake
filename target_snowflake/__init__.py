@@ -20,8 +20,8 @@ from target_snowflake.db_sync import DbSync
 logger = singer.get_logger()
 
 DEFAULT_BATCH_SIZE_ROWS = 100000
-DEFAULT_PARALLELISM     = -1        # -1 is auto parallelism
-DEFAULT_MAX_PARALLELISM = 32        # Don't use more than 32 threads by default
+DEFAULT_PARALLELISM = -1  # -1 is auto parallelism
+DEFAULT_MAX_PARALLELISM = 16  # Don't use more than 32 threads by default
 
 def float_to_decimal(value):
     """Walk the given data structure and turn all instances of float into double."""
