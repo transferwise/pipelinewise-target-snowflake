@@ -626,6 +626,7 @@ class TestIntegration(unittest.TestCase):
         tap_lines = test_utils.get_test_tap_lines('messages-pg-logical-streams.json')
 
         # Set batch size big enough to never has to flush in the middle
+        self.config['hard_delete'] = True
         self.config['batch_size_rows'] = 1000
         self.persist_lines_with_cache(tap_lines)
 
@@ -643,6 +644,9 @@ class TestIntegration(unittest.TestCase):
                     "public2-wearehere": {}}})
             ])
 
+        # Every table should be loaded correctly
+        self.assert_logical_streams_are_in_snowflake(True)
+
     @mock.patch('target_snowflake.emit_state')
     def test_flush_streams_with_intermediate_flushes(self, mock_emit_state):
         """Test emitting states when intermediate flushes required"""
@@ -650,6 +654,7 @@ class TestIntegration(unittest.TestCase):
         tap_lines = test_utils.get_test_tap_lines('messages-pg-logical-streams.json')
 
         # Set batch size small enough to trigger multiple stream flushes
+        self.config['hard_delete'] = True
         self.config['batch_size_rows'] = 10
         self.persist_lines_with_cache(tap_lines)
 
@@ -713,6 +718,9 @@ class TestIntegration(unittest.TestCase):
                      "public2-wearehere": {}}}),
             ])
 
+        # Every table should be loaded correctly
+        self.assert_logical_streams_are_in_snowflake(True)
+
     @mock.patch('target_snowflake.emit_state')
     def test_flush_streams_with_intermediate_flushes_on_all_streams(self, mock_emit_state):
         """Test emitting states when intermediate flushes required and flush_all_streams is enabled"""
@@ -720,6 +728,7 @@ class TestIntegration(unittest.TestCase):
         tap_lines = test_utils.get_test_tap_lines('messages-pg-logical-streams.json')
 
         # Set batch size small enough to trigger multiple stream flushes
+        self.config['hard_delete'] = True
         self.config['batch_size_rows'] = 10
         self.config['flush_all_streams'] = True
         self.persist_lines_with_cache(tap_lines)
@@ -783,3 +792,6 @@ class TestIntegration(unittest.TestCase):
                     "public-country": {"last_replication_method": "FULL_TABLE", "version": 1570922730456, "xmin": None},
                     "public2-wearehere": {}}}),
             ])
+
+        # Every table should be loaded correctly
+        self.assert_logical_streams_are_in_snowflake(True)
