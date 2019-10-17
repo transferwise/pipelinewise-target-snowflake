@@ -232,6 +232,20 @@ class TestIntegration(unittest.TestCase):
             self.assertEqual(table_three, expected_table_three)
             self.assertEqual(table_four, expected_table_four)
 
+    def assert_logical_streams_are_in_snowflake_and_are_empty(self):
+        # Get loaded rows from tables
+        snowflake = DbSync(self.config)
+        target_schema = self.config.get('default_target_schema', '')
+        table_one = snowflake.query("SELECT * FROM {}.logical1_table1 ORDER BY CID".format(target_schema))
+        table_two = snowflake.query("SELECT * FROM {}.logical1_table2 ORDER BY CID".format(target_schema))
+        table_three = snowflake.query("SELECT * FROM {}.logical2_table1 ORDER BY CID".format(target_schema))
+        table_four = snowflake.query("SELECT CID, CTIMENTZ, CTIMETZ FROM {}.logical1_edgydata WHERE CID IN(1,2,3,4,5,6,8,9) ORDER BY CID".format(target_schema))
+
+        self.assertEqual(table_one, [])
+        self.assertEqual(table_two, [])
+        self.assertEqual(table_three, [])
+        self.assertEqual(table_four, [])
+
     #################################
     #           TESTS               #
     #################################
@@ -491,7 +505,7 @@ class TestIntegration(unittest.TestCase):
                 {'C_INT': 4, 'C_PK': 4, 'C_TIME': None, 'C_VARCHAR': '4', 'C_TIME_RENAMED': datetime.time(23, 0, 3)}
             ])
 
-    def test_logical_streams_from_pg_with_hard_delete_and_default_batch_size(self):
+    def test_logical_streams_from_pg_with_hard_delete_and_default_batch_size_should_pass(self):
         """Tests logical streams from pg with inserts, updates and deletes"""
         tap_lines = test_utils.get_test_tap_lines('messages-pg-logical-streams.json')
 
@@ -501,7 +515,7 @@ class TestIntegration(unittest.TestCase):
 
         self.assert_logical_streams_are_in_snowflake(True)
 
-    def test_logical_streams_from_pg_with_hard_delete_and_batch_size_of_5(self):
+    def test_logical_streams_from_pg_with_hard_delete_and_batch_size_of_5_should_pass(self):
         """Tests logical streams from pg with inserts, updates and deletes"""
         tap_lines = test_utils.get_test_tap_lines('messages-pg-logical-streams.json')
 
@@ -511,6 +525,17 @@ class TestIntegration(unittest.TestCase):
         self.persist_lines_with_cache(tap_lines)
 
         self.assert_logical_streams_are_in_snowflake(True)
+
+    def test_logical_streams_from_pg_with_hard_delete_and_batch_size_of_5_and_no_records_should_pass(self):
+        """Tests logical streams from pg with inserts, updates and deletes"""
+        tap_lines = test_utils.get_test_tap_lines('messages-pg-logical-streams-no-records.json')
+
+        # Turning on hard delete mode
+        self.config['hard_delete'] = True
+        self.config['batch_size_rows'] = 5
+        self.persist_lines_with_cache(tap_lines)
+
+        self.assert_logical_streams_are_in_snowflake_and_are_empty()
 
     def test_information_schema_cache_create_and_update(self):
         """Newly created and altered tables must be cached automatically for later use.
