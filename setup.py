@@ -23,7 +23,8 @@ setup(name="pipelinewise-target-snowflake",
           'snowflake-connector-python==2.0.1',
           'boto3==1.9.33',
           'inflection==0.3.1',
-          'joblib==0.13.2'
+          'joblib==0.13.2',
+          'asn1crypto==0.24.0'
       ],
       entry_points="""
           [console_scripts]
