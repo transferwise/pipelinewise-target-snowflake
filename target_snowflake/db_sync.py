@@ -629,7 +629,7 @@ class DbSync:
             ))
             for (name, properties_schema) in self.flatten_schema.items()
             if name.lower() in columns_dict and
-               columns_dict[name.lower()]['DATA_TYPE'].lower() != column_type(properties_schema).lower() and
+               columns_dict[name.lower()]['DATA_TYPE'].lower() != column_type(name, properties_schema).lower() and
 
                # Don't alter table if TIMESTAMP_NTZ detected as the new required column type
                #
@@ -641,7 +641,7 @@ class DbSync:
                # TODO: Support both TIMESTAMP_TZ and TIMESTAMP_NTZ in target-snowflake
                # when extracting data-time values from JSON
                # (Check the column_type function for further details)
-               column_type(properties_schema).lower() != 'timestamp_ntz'
+               column_type(name, properties_schema).lower() != 'timestamp_ntz'
         ]
 
         for (column_name, column) in columns_to_replace:
