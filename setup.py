@@ -17,14 +17,13 @@ setup(name="pipelinewise-target-snowflake",
           'Programming Language :: Python :: 3 :: Only'
       ],
       py_modules=["target_snowflake"],
-      install_requires=['asn1crypto==1.2.0',
+      install_requires=[
           'idna==2.7',
           'singer-python==5.1.1',
           'snowflake-connector-python==2.0.1',
           'boto3==1.9.33',
           'inflection==0.3.1',
           'joblib==0.13.2',
-          'asn1crypto==1.2.0'
       ],
       entry_points="""
           [console_scripts]
