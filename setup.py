@@ -24,7 +24,7 @@ setup(name="pipelinewise-target-snowflake",
           'boto3==1.9.33',
           'inflection==0.3.1',
           'joblib==0.13.2',
-          'asn1crypto==0.24.0'
+          'asn1crypto==1.2.0'
       ],
       entry_points="""
           [console_scripts]
