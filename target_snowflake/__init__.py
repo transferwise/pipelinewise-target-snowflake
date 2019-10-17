@@ -268,7 +268,8 @@ def load_stream_batch(stream, records_to_load, row_count, db_sync, delete_rows=F
 
         # Delete soft-deleted, flagged rows - where _sdc_deleted at is not null
         if delete_rows:
-            db_sync.delete_rows(stream)
+            pass
+            # db_sync.delete_rows(stream)
 
         # reset row count for the current stream
         row_count[stream] = 0
