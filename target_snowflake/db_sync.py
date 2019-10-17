@@ -50,13 +50,13 @@ def validate_config(config):
     return errors
 
 
-def column_type(schema_property):
+def column_type(name, schema_property):
     property_type = schema_property['type']
     property_format = schema_property['format'] if 'format' in schema_property else None
     column_type = 'text'
     if 'object' in property_type or 'array' in property_type:
         column_type = 'variant'
-    elif 'json' in schema_property['name'].lower():
+    elif 'json' in name.lower():
         column_type = 'variant'
     # Every date-time JSON value is currently mapped to TIMESTAMP_NTZ
     #
