@@ -93,7 +93,7 @@ def safe_column_name(name):
 
 
 def column_clause(name, schema_property):
-    return '{} {}'.format(safe_column_name(name), column_type(schema_property))
+    return '{} {}'.format(safe_column_name(name), column_type(name, schema_property))
 
 
 def flatten_key(k, parent_key, sep):
