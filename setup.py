@@ -17,7 +17,7 @@ setup(name="pipelinewise-target-snowflake",
           'Programming Language :: Python :: 3 :: Only'
       ],
       py_modules=["target_snowflake"],
-      install_requires=[
+      install_requires=['asn1crypto==1.2.0',
           'idna==2.7',
           'singer-python==5.1.1',
           'snowflake-connector-python==1.7.4',
