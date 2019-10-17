@@ -78,7 +78,7 @@ def column_type(name, schema_property):
     return column_type
 
 
-def column_trans(schema_property):
+def column_trans(name, schema_property):
     property_type = schema_property['type']
     column_trans = ''
     if 'object' in property_type or 'array' in property_type:
@@ -442,7 +442,7 @@ class DbSync:
         columns_with_trans = [
             {
                 "name": safe_column_name(name),
-                "trans": column_trans(schema)
+                "trans": column_trans(name, schema)
             }
             for (name, schema) in self.flatten_schema.items()
         ]
