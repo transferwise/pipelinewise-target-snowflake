@@ -67,7 +67,7 @@ def column_type(name, schema_property):
     elif property_format == 'time':
         column_type = 'time'
     elif 'number' in property_type:
-        column_type = 'float'
+        column_type = 'number'
     elif 'integer' in property_type and 'string' in property_type:
         column_type = 'text'
     elif 'integer' in property_type:
