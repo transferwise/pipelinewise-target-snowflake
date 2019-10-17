@@ -56,7 +56,7 @@ def column_type(schema_property):
     column_type = 'text'
     if 'object' in property_type or 'array' in property_type:
         column_type = 'variant'
-    elif 'json' in name.lower():
+    elif 'json' in schema_property['name'].lower():
         column_type = 'variant'
     # Every date-time JSON value is currently mapped to TIMESTAMP_NTZ
     #
