@@ -118,20 +118,20 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
         try:
             o = json.loads(line)
         except json.decoder.JSONDecodeError:
-            logger.error(f"Unable to parse:\n{line}")
+            logger.error("Unable to parse:\n{}".format(line))
             raise
 
         if 'type' not in o:
-            raise Exception(f"Line is missing required key 'type': {line}")
+            raise Exception("Line is missing required key 'type': {}".format(line))
 
         t = o['type']
 
         if t == 'RECORD':
             if 'stream' not in o:
-                raise Exception(f"Line is missing required key 'stream': {line}")
+                raise Exception("Line is missing required key 'stream': {}".format(line))
             if o['stream'] not in schemas:
                 raise Exception(
-                    f"A record for stream {o['stream']} was encountered before a corresponding schema")
+                    "A record for stream {} was encountered before a corresponding schema".format(o['stream']))
 
             # Get schema for this record's stream
             stream = o['stream']
@@ -142,9 +142,9 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
             except Exception as ex:
                 if type(ex).__name__ == "InvalidOperation":
                     logger.error(
-                        f"Data validation failed and cannot load to destination. RECORD: {o['record']}\n'multipleOf' "
-                        f"validations that allows long precisions are not supported (i.e. with 15 digits or more). "
-                        f"Try removing 'multipleOf' methods from JSON schema.")
+                        "Data validation failed and cannot load to destination. RECORD: {}\n'multipleOf' "
+                        "validations that allows long precisions are not supported (i.e. with 15 digits or more). "
+                        "Try removing 'multipleOf' methods from JSON schema.".format(o['record']))
                     raise ex
 
             primary_key_string = stream_to_sync[stream].record_primary_key_string(o['record'])
@@ -154,14 +154,10 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
             if stream not in records_to_load:
                 records_to_load[stream] = {}
 
-            logger.info(f'Record ID {primary_key_string} in stream {stream}')
-
+            # increment row count only when a new PK is encountered in the current batch
             if primary_key_string not in records_to_load[stream]:
-                # increment row count with every record line
                 row_count[stream] += 1
                 total_row_count[stream] += 1
-
-            logger.info(f'Row count: {row_count[stream]}')
 
             # append record
             if config.get('add_metadata_columns') or config.get('hard_delete'):
@@ -336,9 +332,9 @@ def flush_streams(
                 # Copy the stream bookmark from the latest state
                 flushed_state['bookmarks'][stream] = copy.deepcopy(state['bookmarks'][stream])
 
-    # If we flush every bucket use the latest state
-    else:
-        flushed_state = copy.deepcopy(state)
+        # If we flush every bucket use the latest state
+        else:
+            flushed_state = copy.deepcopy(state)
 
     # Return with state message with flushed positions
     return flushed_state
