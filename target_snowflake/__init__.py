@@ -7,7 +7,6 @@ import os
 import sys
 import copy
 import tempfile
-import logging
 from datetime import datetime
 from decimal import Decimal
 from tempfile import NamedTemporaryFile
@@ -19,11 +18,11 @@ from jsonschema import Draft4Validator, FormatChecker
 from target_snowflake.db_sync import DbSync
 
 logger = singer.get_logger()
-logger.setLevel(logging.ERROR)
 
 DEFAULT_BATCH_SIZE_ROWS = 100000
 DEFAULT_PARALLELISM = 0  # 0 The number of threads used to flush tables
 DEFAULT_MAX_PARALLELISM = 16  # Don't use more than this number of threads by default when flushing streams in parallel
+
 
 def float_to_decimal(value):
     """Walk the given data structure and turn all instances of float into double."""
@@ -119,20 +118,20 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
         try:
             o = json.loads(line)
         except json.decoder.JSONDecodeError:
-            logger.error("Unable to parse:\n{}".format(line))
+            logger.error(f"Unable to parse:\n{line}")
             raise
 
         if 'type' not in o:
-            raise Exception("Line is missing required key 'type': {}".format(line))
+            raise Exception(f"Line is missing required key 'type': {line}")
 
         t = o['type']
 
         if t == 'RECORD':
             if 'stream' not in o:
-                raise Exception("Line is missing required key 'stream': {}".format(line))
+                raise Exception(f"Line is missing required key 'stream': {line}")
             if o['stream'] not in schemas:
                 raise Exception(
-                    "A record for stream {} was encountered before a corresponding schema".format(o['stream']))
+                    f"A record for stream {o['stream']} was encountered before a corresponding schema")
 
             # Get schema for this record's stream
             stream = o['stream']
@@ -143,8 +142,9 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
             except Exception as ex:
                 if type(ex).__name__ == "InvalidOperation":
                     logger.error(
-                        "Data validation failed and cannot load to destination. RECORD: {}\n'multipleOf' validations that allows long precisions are not supported (i.e. with 15 digits or more). Try removing 'multipleOf' methods from JSON schema."
-                            .format(o['record']))
+                        f"Data validation failed and cannot load to destination. RECORD: {o['record']}\n'multipleOf' "
+                        f"validations that allows long precisions are not supported (i.e. with 15 digits or more). "
+                        f"Try removing 'multipleOf' methods from JSON schema.")
                     raise ex
 
             primary_key_string = stream_to_sync[stream].record_primary_key_string(o['record'])
@@ -154,9 +154,14 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
             if stream not in records_to_load:
                 records_to_load[stream] = {}
 
-            # increment row count with every record line
-            row_count[stream] += 1
-            total_row_count[stream] += 1
+            logger.info(f'Record ID {primary_key_string} in stream {stream}')
+
+            if primary_key_string not in records_to_load[stream]:
+                # increment row count with every record line
+                row_count[stream] += 1
+                total_row_count[stream] += 1
+
+            logger.info(f'Row count: {row_count[stream]}')
 
             # append record
             if config.get('add_metadata_columns') or config.get('hard_delete'):
@@ -266,7 +271,7 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
     # emit latest state
     emit_state(copy.deepcopy(flushed_state))
 
-
+# pylint: disable=too-many-arguments
 def flush_streams(
         streams,
         row_count,
@@ -305,7 +310,7 @@ def flush_streams(
     if filter_streams:
         streams_to_flush = {k: v for k, v in streams.items() if k in filter_streams}
     else:
-        streams_to_flush = streams
+        streams_to_flush = copy.deepcopy(streams)
 
     # Single-host, thread-based parallelism
     with parallel_backend('threading', n_jobs=parallelism):
@@ -318,11 +323,11 @@ def flush_streams(
         ) for (stream) in streams_to_flush.keys())
 
     # reset flushed stream records to empty to avoid flushing same records
-    # Update flushed streams
-    if filter_streams:
-        for stream in streams_to_flush.keys():
-            streams[stream] = {}
+    for stream in streams_to_flush.keys():
+        streams[stream] = {}
 
+        # Update flushed streams
+        if filter_streams:
             # update flushed_state position if we have state information for the stream
             if stream in state.get('bookmarks', {}):
                 # Create bookmark key if not exists
