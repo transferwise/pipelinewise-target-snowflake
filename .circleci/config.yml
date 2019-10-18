@@ -17,6 +17,8 @@ jobs:
       - run:
           name: 'Pylinting'
           command: |
+            . venv/bin/activate
+            pip install .[test]
             pylint target_snowflake -d C,W,unexpected-keyword-arg,duplicate-code
 
       - run:
