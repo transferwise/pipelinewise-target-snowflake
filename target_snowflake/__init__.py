@@ -7,6 +7,7 @@ import os
 import sys
 import copy
 import tempfile
+import logging
 from datetime import datetime
 from decimal import Decimal
 from tempfile import NamedTemporaryFile
@@ -18,6 +19,7 @@ from jsonschema import Draft4Validator, FormatChecker
 from target_snowflake.db_sync import DbSync
 
 logger = singer.get_logger()
+logger.setLevel(logging.ERROR)
 
 DEFAULT_BATCH_SIZE_ROWS = 100000
 DEFAULT_PARALLELISM = 0  # 0 The number of threads used to flush tables
