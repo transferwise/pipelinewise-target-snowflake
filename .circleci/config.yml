@@ -13,8 +13,12 @@ jobs:
             . venv/bin/activate
             pip install --upgrade pip
             pip install .[test]
+
+      - run:
+          name: 'Pylinting'
+          command: |
             pylint target_snowflake -d C,W,unexpected-keyword-arg,duplicate-code
-   
+
       - run:
           name: 'Unit Tests'
           command: |
