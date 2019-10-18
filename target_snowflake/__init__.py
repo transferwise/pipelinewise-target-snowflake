@@ -7,6 +7,7 @@ import os
 import sys
 import copy
 import tempfile
+import logging
 from datetime import datetime
 from decimal import Decimal
 from tempfile import NamedTemporaryFile
@@ -18,6 +19,7 @@ from jsonschema import Draft4Validator, FormatChecker
 from target_snowflake.db_sync import DbSync
 
 logger = singer.get_logger()
+logger.setLevel(logging.ERROR)
 
 DEFAULT_BATCH_SIZE_ROWS = 100000
 DEFAULT_PARALLELISM = 0  # 0 The number of threads used to flush tables
@@ -257,13 +259,12 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
 
     # if some bucket has records that need to be flushed but haven't reached batch size
     # then flush all buckets.
-    if len(row_count.values()) > 0:
+    if sum(row_count.values()) > 0:
         # flush all streams one last time, delete records if needed, reset counts and then emit current state
         flushed_state = flush_streams(records_to_load, row_count, stream_to_sync, config, state, flushed_state)
 
     # emit latest state
     emit_state(copy.deepcopy(flushed_state))
-
 
 # pylint: disable=too-many-arguments
 def flush_streams(
