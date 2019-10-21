@@ -304,9 +304,9 @@ def flush_streams(
 
     # Select the required streams to flush
     if filter_streams:
-        streams_to_flush = {k: v for k, v in streams.items() if k in filter_streams}
+        streams_to_flush = filter_streams
     else:
-        streams_to_flush = copy.deepcopy(streams)
+        streams_to_flush = streams.keys()
 
     # Single-host, thread-based parallelism
     with parallel_backend('threading', n_jobs=parallelism):
@@ -316,10 +316,10 @@ def flush_streams(
             row_count=row_count,
             db_sync=stream_to_sync[stream],
             delete_rows=config.get('hard_delete')
-        ) for (stream) in streams_to_flush.keys())
+        ) for stream in streams_to_flush)
 
     # reset flushed stream records to empty to avoid flushing same records
-    for stream in streams_to_flush.keys():
+    for stream in streams_to_flush:
         streams[stream] = {}
 
         # Update flushed streams
