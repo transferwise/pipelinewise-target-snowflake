@@ -6,10 +6,9 @@ import json
 import os
 import sys
 import copy
-import tempfile
 from datetime import datetime
 from decimal import Decimal
-from tempfile import NamedTemporaryFile
+from tempfile import NamedTemporaryFile, mkstemp
 
 import singer
 from joblib import Parallel, delayed, parallel_backend
@@ -267,6 +266,7 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
     # emit latest state
     emit_state(copy.deepcopy(flushed_state))
 
+
 # pylint: disable=too-many-arguments
 def flush_streams(
         streams,
@@ -354,7 +354,7 @@ def load_stream_batch(stream, records_to_load, row_count, db_sync, delete_rows=F
 
 
 def flush_records(stream, records_to_load, row_count, db_sync):
-    csv_fd, csv_file = tempfile.mkstemp()
+    csv_fd, csv_file = mkstemp()
     with open(csv_fd, 'w+b') as f:
         for record in records_to_load.values():
             csv_line = db_sync.record_to_csv_line(record)
