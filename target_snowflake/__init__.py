@@ -6,10 +6,9 @@ import json
 import os
 import sys
 import copy
-import tempfile
 from datetime import datetime
 from decimal import Decimal
-from tempfile import NamedTemporaryFile
+from tempfile import NamedTemporaryFile, mkstemp
 
 import singer
 from joblib import Parallel, delayed, parallel_backend
@@ -22,6 +21,7 @@ logger = singer.get_logger()
 DEFAULT_BATCH_SIZE_ROWS = 100000
 DEFAULT_PARALLELISM = 0  # 0 The number of threads used to flush tables
 DEFAULT_MAX_PARALLELISM = 16  # Don't use more than this number of threads by default when flushing streams in parallel
+
 
 def float_to_decimal(value):
     """Walk the given data structure and turn all instances of float into double."""
@@ -141,8 +141,9 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
             except Exception as ex:
                 if type(ex).__name__ == "InvalidOperation":
                     logger.error(
-                        "Data validation failed and cannot load to destination. RECORD: {}\n'multipleOf' validations that allows long precisions are not supported (i.e. with 15 digits or more). Try removing 'multipleOf' methods from JSON schema."
-                            .format(o['record']))
+                        "Data validation failed and cannot load to destination. RECORD: {}\n'multipleOf' "
+                        "validations that allows long precisions are not supported (i.e. with 15 digits or more). "
+                        "Try removing 'multipleOf' methods from JSON schema.".format(o['record']))
                     raise ex
 
             primary_key_string = stream_to_sync[stream].record_primary_key_string(o['record'])
@@ -152,9 +153,10 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
             if stream not in records_to_load:
                 records_to_load[stream] = {}
 
-            # increment row count with every record line
-            row_count[stream] += 1
-            total_row_count[stream] += 1
+            # increment row count only when a new PK is encountered in the current batch
+            if primary_key_string not in records_to_load[stream]:
+                row_count[stream] += 1
+                total_row_count[stream] += 1
 
             # append record
             if config.get('add_metadata_columns') or config.get('hard_delete'):
@@ -264,6 +266,7 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
     # emit latest state
     emit_state(copy.deepcopy(flushed_state))
 
+
 # pylint: disable=too-many-arguments
 def flush_streams(
         streams,
@@ -301,9 +304,9 @@ def flush_streams(
 
     # Select the required streams to flush
     if filter_streams:
-        streams_to_flush = {k: v for k, v in streams.items() if k in filter_streams}
+        streams_to_flush = filter_streams
     else:
-        streams_to_flush = streams
+        streams_to_flush = streams.keys()
 
     # Single-host, thread-based parallelism
     with parallel_backend('threading', n_jobs=parallelism):
@@ -313,14 +316,14 @@ def flush_streams(
             row_count=row_count,
             db_sync=stream_to_sync[stream],
             delete_rows=config.get('hard_delete')
-        ) for (stream) in streams_to_flush.keys())
+        ) for stream in streams_to_flush)
 
     # reset flushed stream records to empty to avoid flushing same records
-    # Update flushed streams
-    if filter_streams:
-        for stream in streams_to_flush.keys():
-            streams[stream] = {}
+    for stream in streams_to_flush:
+        streams[stream] = {}
 
+        # Update flushed streams
+        if filter_streams:
             # update flushed_state position if we have state information for the stream
             if stream in state.get('bookmarks', {}):
                 # Create bookmark key if not exists
@@ -329,9 +332,9 @@ def flush_streams(
                 # Copy the stream bookmark from the latest state
                 flushed_state['bookmarks'][stream] = copy.deepcopy(state['bookmarks'][stream])
 
-    # If we flush every bucket use the latest state
-    else:
-        flushed_state = copy.deepcopy(state)
+        # If we flush every bucket use the latest state
+        else:
+            flushed_state = copy.deepcopy(state)
 
     # Return with state message with flushed positions
     return flushed_state
@@ -351,7 +354,7 @@ def load_stream_batch(stream, records_to_load, row_count, db_sync, delete_rows=F
 
 
 def flush_records(stream, records_to_load, row_count, db_sync):
-    csv_fd, csv_file = tempfile.mkstemp()
+    csv_fd, csv_file = mkstemp()
     with open(csv_fd, 'w+b') as f:
         for record in records_to_load.values():
             csv_line = db_sync.record_to_csv_line(record)
