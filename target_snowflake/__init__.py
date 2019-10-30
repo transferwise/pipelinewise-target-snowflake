@@ -325,7 +325,7 @@ def flush_streams(
         # Update flushed streams
         if filter_streams:
             # update flushed_state position if we have state information for the stream
-            if stream in state.get('bookmarks', {}):
+            if state is not None and stream in state.get('bookmarks', {}):
                 # Create bookmark key if not exists
                 if 'bookmarks' not in flushed_state:
                     flushed_state['bookmarks'] = {}
