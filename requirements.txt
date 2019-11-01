@@ -1,3 +1,4 @@
+azure==4.0.0
 idna==2.7
 singer-python==5.1.1
 snowflake-connector-python==2.0.1
