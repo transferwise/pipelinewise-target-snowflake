@@ -23,6 +23,7 @@ setup(name="pipelinewise-target-snowflake",
           'snowflake-connector-python==2.0.3',
           'boto3==1.10.8',
           'botocore==1.13.8',
+          'urllib3==1.24.3',
           'inflection==0.3.1',
           'joblib==0.13.2'
       ],
