@@ -449,14 +449,24 @@ class DbSync:
 
         with self.open_connection() as connection:
             with connection.cursor(snowflake.connector.DictCursor) as cur:
-
+                cur.execute("create table {0}_tmp like {0}".format(self.table_name(stream, False)))
+                copy_sql = """COPY INTO {}_tmp ({}) FROM @{}/{}
+                        FILE_FORMAT = (format_name='{}')
+                        ON_ERROR = CONTINUE
+                    """.format(
+                        self.table_name(stream, False),
+                        ', '.join([c['name'] for c in columns_with_trans]),
+                        self.connection_config['stage'],
+                        s3_key,
+                        self.connection_config['file_format'],
+                    )
+                cur.execute(copy_sql)
                 # Insert or Update with MERGE command if primary key defined
                 if len(self.stream_schema_message['key_properties']) > 0:
                     merge_sql = """MERGE INTO {} t
                         USING (
                             SELECT {}
-                              FROM @{}/{}
-                              (FILE_FORMAT => '{}')) s
+                              FROM {}_tmp) s
                         ON {}
                         WHEN MATCHED THEN
                             UPDATE SET {}
@@ -466,9 +476,7 @@ class DbSync:
                     """.format(
                         self.table_name(stream, False),
                         ', '.join(["{}(${}) {}".format(c['trans'], i + 1, c['name']) for i, c in enumerate(columns_with_trans)]),
-                        self.connection_config['stage'],
-                        s3_key,
-                        self.connection_config['file_format'],
+                        self.table_name(stream, False),
                         self.primary_key_merge_condition(),
                         ', '.join(['{}=s.{}'.format(c['name'], c['name']) for c in columns_with_trans]),
                         ', '.join([c['name'] for c in columns_with_trans]),
@@ -479,18 +487,15 @@ class DbSync:
 
                 # Insert only with COPY command if no primary key
                 else:
-                    copy_sql = """COPY INTO {} ({}) FROM @{}/{}
-                        FILE_FORMAT = (format_name='{}')
+                    copy_sql = """COPY INTO {} ({}) FROM {}
                     """.format(
                         self.table_name(stream, False),
                         ', '.join([c['name'] for c in columns_with_trans]),
-                        self.connection_config['stage'],
-                        s3_key,
-                        self.connection_config['file_format'],
+                        self.table_name(stream, False),
                     )
                     logger.debug("SNOWFLAKE - {}".format(copy_sql))
                     cur.execute(copy_sql)
-
+                cur.execute("drop table {}_tmp".format(self.table_name(stream, False)))
                 logger.info("SNOWFLAKE - Merge into {}: {}".format(self.table_name(stream, False), cur.fetchall()))
 
     def primary_key_merge_condition(self):
