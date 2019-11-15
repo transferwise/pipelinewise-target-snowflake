@@ -449,7 +449,7 @@ class DbSync:
 
         with self.open_connection() as connection:
             with connection.cursor(snowflake.connector.DictCursor) as cur:
-                cur.execute("create table {0}_tmp like {0}".format(self.table_name(stream, False)))
+                cur.execute("create or replace table {0}_tmp like {0}".format(self.table_name(stream, False)))
                 copy_sql = """COPY INTO {}_tmp ({}) FROM @{}/{}
                         FILE_FORMAT = (format_name='{}')
                         ON_ERROR = CONTINUE
@@ -463,19 +463,15 @@ class DbSync:
                 cur.execute(copy_sql)
                 # Insert or Update with MERGE command if primary key defined
                 if len(self.stream_schema_message['key_properties']) > 0:
-                    merge_sql = """MERGE INTO {} t
-                        USING (
-                            SELECT {}
-                              FROM {}_tmp) s
-                        ON {}
+                    merge_sql = """MERGE INTO {0} t
+                        USING {0}_tmp s
+                        ON {1}
                         WHEN MATCHED THEN
-                            UPDATE SET {}
+                            UPDATE SET {2}
                         WHEN NOT MATCHED THEN
-                            INSERT ({})
-                            VALUES ({})
+                            INSERT ({3})
+                            VALUES ({4})
                     """.format(
-                        self.table_name(stream, False),
-                        ', '.join(["{}(${}) {}".format(c['trans'], i + 1, c['name']) for i, c in enumerate(columns_with_trans)]),
                         self.table_name(stream, False),
                         self.primary_key_merge_condition(),
                         ', '.join(['{}=s.{}'.format(c['name'], c['name']) for c in columns_with_trans]),
