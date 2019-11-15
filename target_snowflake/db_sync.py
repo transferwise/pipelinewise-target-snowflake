@@ -480,7 +480,7 @@ class DbSync:
                     )
                     logger.debug("SNOWFLAKE - {}".format(merge_sql))
                     cur.execute(merge_sql)
-
+                    
                 # Insert only with COPY command if no primary key
                 else:
                     copy_sql = """COPY INTO {} ({}) FROM {}
