@@ -12,22 +12,27 @@ jobs:
             python3 -m venv venv
             . venv/bin/activate
             pip install --upgrade pip
-            pip install .
-            pip install pylint
+            pip install .[test]
+
+      - run:
+          name: 'Pylinting'
+          command: |
+            . venv/bin/activate
+            pip install .[test]
             pylint target_snowflake -d C,W,unexpected-keyword-arg,duplicate-code
-   
+
       - run:
           name: 'Unit Tests'
           command: |
             . venv/bin/activate
-            pip install nose
+            pip install .[test]
             nosetests --where=tests/unit
 
       - run:
           name: 'Integration Tests'
           command: |
             . venv/bin/activate
-            pip install nose
+            pip install .[test]
             nosetests --where=tests/integration/
 
 workflows:
