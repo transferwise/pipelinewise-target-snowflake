@@ -6,11 +6,14 @@ import json
 import os
 import sys
 import copy
+import singer
+
 from datetime import datetime
 from decimal import Decimal
 from tempfile import NamedTemporaryFile, mkstemp
-
-import singer
+from typing import Dict
+from dateutil import parser
+from dateutil.parser import ParserError
 from joblib import Parallel, delayed, parallel_backend
 from jsonschema import Draft4Validator, FormatChecker
 
@@ -21,6 +24,12 @@ logger = singer.get_logger()
 DEFAULT_BATCH_SIZE_ROWS = 100000
 DEFAULT_PARALLELISM = 0  # 0 The number of threads used to flush tables
 DEFAULT_MAX_PARALLELISM = 16  # Don't use more than this number of threads by default when flushing streams in parallel
+
+# max timestamp/datetime supported in SF, used to reset all invalid dates that are beyond this value
+MAX_TIMESTAMP = '9999-12-31 23:59:59.999999'
+
+# max time supported in SF, used to reset all invalid times that are beyond this value
+MAX_TIME = '23:59:59.999999'
 
 
 def float_to_decimal(value):
@@ -98,6 +107,33 @@ def load_information_schema_cache(config):
     return information_schema_cache
 
 
+def adjust_timestamps_in_record(record: Dict, schema: Dict) -> None:
+    """
+    Goes through every field that is of type date/datetime/time and if its value is out of range,
+    resets it to MAX value accordingly
+    Args:
+        record: record containing properties and values
+        schema: json schema that has types of each property
+    """
+    # creating this internal function to avoid duplicating code and too many nested blocks.
+    def reset_new_value(record: Dict, key: str, format: str):
+        try:
+            parser.parse(record[key])
+        except ParserError:
+            record[key] = MAX_TIMESTAMP if format != 'time' else MAX_TIME
+
+    for key, value in record.items():
+        if value is not None and key in schema['properties']:
+            if 'anyOf' in schema['properties'][key]:
+                for type_dict in schema['properties'][key]['anyOf']:
+                    if 'string' in type_dict['type'] and type_dict.get('format', None) in {'date-time', 'time', 'date'}:
+                        reset_new_value(record, key, type_dict['format'])
+                        break
+            else:
+                if 'string' in schema['properties'][key]['type'] and \
+                        schema['properties'][key].get('format', None) in {'date-time', 'time', 'date'}:
+                    reset_new_value(record, key, schema['properties'][key]['format'])
+
 # pylint: disable=too-many-locals,too-many-branches,too-many-statements
 def persist_lines(config, lines, information_schema_cache=None) -> None:
     state = None
@@ -134,6 +170,8 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
 
             # Get schema for this record's stream
             stream = o['stream']
+
+            adjust_timestamps_in_record(o['record'], schemas[stream])
 
             # Validate record
             try:
@@ -190,9 +228,8 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
 
             stream = o['stream']
 
-            schemas[stream] = o
-            schema = float_to_decimal(o['schema'])
-            validators[stream] = Draft4Validator(schema, format_checker=FormatChecker())
+            schemas[stream] = float_to_decimal(o['schema'])
+            validators[stream] = Draft4Validator(schemas[stream], format_checker=FormatChecker())
 
             # flush records from previous stream SCHEMA
             # if same stream has been encountered again, it means the schema might have been altered
