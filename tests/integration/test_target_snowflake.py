@@ -7,7 +7,7 @@ import os
 from nose.tools import assert_raises
 
 import target_snowflake
-from target_snowflake import RecordValidationException
+from target_snowflake import RecordValidationException, InvalidTableStructureException
 from target_snowflake.db_sync import DbSync
 
 from snowflake.connector.errors import ProgrammingError
@@ -833,5 +833,5 @@ class TestIntegration(unittest.TestCase):
 
         # Loading invalid records when record validation disabled should fail at load time
         self.config['validate_records'] = False
-        with assert_raises(Exception):
+        with assert_raises(InvalidTableStructureException):
             self.persist_lines_with_cache(tap_lines)

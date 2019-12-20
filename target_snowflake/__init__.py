@@ -42,6 +42,11 @@ class InvalidValidationOperationException(Exception):
     pass
 
 
+class InvalidTableStructureException(Exception):
+    """Exception to raise when target table structure not compatible with singer messages"""
+    pass
+
+
 def float_to_decimal(value):
     """Walk the given data structure and turn all instances of float into double."""
     if isinstance(value, float):
@@ -277,14 +282,13 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
             try:
                 stream_to_sync[stream].create_schema_if_not_exists()
                 stream_to_sync[stream].sync_table()
-            except Exception as e:
-                logger.error("""
+            except Exception:
+                raise InvalidTableStructureException("""
                     Cannot sync table structure in Snowflake schema: {} .
                     Try to delete {}.COLUMNS table to reset information_schema cache. Maybe it's outdated.
                 """.format(
                     stream_to_sync[stream].schema_name,
                     stream_to_sync[stream].pipelinewise_schema.upper()))
-                raise e
 
             row_count[stream] = 0
             total_row_count[stream] = 0
@@ -411,12 +415,14 @@ def flush_records(stream, records_to_load, row_count, db_sync):
     s3_key = db_sync.put_to_stage(csv_file, stream, row_count)
     try:
         db_sync.load_csv(s3_key, row_count)
-    except Exception as e:
-        logger.error("""
+    except Exception:
+        raise InvalidTableStructureException("""
             Cannot load data from S3 into Snowflake schema: {} .
-            Try to delete {}.COLUMNS table to reset information_schema cache. Maybe it's outdated.
-        """.format(db_sync.schema_name, db_sync.pipelinewise_schema.upper()))
-        raise e
+            Try to delete {}.COLUMNS table to reset information_schema cache. Maybe it's outdated or the data types in
+            the singer RECORD messages are not in sync with the corresponding SCHEMA message.
+        """.format(
+            db_sync.schema_name,
+            db_sync.pipelinewise_schema.upper()))
 
     os.remove(csv_file)
     db_sync.delete_from_stage(s3_key)
