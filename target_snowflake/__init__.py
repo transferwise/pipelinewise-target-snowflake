@@ -193,8 +193,7 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
                             f"Data validation failed and cannot load to destination. RECORD: {o['record']}\n"
                             "multipleOf validations that allows long precisions are not supported (i.e. with 15 digits"
                             "or more) Try removing 'multipleOf' methods from JSON schema.")
-                    else:
-                        raise RecordValidationException(f"Record does not pass schema validation. RECORD: {o['record']}")
+                    raise RecordValidationException(f"Record does not pass schema validation. RECORD: {o['record']}")
 
             primary_key_string = stream_to_sync[stream].record_primary_key_string(o['record'])
             if not primary_key_string:
