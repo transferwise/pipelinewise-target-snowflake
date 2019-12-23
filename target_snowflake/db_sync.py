@@ -483,7 +483,7 @@ class DbSync:
                     
                 # Insert only with COPY command if no primary key
                 else:
-                    copy_sql = """COPY INTO {} ({}) FROM {}
+                    copy_sql = """COPY INTO {0} ({1}) FROM {0}_tmp
                     """.format(
                         self.table_name(stream, False),
                         ', '.join([c['name'] for c in columns_with_trans]),
