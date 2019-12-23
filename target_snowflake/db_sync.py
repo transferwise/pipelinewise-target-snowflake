@@ -293,7 +293,7 @@ class DbSync:
             #
             # Further info: https://snowflakecommunity.force.com/s/question/0D50Z00008AEhWbSAL/python-snowflake-connector-ocsp-response-warning-message
             # Snowflake is changing certificate authority
-            insecure_mode=True
+            insecure_mode=False
         )
 
     def query(self, query, params=None):
