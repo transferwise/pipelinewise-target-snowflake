@@ -37,11 +37,17 @@ def add_metadata_columns_to_schema(schema_message):
     Metadata columns gives information about data injections
     """
     extended_schema_message = schema_message
-    extended_schema_message['schema']['properties']['_sdc_extracted_at'] = {'type': ['null', 'string'],
-                                                                            'format': 'date-time'}
-    extended_schema_message['schema']['properties']['_sdc_batched_at'] = {'type': ['null', 'string'],
-                                                                          'format': 'date-time'}
-    extended_schema_message['schema']['properties']['_sdc_deleted_at'] = {'type': ['null', 'string']}
+    extended_schema_message["schema"]["properties"]["_sdc_extracted_at"] = {
+        "type": ["null", "string"],
+        "format": "date-time",
+    }
+    extended_schema_message["schema"]["properties"]["_sdc_batched_at"] = {
+        "type": ["null", "string"],
+        "format": "date-time",
+    }
+    extended_schema_message["schema"]["properties"]["_sdc_deleted_at"] = {
+        "type": ["null", "string"]
+    }
 
     return extended_schema_message
 
@@ -50,10 +56,10 @@ def add_metadata_values_to_record(record_message, stream_to_sync):
     """Populate metadata _sdc columns from incoming record message
     The location of the required attributes are fixed in the stream
     """
-    extended_record = record_message['record']
-    extended_record['_sdc_extracted_at'] = record_message.get('time_extracted')
-    extended_record['_sdc_batched_at'] = datetime.now().isoformat()
-    extended_record['_sdc_deleted_at'] = record_message.get('record', {}).get('_sdc_deleted_at')
+    extended_record = record_message["record"]
+    extended_record["_sdc_extracted_at"] = record_message.get("time_extracted")
+    extended_record["_sdc_batched_at"] = datetime.now().isoformat()
+    extended_record["_sdc_deleted_at"] = record_message.get("record", {}).get("_sdc_deleted_at")
 
     return extended_record
 
@@ -61,14 +67,14 @@ def add_metadata_values_to_record(record_message, stream_to_sync):
 def emit_state(state):
     if state is not None:
         line = json.dumps(state)
-        logger.debug('Emitting state {}'.format(line))
+        logger.debug("Emitting state {}".format(line))
         sys.stdout.write("{}\n".format(line))
         sys.stdout.flush()
 
 
 def get_schema_names_from_config(config):
-    default_target_schema = config.get('default_target_schema')
-    schema_mapping = config.get('schema_mapping', {})
+    default_target_schema = config.get("default_target_schema")
+    schema_mapping = config.get("schema_mapping", {})
     schema_names = []
 
     if default_target_schema:
@@ -76,20 +82,21 @@ def get_schema_names_from_config(config):
 
     if schema_mapping:
         for source_schema, target in schema_mapping.items():
-            schema_names.append(target.get('target_schema'))
+            schema_names.append(target.get("target_schema"))
 
     return schema_names
 
 
 def load_information_schema_cache(config):
     information_schema_cache = []
-    if not ('disable_table_cache' in config and config['disable_table_cache'] == True):
+    if not ("disable_table_cache" in config and config["disable_table_cache"] == True):
         logger.info("Getting catalog objects from information_schema cache table...")
 
         db = DbSync(config)
         information_schema_cache = db.get_table_columns(
             table_schemas=get_schema_names_from_config(config),
-            from_information_schema_cache_table=True)
+            from_information_schema_cache_table=True,
+        )
 
     return information_schema_cache
 
@@ -105,7 +112,7 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
     row_count = {}
     stream_to_sync = {}
     total_row_count = {}
-    batch_size_rows = config.get('batch_size_rows', 100000)
+    batch_size_rows = config.get("batch_size_rows", 100000)
 
     # Loop over lines from stdin
     for line in lines:
@@ -115,30 +122,33 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
             logger.error("Unable to parse:\n{}".format(line))
             raise
 
-        if 'type' not in o:
+        if "type" not in o:
             raise Exception("Line is missing required key 'type': {}".format(line))
 
-        t = o['type']
+        t = o["type"]
 
-        if t == 'RECORD':
-            if 'stream' not in o:
+        if t == "RECORD":
+            if "stream" not in o:
                 raise Exception("Line is missing required key 'stream': {}".format(line))
-            if o['stream'] not in schemas:
+            if o["stream"] not in schemas:
                 raise Exception(
-                    "A record for stream {} was encountered before a corresponding schema".format(o['stream']))
+                    "A record for stream {} was encountered before a corresponding schema".format(
+                        o["stream"]
+                    )
+                )
 
             # Get schema for this record's stream
-            stream = o['stream']
+            stream = o["stream"]
 
             # Validate record
             try:
-                validators[stream].validate(float_to_decimal(o['record']))
+                validators[stream].validate(float_to_decimal(o["record"]))
             except Exception as ex:
                 pass
 
-            primary_key_string = stream_to_sync[stream].record_primary_key_string(o['record'])
+            primary_key_string = stream_to_sync[stream].record_primary_key_string(o["record"])
             if not primary_key_string:
-                primary_key_string = 'RID-{}'.format(total_row_count[stream])
+                primary_key_string = "RID-{}".format(total_row_count[stream])
 
             if stream not in records_to_load:
                 records_to_load[stream] = {}
@@ -148,10 +158,12 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
             total_row_count[stream] += 1
 
             # append record
-            if config.get('add_metadata_columns') or config.get('hard_delete'):
-                records_to_load[stream][primary_key_string] = add_metadata_values_to_record(o, stream_to_sync[stream])
+            if config.get("add_metadata_columns") or config.get("hard_delete"):
+                records_to_load[stream][primary_key_string] = add_metadata_values_to_record(
+                    o, stream_to_sync[stream]
+                )
             else:
-                records_to_load[stream][primary_key_string] = o['record']
+                records_to_load[stream][primary_key_string] = o["record"]
 
             if row_count[stream] >= batch_size_rows:
                 # flush all streams, delete records if needed, reset counts and then emit current state
@@ -159,14 +171,14 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
                 # emit last encountered state
                 emit_state(state)
 
-        elif t == 'SCHEMA':
-            if 'stream' not in o:
+        elif t == "SCHEMA":
+            if "stream" not in o:
                 raise Exception("Line is missing required key 'stream': {}".format(line))
 
-            stream = o['stream']
+            stream = o["stream"]
 
             schemas[stream] = o
-            schema = float_to_decimal(o['schema'])
+            schema = float_to_decimal(o["schema"])
             validators[stream] = Draft4Validator(schema, format_checker=FormatChecker())
 
             # flush records from previous stream SCHEMA
@@ -178,7 +190,7 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
                 emit_state(state)
 
             # key_properties key must be available in the SCHEMA message.
-            if 'key_properties' not in o:
+            if "key_properties" not in o:
                 raise Exception("key_properties field is required")
 
             # Log based and Incremental replications on tables with no Primary Key
@@ -189,14 +201,20 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
             #  1) Set ` 'primary_key_required': false ` in the target-snowflake config.json
             #  or
             #  2) Use fastsync [postgres-to-snowflake, mysql-to-snowflake, etc.]
-            if config.get('primary_key_required', True) and len(o['key_properties']) == 0:
-                logger.critical("Primary key is set to mandatory but not defined in the [{}] stream".format(stream))
+            if config.get("primary_key_required", True) and len(o["key_properties"]) == 0:
+                logger.critical(
+                    "Primary key is set to mandatory but not defined in the [{}] stream".format(
+                        stream
+                    )
+                )
                 raise Exception("key_properties field is required")
 
-            key_properties[stream] = o['key_properties']
+            key_properties[stream] = o["key_properties"]
 
-            if config.get('add_metadata_columns') or config.get('hard_delete'):
-                stream_to_sync[stream] = DbSync(config, add_metadata_columns_to_schema(o), information_schema_cache)
+            if config.get("add_metadata_columns") or config.get("hard_delete"):
+                stream_to_sync[stream] = DbSync(
+                    config, add_metadata_columns_to_schema(o), information_schema_cache
+                )
             else:
                 stream_to_sync[stream] = DbSync(config, o, information_schema_cache)
 
@@ -204,28 +222,30 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
                 stream_to_sync[stream].create_schema_if_not_exists()
                 stream_to_sync[stream].sync_table()
             except Exception as e:
-                logger.error("""
+                logger.error(
+                    """
                     Cannot sync table structure in Snowflake schema: {} .
                     Try to delete {}.COLUMNS table to reset information_schema cache. Maybe it's outdated.
                 """.format(
-                    stream_to_sync[stream].schema_name,
-                    stream_to_sync[stream].pipelinewise_schema.upper()))
+                        stream_to_sync[stream].schema_name,
+                        stream_to_sync[stream].pipelinewise_schema.upper(),
+                    )
+                )
                 raise e
 
             row_count[stream] = 0
             total_row_count[stream] = 0
-            csv_files_to_load[stream] = NamedTemporaryFile(mode='w+b')
+            csv_files_to_load[stream] = NamedTemporaryFile(mode="w+b")
 
-        elif t == 'ACTIVATE_VERSION':
-            logger.debug('ACTIVATE_VERSION message')
+        elif t == "ACTIVATE_VERSION":
+            logger.debug("ACTIVATE_VERSION message")
 
-        elif t == 'STATE':
-            logger.debug('Setting state to {}'.format(o['value']))
-            state = o['value']
+        elif t == "STATE":
+            logger.debug("Setting state to {}".format(o["value"]))
+            state = o["value"]
 
         else:
-            raise Exception("Unknown message type {} in message {}"
-                            .format(o['type'], o))
+            raise Exception("Unknown message type {} in message {}".format(o["type"], o))
 
     # if some bucket has records that need to be flushed but haven't reached batch size
     # then flush all buckets.
@@ -247,14 +267,17 @@ def flush_all_streams(records_to_load, row_count, stream_to_sync, config) -> Non
     :return:
     """
     # Single-host, thread-based parallelism
-    with parallel_backend('threading', n_jobs=-1):
-        Parallel()(delayed(load_stream_batch)(
-            stream=stream,
-            records_to_load=records_to_load[stream],
-            row_count=row_count,
-            db_sync=stream_to_sync[stream],
-            delete_rows=config.get('hard_delete')
-        ) for (stream) in records_to_load.keys())
+    with parallel_backend("threading", n_jobs=-1):
+        Parallel()(
+            delayed(load_stream_batch)(
+                stream=stream,
+                records_to_load=records_to_load[stream],
+                row_count=row_count,
+                db_sync=stream_to_sync[stream],
+                delete_rows=config.get("hard_delete"),
+            )
+            for (stream) in records_to_load.keys()
+        )
 
     # reset all stream records to empty to avoid flushing same records
     for stream in records_to_load.keys():
@@ -277,19 +300,23 @@ def load_stream_batch(stream, records_to_load, row_count, db_sync, delete_rows=F
 
 def flush_records(stream, records_to_load, row_count, db_sync):
     csv_fd, csv_file = tempfile.mkstemp()
-    with open(csv_fd, 'w+b') as f:
+    with open(csv_fd, "w+b") as f:
         for record in records_to_load.values():
             csv_line = db_sync.record_to_csv_line(record)
-            f.write(bytes(csv_line + '\n', 'UTF-8'))
+            f.write(bytes(csv_line + "\n", "UTF-8"))
 
     s3_key = db_sync.put_to_stage(csv_file, stream, row_count)
     try:
         db_sync.load_csv(s3_key, row_count)
     except Exception as e:
-        logger.error("""
+        logger.error(
+            """
             Cannot load data from S3 into Snowflake schema: {} .
             Try to delete {}.COLUMNS table to reset information_schema cache. Maybe it's outdated.
-        """.format(db_sync.schema_name, db_sync.pipelinewise_schema.upper()))
+        """.format(
+                db_sync.schema_name, db_sync.pipelinewise_schema.upper()
+            )
+        )
         raise e
 
     os.remove(csv_file)
@@ -298,7 +325,7 @@ def flush_records(stream, records_to_load, row_count, db_sync):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config', help='Config file')
+    parser.add_argument("-c", "--config", help="Config file")
     args = parser.parse_args()
 
     if args.config:
@@ -311,11 +338,11 @@ def main():
     information_schema_cache = load_information_schema_cache(config)
 
     # Consume singer messages
-    singer_messages = io.TextIOWrapper(sys.stdin.buffer, encoding='utf-8')
+    singer_messages = io.TextIOWrapper(sys.stdin.buffer, encoding="utf-8")
     persist_lines(config, singer_messages, information_schema_cache)
 
     logger.debug("Exiting normally")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
