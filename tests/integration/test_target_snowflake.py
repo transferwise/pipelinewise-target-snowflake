@@ -854,3 +854,4 @@ class TestIntegration(unittest.TestCase):
 
         self.config['validate_records'] = True
         self.persist_lines_with_cache(tap_lines_valid_records)
+
