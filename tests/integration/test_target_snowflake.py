@@ -835,3 +835,22 @@ class TestIntegration(unittest.TestCase):
         self.config['validate_records'] = False
         with assert_raises(InvalidTableStructureException):
             self.persist_lines_with_cache(tap_lines)
+
+    def test_pg_records_validation(self):
+        """Test validating records from postgres tap"""
+        tap_lines_invalid_records = test_utils.get_test_tap_lines('messages-pg-with-invalid-records.json')
+
+        # Loading invalid records when record validation enabled should fail at ...
+        self.config['validate_records'] = True
+        with assert_raises(RecordValidationException):
+            self.persist_lines_with_cache(tap_lines_invalid_records)
+
+        # Loading invalid records when record validation disabled, should pass without any exceptions
+        self.config['validate_records'] = False
+        self.persist_lines_with_cache(tap_lines_invalid_records)
+
+        # Valid records should pass for both with and without validation
+        tap_lines_valid_records = test_utils.get_test_tap_lines('messages-pg-with-valid-records.json')
+
+        self.config['validate_records'] = True
+        self.persist_lines_with_cache(tap_lines_valid_records)
