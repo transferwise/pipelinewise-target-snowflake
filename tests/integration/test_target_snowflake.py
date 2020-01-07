@@ -247,6 +247,25 @@ class TestIntegration(unittest.TestCase):
         self.assertEqual(table_three, [])
         self.assertEqual(table_four, [])
 
+    def assert_binary_data_are_in_snowflake(self, should_metadata_columns_exist=False):
+        # Get loaded rows from tables
+        snowflake = DbSync(self.config)
+        target_schema = self.config.get('default_target_schema', '')
+        table_one = snowflake.query("SELECT * FROM {}.test_binary ORDER BY ID".format(target_schema))
+
+        # ----------------------------------------------------------------------
+        # Check rows in table_one
+        # ----------------------------------------------------------------------
+        expected_table_one = [
+            {'ID': b'pk2', 'DATA': b'data2', 'CREATED_AT': datetime.datetime(2019, 12, 17, 16, 2, 55)},
+            {'ID': b'pk4', 'DATA': b'data4', "CREATED_AT": datetime.datetime(2019, 12, 17, 16, 32, 22)},
+        ]
+
+        if should_metadata_columns_exist:
+            self.assertEqual(self.remove_metadata_columns_from_rows(table_one), expected_table_one)
+        else:
+            self.assertEqual(table_one, expected_table_one)
+
     #################################
     #           TESTS               #
     #################################
@@ -339,6 +358,19 @@ class TestIntegration(unittest.TestCase):
         self.assert_three_streams_are_into_snowflake(
             should_metadata_columns_exist=False,
             should_hard_deleted_rows=False
+        )
+
+    def test_loading_tables_with_binary_columns_and_hard_delete(self):
+        """Loading multiple tables from the same input tap with deleted rows"""
+        tap_lines = test_utils.get_test_tap_lines('messages-with-binary-columns.json')
+
+        # Turning on hard delete mode
+        self.config['hard_delete'] = True
+        self.persist_lines_with_cache(tap_lines)
+
+        # Check if data loaded correctly and metadata columns exist
+        self.assert_binary_data_are_in_snowflake(
+            should_metadata_columns_exist=True
         )
 
     def test_loading_unicode_characters(self):

@@ -65,6 +65,8 @@ def column_type(schema_property):
         column_type = 'timestamp_ntz'
     elif property_format == 'time':
         column_type = 'time'
+    elif property_format == 'binary':
+        column_type = 'binary'
     elif 'number' in property_type:
         column_type = 'float'
     elif 'integer' in property_type and 'string' in property_type:
@@ -82,6 +84,8 @@ def column_trans(schema_property):
     column_trans = ''
     if 'object' in property_type or 'array' in property_type:
         column_trans = 'parse_json'
+    elif schema_property.get('format') == 'binary':
+        column_trans = 'to_binary'
 
     return column_trans
 
