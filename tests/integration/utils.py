@@ -39,6 +39,7 @@ def get_db_config():
     config['add_metadata_columns'] = None
     config['hard_delete'] = None
     config['flush_all_streams'] = None
+    config['validate_records'] = None
 
     return config
 
