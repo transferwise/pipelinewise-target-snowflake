@@ -415,14 +415,12 @@ def flush_records(stream, records_to_load, row_count, db_sync):
     s3_key = db_sync.put_to_stage(csv_file, stream, row_count)
     try:
         db_sync.load_csv(s3_key, row_count)
-    except Exception:
-        raise InvalidTableStructureException("""
+    except Exception as e:
+        logger.error("""
             Cannot load data from S3 into Snowflake schema: {} .
-            Try to delete {}.COLUMNS table to reset information_schema cache. Maybe it's outdated or the data types in
-            the singer RECORD messages are not in sync with the corresponding SCHEMA message.
-        """.format(
-            db_sync.schema_name,
-            db_sync.pipelinewise_schema.upper()))
+            Try to delete {}.COLUMNS table to reset information_schema cache. Maybe it's outdated.
+        """.format(db_sync.schema_name, db_sync.pipelinewise_schema.upper()))
+        raise e
 
     os.remove(csv_file)
     db_sync.delete_from_stage(s3_key)

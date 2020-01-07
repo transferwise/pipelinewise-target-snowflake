@@ -833,7 +833,7 @@ class TestIntegration(unittest.TestCase):
 
         # Loading invalid records when record validation disabled should fail at load time
         self.config['validate_records'] = False
-        with assert_raises(InvalidTableStructureException):
+        with assert_raises(ProgrammingError):
             self.persist_lines_with_cache(tap_lines)
 
     def test_pg_records_validation(self):
