@@ -11,6 +11,22 @@ class TestDBSync(unittest.TestCase):
     def setUp(self):
         self.config = {}
 
+        self.json_types = {
+            'str': {"type": ["string"]},
+            'str_or_null': {"type": ["string", "null"]},
+            'dt': {"type": ["string"], "format": "date-time"},
+            'dt_or_null': {"type": ["string", "null"], "format": "date-time"},
+            'time': {"type": ["string"], "format": "time"},
+            'time_or_null': {"type": ["string", "null"], "format": "time"},
+            'binary': {"type": ["string", "null"], "format": "binary"},
+            'num': {"type": ["number"]},
+            'int': {"type": ["integer"]},
+            'int_or_str': {"type": ["integer", "string"]},
+            'bool': {"type": ["boolean"]},
+            'obj': {"type": ["object"]},
+            'arr': {"type": ["array"]},
+        }
+
     def test_config_validation(self):
         """Test configuration validator"""
         validator = db_sync.validate_config
@@ -57,69 +73,51 @@ class TestDBSync(unittest.TestCase):
         """Test JSON type to Snowflake column type mappings"""
         mapper = db_sync.column_type
 
-        # Incoming JSON schema types
-        json_str = {"type": ["string"]}
-        json_str_or_null = {"type": ["string", "null"]}
-        json_dt = {"type": ["string"], "format": "date-time"}
-        json_dt_or_null = {"type": ["string", "null"], "format": "date-time"}
-        json_t = {"type": ["string"], "format": "time"}
-        json_t_or_null = {"type": ["string", "null"], "format": "time"}
-        json_binary = {"type": ["string", "null"], "format": "binary"}
-        json_num = {"type": ["number"]}
-        json_int = {"type": ["integer"]}
-        json_int_or_str = {"type": ["integer", "string"]}
-        json_bool = {"type": ["boolean"]}
-        json_obj = {"type": ["object"]}
-        json_arr = {"type": ["array"]}
+        # Snowflake column types
+        sf_types = {
+            'str': 'text',
+            'str_or_null': 'text',
+            'dt': 'timestamp_ntz',
+            'dt_or_null': 'timestamp_ntz',
+            'time': 'time',
+            'time_or_null': 'time',
+            'binary': 'binary',
+            'num': 'float',
+            'int': 'number',
+            'int_or_str': 'text',
+            'bool': 'boolean',
+            'obj': 'variant',
+            'arr': 'variant',
+        }
 
-        # Mapping from JSON schema types ot Snowflake column types
-        self.assertEqual(mapper(json_str), 'text')
-        self.assertEqual(mapper(json_str_or_null), 'text')
-        self.assertEqual(mapper(json_dt), 'timestamp_ntz')
-        self.assertEqual(mapper(json_dt_or_null), 'timestamp_ntz')
-        self.assertEqual(mapper(json_t), 'time')
-        self.assertEqual(mapper(json_t_or_null), 'time')
-        self.assertEqual(mapper(json_num), 'float')
-        self.assertEqual(mapper(json_int), 'number')
-        self.assertEqual(mapper(json_int_or_str), 'text')
-        self.assertEqual(mapper(json_bool), 'boolean')
-        self.assertEqual(mapper(json_obj), 'variant')
-        self.assertEqual(mapper(json_arr), 'variant')
-        self.assertEqual(mapper(json_binary), 'binary')
+        # Mapping from JSON schema types to Snowflake column types
+        for key, val in self.json_types.items():
+            self.assertEqual(mapper(val), sf_types[key])
 
     def test_column_trans(self):
         """Test column transformation"""
         trans = db_sync.column_trans
 
-        # Incoming JSON schema types
-        json_str = {"type": ["string"]}
-        json_str_or_null = {"type": ["string", "null"]}
-        json_dt = {"type": ["string"], "format": "date-time"}
-        json_dt_or_null = {"type": ["string", "null"], "format": "date-time"}
-        json_t = {"type": ["string"], "format": "time"}
-        json_t_or_null = {"type": ["string", "null"], "format": "time"}
-        json_binary = {"type": ["string", "null"], "format": "binary"}
-        json_num = {"type": ["number"]}
-        json_int = {"type": ["integer"]}
-        json_int_or_str = {"type": ["integer", "string"]}
-        json_bool = {"type": ["boolean"]}
-        json_obj = {"type": ["object"]}
-        json_arr = {"type": ["array"]}
+        # Snowflake column transformations
+        sf_trans = {
+            'str': '',
+            'str_or_null': '',
+            'dt': '',
+            'dt_or_null': '',
+            'time': '',
+            'time_or_null': '',
+            'binary': 'to_binary',
+            'num': '',
+            'int': '',
+            'int_or_str': '',
+            'bool': '',
+            'obj': 'parse_json',
+            'arr': 'parse_json',
+        }
 
         # Getting transformations for every JSON type
-        self.assertEqual(trans(json_str), '')
-        self.assertEqual(trans(json_str_or_null), '')
-        self.assertEqual(trans(json_dt), '')
-        self.assertEqual(trans(json_dt_or_null), '')
-        self.assertEqual(trans(json_t), '')
-        self.assertEqual(trans(json_t_or_null), '')
-        self.assertEqual(trans(json_num), '')
-        self.assertEqual(trans(json_int), '')
-        self.assertEqual(trans(json_int_or_str), '')
-        self.assertEqual(trans(json_bool), '')
-        self.assertEqual(trans(json_obj), 'parse_json')
-        self.assertEqual(trans(json_arr), 'parse_json')
-        self.assertEqual(trans(json_binary), 'to_binary')
+        for key, val in self.json_types.items():
+            self.assertEqual(trans(val), sf_trans[key])
 
     def test_stream_name_to_dict(self):
         """Test identifying catalog, schema and table names from fully qualified stream and table names"""
