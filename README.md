@@ -65,6 +65,7 @@ encryption=(MASTER_KEY='{client_side_encryption_master_key}');
 
 The `encryption` option is optional and used for client side encryption. If you want client side encryption enabled you'll need
 to define the same master key in the target `config.json`. Furhter details below in the Configuration settings section.
+Instead of `credentials` you can also use `storage_integration`.
 
 2. A named file format. This will be used by the MERGE/COPY commands to parse the CSV files correctly from S3:
 
@@ -83,8 +84,6 @@ Running the the target connector requires a `config.json` file. Example with the
      "user": "my_user",
      "password": "password",
      "warehouse": "my_virtual_warehouse",
-     "aws_access_key_id": "secret",
-     "aws_secret_access_key": "secret",
      "s3_bucket": "bucket_name",
      "stage": "snowflake_external_stage_object_name",
      "file_format": "snowflake_file_format_object_name",
@@ -101,8 +100,8 @@ Full list of options in `config.json`:
 | user                                | String  | Yes        | Snowflake User                                                |
 | password                            | String  | Yes        | Snowflake Password                                            |
 | warehouse                           | String  | Yes        | Snowflake virtual warehouse name                              |
-| aws_access_key_id                   | String  | Yes        | S3 Access Key Id                                              |
-| aws_secret_access_key               | String  | Yes        | S3 Secret Access Key                                          |
+| aws_access_key_id                   | String  | No         | S3 Access Key Id                                              |
+| aws_secret_access_key               | String  | No         | S3 Secret Access Key                                          |
 | s3_bucket                           | String  | Yes        | S3 Bucket name                                                |
 | s3_key_prefix                       | String  |            | (Default: None) A static prefix before the generated S3 key names. Using prefixes you can upload files into specific directories in the S3 bucket. |
 | stage                               | String  | Yes        | Named external stage name created at pre-requirements section. Has to be a fully qualified name including the schema name |
