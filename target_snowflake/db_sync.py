@@ -148,7 +148,7 @@ def _should_json_dump_value(key, value, flatten_schema=None):
     if type(value) is list or type(value) is dict:
         return True
 
-    if flatten_schema and key in flatten_schema and set(flatten_schema[key]['type']) == {'null', 'object', 'array'}:
+    if flatten_schema and key in flatten_schema and 'type' in flatten_schema[key] and set(flatten_schema[key]['type']) == {'null', 'object', 'array'}:
         return True
 
     return False
