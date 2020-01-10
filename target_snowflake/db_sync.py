@@ -152,7 +152,7 @@ def flatten_record(d, parent_key=[], sep='__', level=0, max_level=0):
         if isinstance(v, collections.MutableMapping) and level < max_level:
             items.extend(flatten_record(v, parent_key + [k], sep=sep, level=level+1, max_level=max_level).items())
         else:
-            items.append((new_key, json.dumps(v) if type(v) is list or type(v) is dict else v))
+            items.append((new_key, v))
     return dict(items)
 
 
@@ -340,8 +340,17 @@ class DbSync:
             raise exc
         return ','.join(key_props)
 
+    def _should_json_dump_value(self, key, value):
+        if type(value) is list or type(value) is dict or set(self.flatten_schema[key]['type']) == {'null', 'object', 'array'}:
+            return True
+
+        return False
+
     def record_to_csv_line(self, record):
         flatten = flatten_record(record, max_level=self.data_flattening_max_level)
+
+        # Json dump values if necessary
+        flatten = {k: json.dumps(v) if self._should_json_dump_value(k, v) else v for k, v in flatten.items()}
         return ','.join(
             [
                 json.dumps(flatten[name], ensure_ascii=False) if name in flatten and (flatten[name] == 0 or flatten[name]) else ''
