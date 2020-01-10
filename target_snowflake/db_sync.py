@@ -144,14 +144,17 @@ def flatten_schema(d, parent_key=[], sep='__', level=0, max_level=0):
 
     return dict(sorted_items)
 
-def _should_json_dump_value(key, value, flatten_schema):
-    if type(value) is list or type(value) is dict or set(flatten_schema[key]['type']) == {'null', 'object', 'array'}:
+def _should_json_dump_value(key, value, flatten_schema=None):
+    if type(value) is list or type(value) is dict:
+        return True
+
+    if flatten_schema and key in flatten_schema and set(flatten_schema[key]['type']) == {'null', 'object', 'array'}:
         return True
 
     return False
 
 #pylint: disable-msg=too-many-arguments
-def flatten_record(d, flatten_schema, parent_key=[], sep='__', level=0, max_level=0):
+def flatten_record(d, flatten_schema=None, parent_key=[], sep='__', level=0, max_level=0):
     items = []
     for k, v in d.items():
         new_key = flatten_key(k, parent_key, sep)
