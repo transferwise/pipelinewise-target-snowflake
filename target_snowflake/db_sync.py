@@ -150,6 +150,7 @@ def _should_json_dump_value(key, value, flatten_schema):
 
     return False
 
+#pylint: disable-msg=too-many-arguments
 def flatten_record(d, flatten_schema, parent_key=[], sep='__', level=0, max_level=0):
     items = []
     for k, v in d.items():
