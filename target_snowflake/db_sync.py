@@ -702,4 +702,3 @@ class DbSync:
         else:
             logger.info("Table '{}' exists".format(table_name_with_schema))
             self.update_columns()
-
