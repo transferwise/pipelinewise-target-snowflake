@@ -144,15 +144,25 @@ def flatten_schema(d, parent_key=[], sep='__', level=0, max_level=0):
 
     return dict(sorted_items)
 
+def _should_json_dump_value(key, value, flatten_schema=None):
+    if isinstance(value, (dict, list)):
+        return True
 
-def flatten_record(d, parent_key=[], sep='__', level=0, max_level=0):
+    if flatten_schema and key in flatten_schema and 'type' in flatten_schema[key] and set(flatten_schema[key]['type']) == {'null', 'object', 'array'}:
+        return True
+
+    return False
+
+#pylint: disable-msg=too-many-arguments
+def flatten_record(d, flatten_schema=None, parent_key=[], sep='__', level=0, max_level=0):
     items = []
     for k, v in d.items():
         new_key = flatten_key(k, parent_key, sep)
         if isinstance(v, collections.MutableMapping) and level < max_level:
-            items.extend(flatten_record(v, parent_key + [k], sep=sep, level=level+1, max_level=max_level).items())
+            items.extend(flatten_record(v, flatten_schema, parent_key + [k], sep=sep, level=level+1, max_level=max_level).items())
         else:
-            items.append((new_key, json.dumps(v) if type(v) is list or type(v) is dict else v))
+            items.append((new_key, json.dumps(v) if _should_json_dump_value(k, v, flatten_schema) else v))
+
     return dict(items)
 
 
@@ -332,7 +342,7 @@ class DbSync:
     def record_primary_key_string(self, record):
         if len(self.stream_schema_message['key_properties']) == 0:
             return None
-        flatten = flatten_record(record, max_level=self.data_flattening_max_level)
+        flatten = flatten_record(record, self.flatten_schema, max_level=self.data_flattening_max_level)
         try:
             key_props = [str(flatten[p]) for p in self.stream_schema_message['key_properties']]
         except Exception as exc:
@@ -341,7 +351,8 @@ class DbSync:
         return ','.join(key_props)
 
     def record_to_csv_line(self, record):
-        flatten = flatten_record(record, max_level=self.data_flattening_max_level)
+        flatten = flatten_record(record, self.flatten_schema, max_level=self.data_flattening_max_level)
+
         return ','.join(
             [
                 json.dumps(flatten[name], ensure_ascii=False) if name in flatten and (flatten[name] == 0 or flatten[name]) else ''
@@ -691,4 +702,3 @@ class DbSync:
         else:
             logger.info("Table '{}' exists".format(table_name_with_schema))
             self.update_columns()
-
