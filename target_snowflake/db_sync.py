@@ -145,7 +145,7 @@ def flatten_schema(d, parent_key=[], sep='__', level=0, max_level=0):
     return dict(sorted_items)
 
 def _should_json_dump_value(key, value, flatten_schema=None):
-    if isinstance(value, list) or isinstance(value, dict):
+    if isinstance(value, (dict, list)):
         return True
 
     if flatten_schema and key in flatten_schema and 'type' in flatten_schema[key] and set(flatten_schema[key]['type']) == {'null', 'object', 'array'}:
