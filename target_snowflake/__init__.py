@@ -367,7 +367,8 @@ def flush_streams(
             records_to_load=streams[stream],
             row_count=row_count,
             db_sync=stream_to_sync[stream],
-            delete_rows=config.get('hard_delete')
+            delete_rows=config.get('hard_delete'),
+            temp_dir=config.get('temp_dir')
         ) for stream in streams_to_flush)
 
     # reset flushed stream records to empty to avoid flushing same records
@@ -392,10 +393,10 @@ def flush_streams(
     return flushed_state
 
 
-def load_stream_batch(stream, records_to_load, row_count, db_sync, delete_rows=False):
+def load_stream_batch(stream, records_to_load, row_count, db_sync, delete_rows=False, temp_dir=None):
     # Load into snowflake
     if row_count[stream] > 0:
-        flush_records(stream, records_to_load, row_count[stream], db_sync)
+        flush_records(stream, records_to_load, row_count[stream], db_sync, temp_dir)
 
         # Delete soft-deleted, flagged rows - where _sdc_deleted at is not null
         if delete_rows:
@@ -405,8 +406,11 @@ def load_stream_batch(stream, records_to_load, row_count, db_sync, delete_rows=F
         row_count[stream] = 0
 
 
-def flush_records(stream, records_to_load, row_count, db_sync):
-    csv_fd, csv_file = mkstemp()
+def flush_records(stream, records_to_load, row_count, db_sync, temp_dir=None):
+    if temp_dir:
+        os.makedirs(temp_dir, exist_ok=True)
+    csv_fd, csv_file = mkstemp(suffix='.csv', prefix='records_', dir=temp_dir)
+
     with open(csv_fd, 'w+b') as f:
         for record in records_to_load.values():
             csv_line = db_sync.record_to_csv_line(record)
