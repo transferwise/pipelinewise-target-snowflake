@@ -820,3 +820,22 @@ class TestIntegration(unittest.TestCase):
 
         # Every table should be loaded correctly
         self.assert_logical_streams_are_in_snowflake(True)
+
+    def test_using_aws_environment_variables(self):
+        """Test loading data with aws in the environment rather than explicitly provided access keys"""
+        tap_lines = test_utils.get_test_tap_lines("messages-with-three-streams.json")
+
+        try:
+            os.environ["AWS_ACCESS_KEY_ID"] = os.environ.get(
+                "TARGET_SNOWFLAKE_AWS_ACCESS_KEY"
+            )
+            os.environ["AWS_SECRET_ACCESS_KEY"] = os.environ.get(
+                "TARGET_SNOWFLAKE_AWS_SECRET_ACCESS_KEY"
+            )
+            self.config["aws_access_key_id"] = None
+            self.config["aws_secret_access_key"] = None
+
+            target_snowflake.persist_lines(self.config, tap_lines)
+        finally:
+            del os.environ["AWS_ACCESS_KEY_ID"]
+            del os.environ["AWS_SECRET_ACCESS_KEY"]
