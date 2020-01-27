@@ -271,14 +271,12 @@ class DbSync:
             self.data_flattening_max_level = self.connection_config.get('data_flattening_max_level', 0)
             self.flatten_schema = flatten_schema(stream_schema_message['schema'], max_level=self.data_flattening_max_level)
 
-        if 'aws_access_key_id' in self.connection_config:
-            self.s3 = boto3.client(
-                's3',
-                aws_access_key_id=self.connection_config['aws_access_key_id'],
-                aws_secret_access_key=self.connection_config['aws_secret_access_key']
-            )
-        else:
-            self.s3 = boto3.client('s3')
+        self.s3 = boto3.client(
+            's3',
+            aws_access_key_id=self.connection_config.get('aws_access_key_id'),
+            aws_secret_access_key=self.connection_config.get('aws_secret_access_key'),
+            aws_session_token=self.connection_config.get('aws_session_token')
+        )
 
     def open_connection(self):
         return snowflake.connector.connect(

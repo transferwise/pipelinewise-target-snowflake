@@ -100,8 +100,9 @@ Full list of options in `config.json`:
 | user                                | String  | Yes        | Snowflake User                                                |
 | password                            | String  | Yes        | Snowflake Password                                            |
 | warehouse                           | String  | Yes        | Snowflake virtual warehouse name                              |
-| aws_access_key_id                   | String  | No         | S3 Access Key Id                                              |
-| aws_secret_access_key               | String  | No         | S3 Secret Access Key                                          |
+| aws_access_key_id                   | String  | No         | S3 Access Key Id. If not provided, AWS_ACCESS_KEY_ID environment variable or IAM role will be used |
+| aws_secret_access_key               | String  | No         | S3 Secret Access Key. If not provided, AWS_SECRET_ACCESS_KEY environment variable or IAM role will be used |
+| aws_session_token                   | String  | No         | AWS Session token. If not provided, AWS_SESSION_TOKEN environment variable will be used |
 | s3_bucket                           | String  | Yes        | S3 Bucket name                                                |
 | s3_key_prefix                       | String  |            | (Default: None) A static prefix before the generated S3 key names. Using prefixes you can upload files into specific directories in the S3 bucket. |
 | stage                               | String  | Yes        | Named external stage name created at pre-requirements section. Has to be a fully qualified name including the schema name |
