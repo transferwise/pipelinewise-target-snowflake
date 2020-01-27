@@ -11,6 +11,22 @@ class TestDBSync(unittest.TestCase):
     def setUp(self):
         self.config = {}
 
+        self.json_types = {
+            'str': {"type": ["string"]},
+            'str_or_null': {"type": ["string", "null"]},
+            'dt': {"type": ["string"], "format": "date-time"},
+            'dt_or_null': {"type": ["string", "null"], "format": "date-time"},
+            'time': {"type": ["string"], "format": "time"},
+            'time_or_null': {"type": ["string", "null"], "format": "time"},
+            'binary': {"type": ["string", "null"], "format": "binary"},
+            'num': {"type": ["number"]},
+            'int': {"type": ["integer"]},
+            'int_or_str': {"type": ["integer", "string"]},
+            'bool': {"type": ["boolean"]},
+            'obj': {"type": ["object"]},
+            'arr': {"type": ["array"]},
+        }
+
     def test_config_validation(self):
         """Test configuration validator"""
         validator = db_sync.validate_config
@@ -57,63 +73,81 @@ class TestDBSync(unittest.TestCase):
         """Test JSON type to Snowflake column type mappings"""
         mapper = db_sync.column_type
 
-        # Incoming JSON schema types
-        json_str = {"type": ["string"]}
-        json_str_or_null = {"type": ["string", "null"]}
-        json_dt = {"type": ["string"], "format": "date-time"}
-        json_dt_or_null = {"type": ["string", "null"], "format": "date-time"}
-        json_t = {"type": ["string"], "format": "time"}
-        json_t_or_null = {"type": ["string", "null"], "format": "time"}
-        json_num = {"type": ["number"]}
-        json_int = {"type": ["integer"]}
-        json_int_or_str = {"type": ["integer", "string"]}
-        json_bool = {"type": ["boolean"]}
-        json_obj = {"type": ["object"]}
-        json_arr = {"type": ["array"]}
+        # Snowflake column types
+        sf_types = {
+            'str': 'text',
+            'str_or_null': 'text',
+            'dt': 'timestamp_ntz',
+            'dt_or_null': 'timestamp_ntz',
+            'time': 'time',
+            'time_or_null': 'time',
+            'binary': 'binary',
+            'num': 'float',
+            'int': 'number',
+            'int_or_str': 'text',
+            'bool': 'boolean',
+            'obj': 'variant',
+            'arr': 'variant',
+        }
 
-        # Mapping from JSON schema types ot Snowflake column types
-        self.assertEquals(mapper(json_str), 'text')
-        self.assertEquals(mapper(json_str_or_null), 'text')
-        self.assertEquals(mapper(json_dt), 'timestamp_ntz')
-        self.assertEquals(mapper(json_dt_or_null), 'timestamp_ntz')
-        self.assertEquals(mapper(json_t), 'time')
-        self.assertEquals(mapper(json_t_or_null), 'time')
-        self.assertEquals(mapper(json_num), 'float')
-        self.assertEquals(mapper(json_int), 'number')
-        self.assertEquals(mapper(json_int_or_str), 'text')
-        self.assertEquals(mapper(json_bool), 'boolean')
-        self.assertEquals(mapper(json_obj), 'variant')
-        self.assertEquals(mapper(json_arr), 'variant')
+        # Mapping from JSON schema types to Snowflake column types
+        for key, val in self.json_types.items():
+            self.assertEqual(mapper(val), sf_types[key])
+
+    def test_column_trans(self):
+        """Test column transformation"""
+        trans = db_sync.column_trans
+
+        # Snowflake column transformations
+        sf_trans = {
+            'str': '',
+            'str_or_null': '',
+            'dt': '',
+            'dt_or_null': '',
+            'time': '',
+            'time_or_null': '',
+            'binary': 'to_binary',
+            'num': '',
+            'int': '',
+            'int_or_str': '',
+            'bool': '',
+            'obj': 'parse_json',
+            'arr': 'parse_json',
+        }
+
+        # Getting transformations for every JSON type
+        for key, val in self.json_types.items():
+            self.assertEqual(trans(val), sf_trans[key])
 
     def test_stream_name_to_dict(self):
         """Test identifying catalog, schema and table names from fully qualified stream and table names"""
         # Singer stream name format (Default '-' separator)
-        self.assertEquals(
+        self.assertEqual(
             db_sync.stream_name_to_dict('my_table'),
             {"catalog_name": None, "schema_name": None, "table_name": "my_table"})
 
         # Singer stream name format (Default '-' separator)
-        self.assertEquals(
+        self.assertEqual(
             db_sync.stream_name_to_dict('my_schema-my_table'),
             {"catalog_name": None, "schema_name": "my_schema", "table_name": "my_table"})
 
         # Singer stream name format (Default '-' separator)
-        self.assertEquals(
+        self.assertEqual(
             db_sync.stream_name_to_dict('my_catalog-my_schema-my_table'),
             {"catalog_name": "my_catalog", "schema_name": "my_schema", "table_name": "my_table"})
 
         # Snowflake table format (Custom '.' separator)
-        self.assertEquals(
+        self.assertEqual(
             db_sync.stream_name_to_dict('my_table', separator='.'),
             {"catalog_name": None, "schema_name": None, "table_name": "my_table"})
 
         # Snowflake table format (Custom '.' separator)
-        self.assertEquals(
+        self.assertEqual(
             db_sync.stream_name_to_dict('my_schema.my_table', separator='.'),
             {"catalog_name": None, "schema_name": "my_schema", "table_name": "my_table"})
 
         # Snowflake table format (Custom '.' separator)
-        self.assertEquals(
+        self.assertEqual(
             db_sync.stream_name_to_dict('my_catalog.my_schema.my_table', separator='.'),
             {"catalog_name": "my_catalog", "schema_name": "my_schema", "table_name": "my_table"})
 
@@ -123,7 +157,7 @@ class TestDBSync(unittest.TestCase):
 
         # Schema with no object properties should be empty dict
         schema_with_no_properties = {"type": "object"}
-        self.assertEquals(flatten_schema(schema_with_no_properties), {})
+        self.assertEqual(flatten_schema(schema_with_no_properties), {})
 
         not_nested_schema = {
             "type": "object",
@@ -133,7 +167,7 @@ class TestDBSync(unittest.TestCase):
                 "c_int": {"type": ["null", "integer"]}}}
 
         # NO FLATTENING - Schema with simple properties should be a plain dictionary
-        self.assertEquals(flatten_schema(not_nested_schema), not_nested_schema['properties'])
+        self.assertEqual(flatten_schema(not_nested_schema), not_nested_schema['properties'])
 
         nested_schema_with_no_properties = {
             "type": "object",
@@ -144,7 +178,7 @@ class TestDBSync(unittest.TestCase):
                 "c_obj": {"type": ["null", "object"]}}}
 
         # NO FLATTENING - Schema with object type property but without further properties should be a plain dictionary
-        self.assertEquals(flatten_schema(nested_schema_with_no_properties),
+        self.assertEqual(flatten_schema(nested_schema_with_no_properties),
                           nested_schema_with_no_properties['properties'])
 
         nested_schema_with_properties = {
@@ -172,16 +206,16 @@ class TestDBSync(unittest.TestCase):
 
         # NO FLATTENING - Schema with object type property but without further properties should be a plain dictionary
         # No flattening (default)
-        self.assertEquals(flatten_schema(nested_schema_with_properties), nested_schema_with_properties['properties'])
+        self.assertEqual(flatten_schema(nested_schema_with_properties), nested_schema_with_properties['properties'])
 
         # NO FLATTENING - Schema with object type property but without further properties should be a plain dictionary
         #   max_level: 0 : No flattening (default)
-        self.assertEquals(flatten_schema(nested_schema_with_properties, max_level=0),
+        self.assertEqual(flatten_schema(nested_schema_with_properties, max_level=0),
                           nested_schema_with_properties['properties'])
 
         # FLATTENING - Schema with object type property but without further properties should be a dict with
         # flattened properties
-        self.assertEquals(flatten_schema(nested_schema_with_properties, max_level=1),
+        self.assertEqual(flatten_schema(nested_schema_with_properties, max_level=1),
                           {
                               'c_pk': {'type': ['null', 'integer']},
                               'c_varchar': {'type': ['null', 'string']},
@@ -199,7 +233,7 @@ class TestDBSync(unittest.TestCase):
 
         # FLATTENING - Schema with object type property but without further properties should be a dict with
         # flattened properties
-        self.assertEquals(flatten_schema(nested_schema_with_properties, max_level=10),
+        self.assertEqual(flatten_schema(nested_schema_with_properties, max_level=10),
                           {
                               'c_pk': {'type': ['null', 'integer']},
                               'c_varchar': {'type': ['null', 'string']},
@@ -216,11 +250,11 @@ class TestDBSync(unittest.TestCase):
 
         empty_record = {}
         # Empty record should be empty dict
-        self.assertEquals(flatten_record(empty_record), {})
+        self.assertEqual(flatten_record(empty_record), {})
 
         not_nested_record = {"c_pk": 1, "c_varchar": "1", "c_int": 1}
         # NO FLATTENING - Record with simple properties should be a plain dictionary
-        self.assertEquals(flatten_record(not_nested_record), not_nested_record)
+        self.assertEqual(flatten_record(not_nested_record), not_nested_record)
 
         nested_record = {
             "c_pk": 1,
@@ -235,7 +269,7 @@ class TestDBSync(unittest.TestCase):
                 }}}
 
         # NO FLATTENING - No flattening (default)
-        self.assertEquals(flatten_record(nested_record),
+        self.assertEqual(flatten_record(nested_record),
                           {
                               "c_pk": 1,
                               "c_varchar": "1",
@@ -246,7 +280,7 @@ class TestDBSync(unittest.TestCase):
 
         # NO FLATTENING
         #   max_level: 0 : No flattening (default)
-        self.assertEquals(flatten_record(nested_record, max_level=0),
+        self.assertEqual(flatten_record(nested_record, max_level=0),
                           {
                               "c_pk": 1,
                               "c_varchar": "1",
@@ -257,7 +291,7 @@ class TestDBSync(unittest.TestCase):
 
         # SEMI FLATTENING
         #   max_level: 1 : Semi-flattening (default)
-        self.assertEquals(flatten_record(nested_record, max_level=1),
+        self.assertEqual(flatten_record(nested_record, max_level=1),
                           {
                               "c_pk": 1,
                               "c_varchar": "1",
@@ -269,7 +303,7 @@ class TestDBSync(unittest.TestCase):
                           })
 
         # FLATTENING
-        self.assertEquals(flatten_record(nested_record, max_level=10),
+        self.assertEqual(flatten_record(nested_record, max_level=10),
                           {
                               "c_pk": 1,
                               "c_varchar": "1",
@@ -279,3 +313,45 @@ class TestDBSync(unittest.TestCase):
                               "c_obj__nested_prop3__multi_nested_prop1": "multi_value_1",
                               "c_obj__nested_prop3__multi_nested_prop2": "multi_value_2"
                           })
+
+    def test_flatten_record_with_flatten_schema(self):
+        flatten_record = db_sync.flatten_record
+
+        flatten_schema = {
+            "id": {
+                "type": [
+                    "object",
+                    "array",
+                    "null"
+                ]
+            }
+        }
+
+        test_cases = [
+            (
+                True,
+                {
+                    "id": 1,
+                    "data": "xyz"
+                },
+                {
+                    "id": "1",
+                    "data": "xyz"
+                }
+            ),
+            (
+                False,
+                {
+                    "id": 1,
+                    "data": "xyz"
+                },
+                {
+                    "id": 1,
+                    "data": "xyz"
+                }
+            )
+        ]
+
+        for idx, (should_use_flatten_schema, record, expected_output) in enumerate(test_cases):
+            output = flatten_record(record, flatten_schema if should_use_flatten_schema else None)
+            self.assertEqual(output, expected_output, f"Test {idx} failed. Testcase: {test_cases[idx]}")

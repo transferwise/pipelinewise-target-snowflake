@@ -32,6 +32,21 @@ MAX_TIMESTAMP = '9999-12-31 23:59:59.999999'
 MAX_TIME = '23:59:59.999999'
 
 
+class RecordValidationException(Exception):
+    """Exception to raise when record validation failed"""
+    pass
+
+
+class InvalidValidationOperationException(Exception):
+    """Exception to raise when internal JSON schema validation process failed"""
+    pass
+
+
+class InvalidTableStructureException(Exception):
+    """Exception to raise when target table structure not compatible with singer messages"""
+    pass
+
+
 def float_to_decimal(value):
     """Walk the given data structure and turn all instances of float into double."""
     if isinstance(value, float):
@@ -174,15 +189,16 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
             adjust_timestamps_in_record(o['record'], schemas[stream])
 
             # Validate record
-            try:
-                validators[stream].validate(float_to_decimal(o['record']))
-            except Exception as ex:
-                if type(ex).__name__ == "InvalidOperation":
-                    logger.error(
-                        "Data validation failed and cannot load to destination. RECORD: {}\n'multipleOf' "
-                        "validations that allows long precisions are not supported (i.e. with 15 digits or more). "
-                        "Try removing 'multipleOf' methods from JSON schema.".format(o['record']))
-                    raise ex
+            if config.get('validate_records'):
+                try:
+                    validators[stream].validate(float_to_decimal(o['record']))
+                except Exception as ex:
+                    if type(ex).__name__ == "InvalidOperation":
+                        raise InvalidValidationOperationException(
+                            f"Data validation failed and cannot load to destination. RECORD: {o['record']}\n"
+                            "multipleOf validations that allows long precisions are not supported (i.e. with 15 digits"
+                            "or more) Try removing 'multipleOf' methods from JSON schema.")
+                    raise RecordValidationException(f"Record does not pass schema validation. RECORD: {o['record']}")
 
             primary_key_string = stream_to_sync[stream].record_primary_key_string(o['record'])
             if not primary_key_string:
@@ -266,14 +282,13 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
             try:
                 stream_to_sync[stream].create_schema_if_not_exists()
                 stream_to_sync[stream].sync_table()
-            except Exception as e:
-                logger.error("""
+            except Exception:
+                raise InvalidTableStructureException("""
                     Cannot sync table structure in Snowflake schema: {} .
                     Try to delete {}.COLUMNS table to reset information_schema cache. Maybe it's outdated.
                 """.format(
                     stream_to_sync[stream].schema_name,
                     stream_to_sync[stream].pipelinewise_schema.upper()))
-                raise e
 
             row_count[stream] = 0
             total_row_count[stream] = 0
@@ -352,7 +367,8 @@ def flush_streams(
             records_to_load=streams[stream],
             row_count=row_count,
             db_sync=stream_to_sync[stream],
-            delete_rows=config.get('hard_delete')
+            delete_rows=config.get('hard_delete'),
+            temp_dir=config.get('temp_dir')
         ) for stream in streams_to_flush)
 
     # reset flushed stream records to empty to avoid flushing same records
@@ -377,10 +393,10 @@ def flush_streams(
     return flushed_state
 
 
-def load_stream_batch(stream, records_to_load, row_count, db_sync, delete_rows=False):
+def load_stream_batch(stream, records_to_load, row_count, db_sync, delete_rows=False, temp_dir=None):
     # Load into snowflake
     if row_count[stream] > 0:
-        flush_records(stream, records_to_load, row_count[stream], db_sync)
+        flush_records(stream, records_to_load, row_count[stream], db_sync, temp_dir)
 
         # Delete soft-deleted, flagged rows - where _sdc_deleted at is not null
         if delete_rows:
@@ -390,8 +406,11 @@ def load_stream_batch(stream, records_to_load, row_count, db_sync, delete_rows=F
         row_count[stream] = 0
 
 
-def flush_records(stream, records_to_load, row_count, db_sync):
-    csv_fd, csv_file = mkstemp()
+def flush_records(stream, records_to_load, row_count, db_sync, temp_dir=None):
+    if temp_dir:
+        os.makedirs(temp_dir, exist_ok=True)
+    csv_fd, csv_file = mkstemp(suffix='.csv', prefix='records_', dir=temp_dir)
+
     with open(csv_fd, 'w+b') as f:
         for record in records_to_load.values():
             csv_line = db_sync.record_to_csv_line(record)
