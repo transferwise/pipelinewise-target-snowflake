@@ -503,6 +503,22 @@ class DbSync:
                 cur.execute(copy_sql)
                 # Insert or Update with MERGE command if primary key defined
                 if len(self.stream_schema_message["key_properties"]) > 0:
+                    delete_sql = """delete from {0} t
+                        where ({1}) in (select {1} from {0}_tmp)""".format(
+                        self.table_name(stream, False),
+                        ", ".join(primary_column_names(self.stream_schema_message)),
+                    )
+                    cur.execute(delete_sql)
+                    logger.info("Delete from {} ok".format(self.table_name(stream, False)))
+                    insert_sql = """insert into {0}
+                    ({1})
+                    select {1}
+                    from {0}_tmp""".format(
+                        self.table_name(stream, False),
+                        ", ".join([c["name"] for c in columns_with_trans]),
+                    )
+                    cur.execute(insert_sql)
+                    logger.info("Insert into {} ok".format(self.table_name(stream, False)))
                     merge_sql = """MERGE INTO {0} t
                         USING {0}_tmp s
                         ON {1}
@@ -521,7 +537,7 @@ class DbSync:
                         ", ".join(["s.{}".format(c["name"]) for c in columns_with_trans]),
                     )
                     logger.debug("SNOWFLAKE - {}".format(merge_sql))
-                    cur.execute(merge_sql)
+                    # cur.execute(merge_sql)
                 # Insert only with COPY command if no primary key
                 else:
                     copy_sql = """COPY INTO {0} ({1}) FROM {0}_tmp
