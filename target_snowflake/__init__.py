@@ -157,7 +157,6 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
     key_properties = {}
     validators = {}
     records_to_load = {}
-    csv_files_to_load = {}
     row_count = {}
     stream_to_sync = {}
     total_row_count = {}
@@ -292,7 +291,6 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
 
             row_count[stream] = 0
             total_row_count[stream] = 0
-            csv_files_to_load[stream] = NamedTemporaryFile(mode='w+b')
 
         elif t == 'ACTIVATE_VERSION':
             logger.debug('ACTIVATE_VERSION message')
@@ -416,7 +414,7 @@ def flush_records(stream, records_to_load, row_count, db_sync, temp_dir=None):
             csv_line = db_sync.record_to_csv_line(record)
             f.write(bytes(csv_line + '\n', 'UTF-8'))
 
-    s3_key = db_sync.put_to_stage(csv_file, stream, row_count)
+    s3_key = db_sync.put_to_stage(csv_file, stream, row_count, temp_dir=temp_dir)
     try:
         db_sync.load_csv(s3_key, row_count)
     except Exception as e:

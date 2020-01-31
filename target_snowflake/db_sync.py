@@ -358,7 +358,7 @@ class DbSync:
             ]
         )
 
-    def put_to_stage(self, file, stream, count):
+    def put_to_stage(self, file, stream, count, temp_dir=None):
         logger.info("Uploading {} rows to external snowflake stage on S3".format(count))
 
         # Generating key in S3 bucket 
@@ -379,7 +379,8 @@ class DbSync:
             )
             encryption_metadata, encrypted_file = SnowflakeEncryptionUtil.encrypt_file(
                 encryption_material,
-                file
+                file,
+                tmp_dir=temp_dir
             )
 
             # Upload to s3
