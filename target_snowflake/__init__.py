@@ -414,7 +414,7 @@ def flush_records(stream, records_to_load, row_count, db_sync, temp_dir=None):
             csv_line = db_sync.record_to_csv_line(record)
             f.write(bytes(csv_line + '\n', 'UTF-8'))
 
-    s3_key = db_sync.put_to_stage(csv_file, stream, row_count)
+    s3_key = db_sync.put_to_stage(csv_file, stream, row_count, temp_dir=temp_dir)
     try:
         db_sync.load_csv(s3_key, row_count)
     except Exception as e:
