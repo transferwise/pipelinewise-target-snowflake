@@ -7,7 +7,7 @@ import os
 from nose.tools import assert_raises
 
 import target_snowflake
-from target_snowflake import RecordValidationException, InvalidTableStructureException
+from target_snowflake import RecordValidationException
 from target_snowflake.db_sync import DbSync
 
 from snowflake.connector.errors import ProgrammingError
