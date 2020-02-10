@@ -1,10 +1,8 @@
 import os
 import json
 import sys
-
 import boto3
 import snowflake.connector
-import singer
 import collections
 import inflection
 import re
@@ -12,10 +10,9 @@ import itertools
 import time
 import datetime
 
+from singer import get_logger
 from snowflake.connector.encryption_util import SnowflakeEncryptionUtil
 from snowflake.connector.remote_storage_util import SnowflakeFileEncryptionMaterial
-
-logger = singer.get_logger()
 
 
 def validate_config(config):
@@ -213,12 +210,15 @@ class DbSync:
         self.stream_schema_message = stream_schema_message
         self.information_schema_columns = information_schema_cache
 
+        # logger to be used across the class's methods
+        self.logger = get_logger('target_snowflake')
+
         # Validate connection configuration
         config_errors = validate_config(connection_config)
 
         # Exit if config has errors
         if len(config_errors) > 0:
-            logger.error("Invalid configuration:\n   * {}".format('\n   * '.join(config_errors)))
+            self.logger.error("Invalid configuration:\n   * {}".format('\n   * '.join(config_errors)))
             sys.exit(1)
 
         # Internal pipelinewise schema derived from the stage object in the config
@@ -226,7 +226,8 @@ class DbSync:
         if stage['schema_name']:
             self.pipelinewise_schema = stage['schema_name']
         else:
-            logger.error("The named external stage object in config has to use the <schema>.<stage_name> format.")
+            self.logger.error(
+                "The named external stage object in config has to use the <schema>.<stage_name> format.")
             sys.exit(1)
 
         self.schema_name = None
@@ -316,7 +317,7 @@ class DbSync:
                     queries = [query]
 
                 for q in queries:
-                    logger.debug("SNOWFLAKE - Running query: {}".format(q))
+                    self.logger.debug("SNOWFLAKE - Running query: {}".format(q))
                     cur.execute(q, params)
 
                     if cur.rowcount > 0:
@@ -344,7 +345,8 @@ class DbSync:
         try:
             key_props = [str(flatten[p]) for p in self.stream_schema_message['key_properties']]
         except Exception as exc:
-            logger.info("Cannot find {} primary key(s) in record: {}".format(self.stream_schema_message['key_properties'], flatten))
+            self.logger.info("Cannot find {} primary key(s) in record: {}".format(self.stream_schema_message['key_properties'],
+                                                                     flatten))
             raise exc
         return ','.join(key_props)
 
@@ -359,14 +361,14 @@ class DbSync:
         )
 
     def put_to_stage(self, file, stream, count, temp_dir=None):
-        logger.info("Uploading {} rows to external snowflake stage on S3".format(count))
+        self.logger.info("Uploading {} rows to external snowflake stage on S3".format(count))
 
         # Generating key in S3 bucket 
         bucket = self.connection_config['s3_bucket']
         s3_key_prefix = self.connection_config.get('s3_key_prefix', '')
         s3_key = "{}pipelinewise_{}_{}.csv".format(s3_key_prefix, stream, datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f"))
 
-        logger.info("Target S3 bucket: {}, local file: {}, S3 key: {}".format(bucket, file, s3_key))
+        self.logger.info("Target S3 bucket: {}, local file: {}, S3 key: {}".format(bucket, file, s3_key))
 
         # Encrypt csv if client side encryption enabled
         master_key = self.connection_config.get('client_side_encryption_master_key', '')
@@ -400,12 +402,10 @@ class DbSync:
 
         return s3_key
 
-
     def delete_from_stage(self, s3_key):
-        logger.info("Deleting {} from external snowflake stage on S3".format(s3_key))
+        self.logger.info("Deleting {} from external snowflake stage on S3".format(s3_key))
         bucket = self.connection_config['s3_bucket']
         self.s3.delete_object(Bucket=bucket, Key=s3_key)
-
 
     def cache_information_schema_columns(self, table_schemas=[], create_only=False):
         """Information_schema_columns cache is a copy of snowflake INFORMATION_SCHAME.COLUMNS table to avoid the error of
@@ -440,11 +440,10 @@ class DbSync:
             insert = insert + " WHERE LOWER(table_schema) IN ({})".format(', '.join("'{}'".format(s).lower() for s in table_schemas))
             self.query([delete, insert])
 
-
     def load_csv(self, s3_key, count):
         stream_schema_message = self.stream_schema_message
         stream = stream_schema_message['stream']
-        logger.info("Loading {} rows into '{}'".format(count, self.table_name(stream, False)))
+        self.logger.info("Loading {} rows into '{}'".format(count, self.table_name(stream, False)))
 
         # Get list if columns with types
         columns_with_trans = [
@@ -482,7 +481,7 @@ class DbSync:
                         ', '.join([c['name'] for c in columns_with_trans]),
                         ', '.join(['s.{}'.format(c['name']) for c in columns_with_trans])
                     )
-                    logger.debug("SNOWFLAKE - {}".format(merge_sql))
+                    self.logger.debug("SNOWFLAKE - {}".format(merge_sql))
                     cur.execute(merge_sql)
 
                 # Insert only with COPY command if no primary key
@@ -496,10 +495,10 @@ class DbSync:
                         s3_key,
                         self.connection_config['file_format'],
                     )
-                    logger.debug("SNOWFLAKE - {}".format(copy_sql))
+                    self.logger.debug("SNOWFLAKE - {}".format(copy_sql))
                     cur.execute(copy_sql)
 
-                logger.info("SNOWFLAKE - Merge into {}: {}".format(self.table_name(stream, False), cur.fetchall()))
+                self.logger.info("SNOWFLAKE - Merge into {}: {}".format(self.table_name(stream, False), cur.fetchall()))
 
     def primary_key_merge_condition(self):
         stream_schema_message = self.stream_schema_message
@@ -531,12 +530,13 @@ class DbSync:
 
     def grant_usage_on_schema(self, schema_name, grantee):
         query = "GRANT USAGE ON SCHEMA {} TO ROLE {}".format(schema_name, grantee)
-        logger.info("Granting USAGE privilegue on '{}' schema to '{}'... {}".format(schema_name, grantee, query))
+        self.logger.info("Granting USAGE privilege on '{}' schema to '{}'... {}".format(schema_name, grantee, query))
         self.query(query)
 
     def grant_select_on_all_tables_in_schema(self, schema_name, grantee):
         query = "GRANT SELECT ON ALL TABLES IN SCHEMA {} TO ROLE {}".format(schema_name, grantee)
-        logger.info("Granting SELECT ON ALL TABLES privilegue on '{}' schema to '{}'... {}".format(schema_name, grantee, query))
+        self.logger.info(
+            "Granting SELECT ON ALL TABLES privilege on '{}' schema to '{}'... {}".format(schema_name, grantee, query))
         self.query(query)
 
     @classmethod
@@ -550,8 +550,8 @@ class DbSync:
     def delete_rows(self, stream):
         table = self.table_name(stream, False)
         query = "DELETE FROM {} WHERE _sdc_deleted_at IS NOT NULL".format(table)
-        logger.info("Deleting rows from '{}' table... {}".format(table, query))
-        logger.info("DELETE {}".format(len(self.query(query))))
+        self.logger.info("Deleting rows from '{}' table... {}".format(table, query))
+        self.logger.info("DELETE {}".format(len(self.query(query))))
 
     def create_schema_if_not_exists(self):
         schema_name = self.schema_name
@@ -569,7 +569,7 @@ class DbSync:
 
         if len(schema_rows) == 0:
             query = "CREATE SCHEMA IF NOT EXISTS {}".format(schema_name)
-            logger.info("Schema '{}' does not exist. Creating... {}".format(schema_name, query))
+            self.logger.info("Schema '{}' does not exist. Creating... {}".format(schema_name, query))
             self.query(query)
 
             self.grant_privilege(schema_name, self.grantees, self.grant_usage_on_schema)
@@ -578,7 +578,7 @@ class DbSync:
         return self.query("""SELECT LOWER(table_schema) table_schema, LOWER(table_name) table_name
             FROM information_schema.tables
             WHERE LOWER(table_schema) = {}""".format(
-                "LOWER(table_schema)" if table_schema is None else "'{}'".format(table_schema.lower())
+            "LOWER(table_schema)" if table_schema is None else "'{}'".format(table_schema.lower())
         ))
 
     def get_table_columns(self, table_schemas=[], table_name=None, from_information_schema_cache_table=False):
@@ -642,7 +642,7 @@ class DbSync:
                # Don't alter table if TIMESTAMP_NTZ detected as the new required column type
                #
                # Target-snowflake maps every data-time JSON types to TIMESTAMP_NTZ but sometimes
-               # a TIMESTAMP_TZ column is alrady available in the target table (i.e. created by fastsync initial load)
+               # a TIMESTAMP_TZ column is already available in the target table (i.e. created by fastsync initial load)
                # We need to exclude this conversion otherwise we loose the data that is already populated
                # in the column
                #
@@ -663,17 +663,17 @@ class DbSync:
 
     def drop_column(self, column_name, stream):
         drop_column = "ALTER TABLE {} DROP COLUMN {}".format(self.table_name(stream, False), column_name)
-        logger.info('Dropping column: {}'.format(drop_column))
+        self.logger.info('Dropping column: {}'.format(drop_column))
         self.query(drop_column)
 
     def version_column(self, column_name, stream):
         version_column = "ALTER TABLE {} RENAME COLUMN {} TO \"{}_{}\"".format(self.table_name(stream, False), column_name, column_name.replace("\"",""), time.strftime("%Y%m%d_%H%M"))
-        logger.info('Dropping column: {}'.format(version_column))
+        self.logger.info('Dropping column: {}'.format(version_column))
         self.query(version_column)
 
     def add_column(self, column, stream):
         add_column = "ALTER TABLE {} ADD COLUMN {}".format(self.table_name(stream, False), column)
-        logger.info('Adding column: {}'.format(add_column))
+        self.logger.info('Adding column: {}'.format(add_column))
         self.query(add_column)
 
     def sync_table(self):
@@ -690,7 +690,7 @@ class DbSync:
 
         if len(found_tables) == 0:
             query = self.create_table_query()
-            logger.info("Table '{}' does not exist. Creating...".format(table_name_with_schema))
+            self.logger.info("Table '{}' does not exist. Creating...".format(table_name_with_schema))
             self.query(query)
 
             self.grant_privilege(self.schema_name, self.grantees, self.grant_select_on_all_tables_in_schema)
@@ -699,5 +699,5 @@ class DbSync:
             if self.information_schema_columns:
                 self.cache_information_schema_columns(table_schemas=[self.schema_name])
         else:
-            logger.info("Table '{}' exists".format(table_name_with_schema))
+            self.logger.info("Table '{}' exists".format(table_name_with_schema))
             self.update_columns()

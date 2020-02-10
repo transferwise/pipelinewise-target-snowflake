@@ -1,9 +1,9 @@
-#!/usr/bin/env python
+#!/usr/bin/.env python
 
 from setuptools import setup
 
 with open('README.md') as f:
-      long_description = f.read()
+    long_description = f.read()
 
 setup(name="pipelinewise-target-snowflake",
       version="1.4.1",
@@ -19,7 +19,7 @@ setup(name="pipelinewise-target-snowflake",
       py_modules=["target_snowflake"],
       install_requires=[
           'idna==2.7',
-          'singer-python==5.1.1',
+          'pipelinewise-singer-python==1.*',
           'snowflake-connector-python==2.0.3',
           'boto3==1.10.8',
           'botocore==1.13.8',
@@ -40,6 +40,4 @@ setup(name="pipelinewise-target-snowflake",
           target-snowflake=target_snowflake:main
       """,
       packages=["target_snowflake"],
-      package_data = {},
-      include_package_data=True,
-)
+      )
