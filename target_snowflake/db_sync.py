@@ -503,22 +503,25 @@ class DbSync:
                 cur.execute(copy_sql)
                 # Insert or Update with MERGE command if primary key defined
                 if len(self.stream_schema_message["key_properties"]) > 0:
-                    delete_sql = """delete from {0} t
-                        where ({1}) in (select {1} from {0}_tmp)""".format(
-                        self.table_name(stream, False),
-                        ", ".join(primary_column_names(self.stream_schema_message)),
+                    table_name = self.table_name(stream, False)
+                    queries = list()
+                    queries.append(
+                        """delete from {0}
+                            using {0}_tmp t
+                            where {1}""".format(
+                            table_name,
+                            self.primary_key_merge_condition().replace("s.", f"{table_name}."),
+                        )
                     )
-                    cur.execute(delete_sql)
-                    logger.info("Delete from {} ok".format(self.table_name(stream, False)))
-                    insert_sql = """insert into {0}
+                    queries.append(
+                        """insert into {0}
                     ({1})
                     select {1}
                     from {0}_tmp""".format(
-                        self.table_name(stream, False),
-                        ", ".join([c["name"] for c in columns_with_trans]),
+                            table_name, ", ".join([c["name"] for c in columns_with_trans])
+                        )
                     )
-                    cur.execute(insert_sql)
-                    logger.info("Insert into {} ok".format(self.table_name(stream, False)))
+                    self.query(queries)
                     merge_sql = """MERGE INTO {0} t
                         USING {0}_tmp s
                         ON {1}
@@ -536,7 +539,7 @@ class DbSync:
                         ", ".join([c["name"] for c in columns_with_trans]),
                         ", ".join(["s.{}".format(c["name"]) for c in columns_with_trans]),
                     )
-                    logger.debug("SNOWFLAKE - {}".format(merge_sql))
+                    # logger.debug("SNOWFLAKE - {}".format(merge_sql))
                     # cur.execute(merge_sql)
                 # Insert only with COPY command if no primary key
                 else:
