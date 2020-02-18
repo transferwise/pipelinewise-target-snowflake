@@ -1,7 +1,7 @@
 1.5.0 (2020-02)
 -------------------
 
-- Support custom logging configuration by setting `LOGGING_CONF_FILE` env variable to the absolute path if .conf file
+- Support custom logging configuration by setting `LOGGING_CONF_FILE` env variable to the absolute path of a .conf file
 
 1.4.1 (2020-01-31)
 -------------------
