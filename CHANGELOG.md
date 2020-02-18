@@ -1,3 +1,43 @@
+1.5.0 (2020-02)
+-------------------
+
+- Support custom logging configuration by setting `LOGGING_CONF_FILE` env variable to the absolute path if .conf file
+
+1.4.1 (2020-01-31)
+-------------------
+
+- Change default /tmp folder for encrypting files
+
+1.4.0 (2020-01-28)
+-------------------
+
+- Make AWS key optional and obtain it secondarily from env vars
+
+1.3.0 (2020-01-15)
+-------------------
+
+- Add temp_dir optional parameter to config
+
+1.2.1 (2020-01-13)
+-------------------
+
+- Fixed issue when JSON value not sent correctly
+
+1.2.0 (2020-01-07)
+-------------------
+
+- Load binary data into Snowflake BINARY data type column
+
+1.1.8 (2019-12-09)
+-------------------
+
+- Add missing module `python-dateutil`
+
+1.1.7 (2019-12-09)
+-------------------
+
+- Review dates & timestamps and fix them before insert/update
+
 1.1.6 (2019-11-05)
 -------------------
 
