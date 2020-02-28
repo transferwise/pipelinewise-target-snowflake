@@ -3,10 +3,10 @@
 from setuptools import setup
 
 with open('README.md') as f:
-      long_description = f.read()
+    long_description = f.read()
 
 setup(name="pipelinewise-target-snowflake",
-      version="1.3.0",
+      version="1.5.0",
       description="Singer.io target for loading data to Snowflake - PipelineWise compatible",
       long_description=long_description,
       long_description_content_type='text/markdown',
@@ -19,7 +19,7 @@ setup(name="pipelinewise-target-snowflake",
       py_modules=["target_snowflake"],
       install_requires=[
           'idna==2.7',
-          'singer-python==5.1.1',
+          'pipelinewise-singer-python==1.*',
           'snowflake-connector-python==2.0.3',
           'boto3==1.10.8',
           'botocore==1.13.8',
@@ -40,6 +40,4 @@ setup(name="pipelinewise-target-snowflake",
           target-snowflake=target_snowflake:main
       """,
       packages=["target_snowflake"],
-      package_data = {},
-      include_package_data=True,
-)
+      )

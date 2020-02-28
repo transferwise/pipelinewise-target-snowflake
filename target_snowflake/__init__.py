@@ -3,23 +3,27 @@
 import argparse
 import io
 import json
+import logging
 import os
 import sys
 import copy
-import singer
 
 from datetime import datetime
 from decimal import Decimal
-from tempfile import NamedTemporaryFile, mkstemp
+from tempfile import mkstemp
 from typing import Dict
 from dateutil import parser
 from dateutil.parser import ParserError
 from joblib import Parallel, delayed, parallel_backend
 from jsonschema import Draft4Validator, FormatChecker
+from singer import get_logger
 
 from target_snowflake.db_sync import DbSync
 
-logger = singer.get_logger()
+LOGGER = get_logger('target_snowflake')
+
+# Tone down snowflake.connector log noise by only outputting warnings and higher level messages
+logging.getLogger('snowflake.connector').setLevel(logging.WARNING)
 
 DEFAULT_BATCH_SIZE_ROWS = 100000
 DEFAULT_PARALLELISM = 0  # 0 The number of threads used to flush tables
@@ -89,7 +93,7 @@ def add_metadata_values_to_record(record_message, stream_to_sync):
 def emit_state(state):
     if state is not None:
         line = json.dumps(state)
-        logger.info('Emitting state {}'.format(line))
+        LOGGER.info('Emitting state {}'.format(line))
         sys.stdout.write("{}\n".format(line))
         sys.stdout.flush()
 
@@ -111,8 +115,8 @@ def get_schema_names_from_config(config):
 
 def load_information_schema_cache(config):
     information_schema_cache = []
-    if not ('disable_table_cache' in config and config['disable_table_cache'] == True):
-        logger.info("Getting catalog objects from information_schema cache table...")
+    if not ('disable_table_cache' in config and config['disable_table_cache']):
+        LOGGER.info("Getting catalog objects from information_schema cache table...")
 
         db = DbSync(config)
         information_schema_cache = db.get_table_columns(
@@ -149,6 +153,7 @@ def adjust_timestamps_in_record(record: Dict, schema: Dict) -> None:
                         schema['properties'][key].get('format', None) in {'date-time', 'time', 'date'}:
                     reset_new_value(record, key, schema['properties'][key]['format'])
 
+
 # pylint: disable=too-many-locals,too-many-branches,too-many-statements
 def persist_lines(config, lines, information_schema_cache=None) -> None:
     state = None
@@ -157,7 +162,6 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
     key_properties = {}
     validators = {}
     records_to_load = {}
-    csv_files_to_load = {}
     row_count = {}
     stream_to_sync = {}
     total_row_count = {}
@@ -168,7 +172,7 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
         try:
             o = json.loads(line)
         except json.decoder.JSONDecodeError:
-            logger.error("Unable to parse:\n{}".format(line))
+            LOGGER.error("Unable to parse:\n{}".format(line))
             raise
 
         if 'type' not in o:
@@ -269,7 +273,7 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
             #  or
             #  2) Use fastsync [postgres-to-snowflake, mysql-to-snowflake, etc.]
             if config.get('primary_key_required', True) and len(o['key_properties']) == 0:
-                logger.critical("Primary key is set to mandatory but not defined in the [{}] stream".format(stream))
+                LOGGER.critical("Primary key is set to mandatory but not defined in the [{}] stream".format(stream))
                 raise Exception("key_properties field is required")
 
             key_properties[stream] = o['key_properties']
@@ -292,13 +296,12 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
 
             row_count[stream] = 0
             total_row_count[stream] = 0
-            csv_files_to_load[stream] = NamedTemporaryFile(mode='w+b')
 
         elif t == 'ACTIVATE_VERSION':
-            logger.debug('ACTIVATE_VERSION message')
+            LOGGER.debug('ACTIVATE_VERSION message')
 
         elif t == 'STATE':
-            logger.debug('Setting state to {}'.format(o['value']))
+            LOGGER.debug('Setting state to {}'.format(o['value']))
             state = o['value']
 
             # Initially set flushed state
@@ -416,11 +419,11 @@ def flush_records(stream, records_to_load, row_count, db_sync, temp_dir=None):
             csv_line = db_sync.record_to_csv_line(record)
             f.write(bytes(csv_line + '\n', 'UTF-8'))
 
-    s3_key = db_sync.put_to_stage(csv_file, stream, row_count)
+    s3_key = db_sync.put_to_stage(csv_file, stream, row_count, temp_dir=temp_dir)
     try:
         db_sync.load_csv(s3_key, row_count)
     except Exception as e:
-        logger.error("""
+        LOGGER.error("""
             Cannot load data from S3 into Snowflake schema: {} .
             Try to delete {}.COLUMNS table to reset information_schema cache. Maybe it's outdated.
         """.format(db_sync.schema_name, db_sync.pipelinewise_schema.upper()))
@@ -431,9 +434,9 @@ def flush_records(stream, records_to_load, row_count, db_sync, temp_dir=None):
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config', help='Config file')
-    args = parser.parse_args()
+    arg_parser = argparse.ArgumentParser()
+    arg_parser.add_argument('-c', '--config', help='Config file')
+    args = arg_parser.parse_args()
 
     if args.config:
         with open(args.config) as config_input:
@@ -448,7 +451,7 @@ def main():
     singer_messages = io.TextIOWrapper(sys.stdin.buffer, encoding='utf-8')
     persist_lines(config, singer_messages, information_schema_cache)
 
-    logger.debug("Exiting normally")
+    LOGGER.debug("Exiting normally")
 
 
 if __name__ == '__main__':
