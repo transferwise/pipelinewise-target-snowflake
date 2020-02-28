@@ -337,7 +337,7 @@ class DbSync:
         if without_schema:
             return '{}'.format(sf_table_name)
 
-        return '{}.{}'.format(self.schema_name, sf_table_name)
+        return '{}."{}"'.format(self.schema_name, sf_table_name.upper())
 
     def record_primary_key_string(self, record):
         if len(self.stream_schema_message['key_properties']) == 0:
