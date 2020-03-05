@@ -247,11 +247,11 @@ class TestIntegration(unittest.TestCase):
         self.assertEqual(table_three, [])
         self.assertEqual(table_four, [])
 
-    def assert_binary_data_are_in_snowflake(self, should_metadata_columns_exist=False):
+    def assert_binary_data_are_in_snowflake(self, table_name, should_metadata_columns_exist=False):
         # Get loaded rows from tables
         snowflake = DbSync(self.config)
         target_schema = self.config.get('default_target_schema', '')
-        table_one = snowflake.query("SELECT * FROM {}.test_binary ORDER BY ID".format(target_schema))
+        table_one = snowflake.query("SELECT * FROM {}.{} ORDER BY ID".format(target_schema, table_name))
 
         # ----------------------------------------------------------------------
         # Check rows in table_one
@@ -370,6 +370,21 @@ class TestIntegration(unittest.TestCase):
 
         # Check if data loaded correctly and metadata columns exist
         self.assert_binary_data_are_in_snowflake(
+            table_name='test_binary',
+            should_metadata_columns_exist=True
+        )
+
+    def test_loading_table_with_reserved_word_as_name_and_hard_delete(self):
+        """Loading a table where the name is a reserved word with deleted rows"""
+        tap_lines = test_utils.get_test_tap_lines('messages-with-reserved-name-as-table-name.json')
+
+        # Turning on hard delete mode
+        self.config['hard_delete'] = True
+        self.persist_lines_with_cache(tap_lines)
+
+        # Check if data loaded correctly and metadata columns exist
+        self.assert_binary_data_are_in_snowflake(
+            table_name='"ORDER"',
             should_metadata_columns_exist=True
         )
 
@@ -664,7 +679,7 @@ class TestIntegration(unittest.TestCase):
         """.format(snowflake.pipelinewise_schema, target_schema))
 
         # Loading into an outdated information_schema cache should fail with table not exists
-        with self.assertRaises(Exception):
+        with self.assertRaises(target_snowflake.InvalidTableStructureException):
             self.persist_lines_with_cache(tap_lines_with_multi_streams)
 
         # 2) Simulate an out of data cache:
