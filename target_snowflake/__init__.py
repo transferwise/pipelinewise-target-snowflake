@@ -286,7 +286,8 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
             try:
                 stream_to_sync[stream].create_schema_if_not_exists()
                 stream_to_sync[stream].sync_table()
-            except Exception:
+            except Exception as ex:
+                LOGGER.exception(ex)
                 raise InvalidTableStructureException("""
                     Cannot sync table structure in Snowflake schema: {} .
                     Try to delete {}.COLUMNS table to reset information_schema cache. Maybe it's outdated.

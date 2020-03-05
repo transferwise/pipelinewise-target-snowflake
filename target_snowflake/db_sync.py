@@ -334,9 +334,9 @@ class DbSync:
             sf_table_name =  '{}_temp'.format(sf_table_name)
 
         if without_schema:
-            return '{}'.format(sf_table_name)
+            return f'"{sf_table_name.upper()}"'
 
-        return '{}.{}'.format(self.schema_name, sf_table_name)
+        return f'{self.schema_name}."{sf_table_name.upper()}"'
 
     def record_primary_key_string(self, record):
         if len(self.stream_schema_message['key_properties']) == 0:
@@ -611,11 +611,14 @@ class DbSync:
         stream_schema_message = self.stream_schema_message
         stream = stream_schema_message['stream']
         table_name = self.table_name(stream, False, True)
-        columns = []
+
         if self.information_schema_columns:
-            columns = list(filter(lambda x: x['TABLE_SCHEMA'] == self.schema_name.lower() and x['TABLE_NAME'].lower() == table_name, self.information_schema_columns))
+            columns = list(filter(lambda x: x['TABLE_SCHEMA'] == self.schema_name.lower() and
+                                            f'"{x["TABLE_NAME"].upper()}"' == table_name,
+                                  self.information_schema_columns))
         else:
             columns = self.get_table_columns(table_schemas=[self.schema_name], table_name=table_name)
+
         columns_dict = {column['COLUMN_NAME'].lower(): column for column in columns}
 
         columns_to_add = [
@@ -681,12 +684,14 @@ class DbSync:
         stream = stream_schema_message['stream']
         table_name = self.table_name(stream, False, True)
         table_name_with_schema = self.table_name(stream, False)
-        found_tables = []
 
         if self.information_schema_columns:
-            found_tables = list(filter(lambda x: x['TABLE_SCHEMA'] == self.schema_name.lower() and x['TABLE_NAME'].lower() == table_name, self.information_schema_columns))
+            found_tables = list(filter(lambda x: x['TABLE_SCHEMA'] == self.schema_name.lower() and
+                                                 f'"{x["TABLE_NAME"].upper()}"' == table_name,
+                                       self.information_schema_columns))
         else:
-            found_tables = [table for table in (self.get_tables(self.schema_name.lower())) if table['TABLE_NAME'].lower() == table_name]
+            found_tables = [table for table in (self.get_tables(self.schema_name.lower()))
+                            if f'"{table["TABLE_NAME"].upper()}"' == table_name]
 
         if len(found_tables) == 0:
             query = self.create_table_query()
