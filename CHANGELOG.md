@@ -1,3 +1,8 @@
+1.6.0 (2020-02-06)
+-------------------
+
+- Support usage of reserved words as table names.
+
 1.5.0 (2020-02)
 -------------------
 
