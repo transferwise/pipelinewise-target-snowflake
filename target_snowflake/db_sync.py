@@ -15,6 +15,11 @@ from snowflake.connector.encryption_util import SnowflakeEncryptionUtil
 from snowflake.connector.remote_storage_util import SnowflakeFileEncryptionMaterial
 
 
+class TooManyRecordsException(Exception):
+    """Exception to raise when query returns more records than max_records"""
+    pass
+
+
 def validate_config(config):
     errors = []
     required_config_keys = [
@@ -187,7 +192,7 @@ def stream_name_to_dict(stream_name, separator='-'):
 
 # pylint: disable=too-many-public-methods,too-many-instance-attributes
 class DbSync:
-    def __init__(self, connection_config, stream_schema_message=None, information_schema_cache=None):
+    def __init__(self, connection_config, stream_schema_message=None, table_cache=None):
         """
             connection_config:      Snowflake connection details
 
@@ -208,7 +213,7 @@ class DbSync:
         """
         self.connection_config = connection_config
         self.stream_schema_message = stream_schema_message
-        self.information_schema_columns = information_schema_cache
+        self.table_cache = table_cache
 
         # logger to be used across the class's methods
         self.logger = get_logger('target_snowflake')
@@ -221,11 +226,8 @@ class DbSync:
             self.logger.error("Invalid configuration:\n   * {}".format('\n   * '.join(config_errors)))
             sys.exit(1)
 
-        # Internal pipelinewise schema derived from the stage object in the config
         stage = stream_name_to_dict(self.connection_config['stage'], separator='.')
-        if stage['schema_name']:
-            self.pipelinewise_schema = stage['schema_name']
-        else:
+        if not stage['schema_name']:
             self.logger.error(
                 "The named external stage object in config has to use the <schema>.<stage_name> format.")
             sys.exit(1)
@@ -303,7 +305,7 @@ class DbSync:
             autocommit=True
         )
 
-    def query(self, query, params=None):
+    def query(self, query, params=None, max_records=0):
         result = []
         with self.open_connection() as connection:
             with connection.cursor(snowflake.connector.DictCursor) as cur:
@@ -320,6 +322,11 @@ class DbSync:
                     self.logger.debug("SNOWFLAKE - Running query: {}".format(q))
                     cur.execute(q, params)
 
+                    # Raise exception if returned rows greater than max allowed records
+                    if 0 < max_records < cur.rowcount:
+                        raise TooManyRecordsException(
+                            f"Query returned too many records. This query can return max {max_records} records")
+
                     if cur.rowcount > 0:
                         result = cur.fetchall()
 
@@ -331,7 +338,7 @@ class DbSync:
         sf_table_name = table_name.replace('.', '_').replace('-', '_').lower()
 
         if is_temporary:
-            sf_table_name =  '{}_temp'.format(sf_table_name)
+            sf_table_name = '{}_temp'.format(sf_table_name)
 
         if without_schema:
             return f'"{sf_table_name.upper()}"'
@@ -363,7 +370,7 @@ class DbSync:
     def put_to_stage(self, file, stream, count, temp_dir=None):
         self.logger.info("Uploading {} rows to external snowflake stage on S3".format(count))
 
-        # Generating key in S3 bucket 
+        # Generating key in S3 bucket
         bucket = self.connection_config['s3_bucket']
         s3_key_prefix = self.connection_config.get('s3_key_prefix', '')
         s3_key = "{}pipelinewise_{}_{}.csv".format(s3_key_prefix, stream, datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f"))
@@ -406,39 +413,6 @@ class DbSync:
         self.logger.info("Deleting {} from external snowflake stage on S3".format(s3_key))
         bucket = self.connection_config['s3_bucket']
         self.s3.delete_object(Bucket=bucket, Key=s3_key)
-
-    def cache_information_schema_columns(self, table_schemas=[], create_only=False):
-        """Information_schema_columns cache is a copy of snowflake INFORMATION_SCHAME.COLUMNS table to avoid the error of
-        'Information schema query returned too much data. Please repeat query with more selective predicates.'.
-
-        Snowflake gives the above error message when running multiple taps in parallel (approx. >10 taps) and
-        when these taps selecting from information_schema at the same time. To avoid this problem we maintain a
-        local copy of the INFORMATION_SCHAME.COLUMNS table and it's keep updating automatically whenever it's needed.
-        """
-
-        # Create empty columns cache table if not exists
-        self.query("""
-            CREATE SCHEMA IF NOT EXISTS {}
-        """.format(self.pipelinewise_schema))
-        self.query("""
-            CREATE TABLE IF NOT EXISTS {}.columns (table_schema VARCHAR, table_name VARCHAR, column_name VARCHAR, data_type VARCHAR)
-        """.format(self.pipelinewise_schema))
-
-        if not create_only and table_schemas:
-            # Delete existing data about the current schema
-            delete = """
-                DELETE FROM {}.columns
-            """.format(self.pipelinewise_schema)
-            delete = delete + " WHERE LOWER(table_schema) IN ({})".format(', '.join("'{}'".format(s).lower() for s in table_schemas))
-
-            # Insert the latest data from information_schema into the cache table
-            insert = """
-                INSERT INTO {}.columns
-                SELECT table_schema, table_name, column_name, data_type
-                FROM information_schema.columns
-            """.format(self.pipelinewise_schema)
-            insert = insert + " WHERE LOWER(table_schema) IN ({})".format(', '.join("'{}'".format(s).lower() for s in table_schemas))
-            self.query([delete, insert])
 
     def load_csv(self, s3_key, count):
         stream_schema_message = self.stream_schema_message
@@ -557,15 +531,12 @@ class DbSync:
         schema_name = self.schema_name
         schema_rows = 0
 
-        # information_schema_columns is an optional pre-collected list of available objects in snowflake
-        if self.information_schema_columns:
-            schema_rows = list(filter(lambda x: x['TABLE_SCHEMA'] == schema_name, self.information_schema_columns))
+        # table_cache is an optional pre-collected list of available objects in snowflake
+        if self.table_cache:
+            schema_rows = list(filter(lambda x: x['SCHEMA_NAME'] == schema_name.upper(), self.table_cache))
         # Query realtime if not pre-collected
         else:
-            schema_rows = self.query(
-                'SELECT LOWER(schema_name) schema_name FROM information_schema.schemata WHERE LOWER(schema_name) = %s',
-                (schema_name.lower(),)
-            )
+            schema_rows = self.query(f"SHOW SCHEMAS LIKE '{schema_name.upper()}'")
 
         if len(schema_rows) == 0:
             query = "CREATE SCHEMA IF NOT EXISTS {}".format(schema_name)
@@ -574,52 +545,99 @@ class DbSync:
 
             self.grant_privilege(schema_name, self.grantees, self.grant_usage_on_schema)
 
-    def get_tables(self, table_schema=None):
-        return self.query("""SELECT LOWER(table_schema) table_schema, LOWER(table_name) table_name
-            FROM information_schema.tables
-            WHERE LOWER(table_schema) = {}""".format(
-            "LOWER(table_schema)" if table_schema is None else "'{}'".format(table_schema.lower())
-        ))
+            # Refresh columns cache if required
+            if self.table_cache:
+                self.table_cache = self.get_table_columns(table_schemas=[self.schema_name])
 
-    def get_table_columns(self, table_schemas=[], table_name=None, from_information_schema_cache_table=False):
-        if from_information_schema_cache_table:
-            self.cache_information_schema_columns(create_only=True)
+    def get_tables(self, table_schemas=[]):
+        tables = []
+        if table_schemas:
+            for schema in table_schemas:
+                queries = []
 
-        # Select columns
-        table_columns = []
-        if table_schemas or table_name:
-            sql = """SELECT LOWER(c.table_schema) table_schema, LOWER(c.table_name) table_name, c.column_name, c.data_type
-                FROM {}.columns c
-            """.format("information_schema" if not from_information_schema_cache_table else self.pipelinewise_schema)
-            if table_schemas:
-                sql = sql + " WHERE LOWER(c.table_schema) IN ({})".format(', '.join("'{}'".format(s).lower() for s in table_schemas))
-            elif table_name:
-                sql = sql + " WHERE LOWER(c.table_name) = '{}'".format(table_name.lower())
-            table_columns = self.query(sql)
+                # Get column data types by SHOW COLUMNS
+                show_tables = f"SHOW TERSE TABLES IN SCHEMA {self.connection_config['dbname']}.{schema}"
+
+                # Convert output of SHOW COLUMNS to table and insert restuls into the cache COLUMNS table
+                select = f"""
+                    SELECT "schema_name" AS schema_name
+                          ,"name"        AS table_name
+                      FROM TABLE(RESULT_SCAN(LAST_QUERY_ID()))
+                """
+                queries.extend([show_tables, select])
+
+                # Run everything in one transaction
+                self.query(show_tables, max_records=9999)
         else:
             raise Exception("Cannot get table columns. List of table schemas empty")
 
-        # Refresh cached information_schema if no results
-        if from_information_schema_cache_table and len(table_columns) == 0:
-            self.cache_information_schema_columns(table_schemas=table_schemas)
-            table_columns = self.query(sql)
+        return tables
 
-        # Get columns from cache or information_schema and return results
+    def get_table_columns(self, table_schemas=[], table_name=None):
+        table_columns = []
+        if table_schemas or table_name:
+            for schema in table_schemas:
+                queries = []
+
+                # Get column data types by SHOW COLUMNS
+                show_columns = f"SHOW COLUMNS IN SCHEMA {self.connection_config['dbname']}.{schema}"
+
+                # Convert output of SHOW COLUMNS to table and insert results into the cache COLUMNS table
+                select = f"""
+                    SELECT "schema_name" AS schema_name
+                          ,"table_name"  AS table_name
+                          ,"column_name" AS column_name
+                          -- ----------------------------------------------------------------------------------------
+                          -- Character and numeric columns display their generic data type rather than their defined
+                          -- data type (i.e. TEXT for all character types, FIXED for all fixed-point numeric types,
+                          -- and REAL for all floating-point numeric types).
+                          --
+                          -- Further info at https://docs.snowflake.net/manuals/sql-reference/sql/show-columns.html
+                          -- ----------------------------------------------------------------------------------------
+                          ,CASE PARSE_JSON("data_type"):type::varchar
+                             WHEN 'FIXED' THEN 'NUMBER'
+                             WHEN 'REAL'  THEN 'FLOAT'
+                             ELSE PARSE_JSON("data_type"):type::varchar
+                           END data_type
+                      FROM TABLE(RESULT_SCAN(LAST_QUERY_ID()))
+                """
+                queries.extend([show_columns, select])
+
+                # Run everything in one transaction
+                try:
+                    columns = self.query(queries, max_records=9999)
+                    table_columns.extend(columns)
+
+                # Catch exception when schema not exists and SHOW COLUMNS throws a ProgrammingError
+                # Regexp to extract snowflake error code and message from the exception message
+                # Do nothing if schema not exists
+                except snowflake.connector.errors.ProgrammingError as exc:
+                    if re.match('002003 \(02000\):.*\n.*does not exist or not authorized.*', str(sys.exc_info()[1])):
+                        pass
+                    else:
+                        raise exc
+
+        else:
+            raise Exception("Cannot get table columns. List of table schemas empty")
+
         return table_columns
+
+    def refresh_table_cache(self):
+        self.table_cache = self.get_table_columns([self.schema_name])
 
     def update_columns(self):
         stream_schema_message = self.stream_schema_message
         stream = stream_schema_message['stream']
         table_name = self.table_name(stream, False, True)
 
-        if self.information_schema_columns:
-            columns = list(filter(lambda x: x['TABLE_SCHEMA'] == self.schema_name.lower() and
+        if self.table_cache:
+            columns = list(filter(lambda x: x['SCHEMA_NAME'] == self.schema_name.upper() and
                                             f'"{x["TABLE_NAME"].upper()}"' == table_name,
-                                  self.information_schema_columns))
+                                  self.table_cache))
         else:
             columns = self.get_table_columns(table_schemas=[self.schema_name], table_name=table_name)
 
-        columns_dict = {column['COLUMN_NAME'].lower(): column for column in columns}
+        columns_dict = {column['COLUMN_NAME'].upper(): column for column in columns}
 
         columns_to_add = [
             column_clause(
@@ -627,7 +645,7 @@ class DbSync:
                 properties_schema
             )
             for (name, properties_schema) in self.flatten_schema.items()
-            if name.lower() not in columns_dict
+            if name.upper() not in columns_dict
         ]
 
         for column in columns_to_add:
@@ -639,8 +657,8 @@ class DbSync:
                 properties_schema
             ))
             for (name, properties_schema) in self.flatten_schema.items()
-            if name.lower() in columns_dict and
-               columns_dict[name.lower()]['DATA_TYPE'].lower() != column_type(properties_schema).lower() and
+            if name.upper() in columns_dict and
+               columns_dict[name.upper()]['DATA_TYPE'].upper() != column_type(properties_schema).upper() and
 
                # Don't alter table if TIMESTAMP_NTZ detected as the new required column type
                #
@@ -652,7 +670,7 @@ class DbSync:
                # TODO: Support both TIMESTAMP_TZ and TIMESTAMP_NTZ in target-snowflake
                # when extracting data-time values from JSON
                # (Check the column_type function for further details)
-               column_type(properties_schema).lower() != 'timestamp_ntz'
+               column_type(properties_schema).upper() != 'TIMESTAMP_NTZ'
         ]
 
         for (column_name, column) in columns_to_replace:
@@ -660,9 +678,9 @@ class DbSync:
             self.version_column(column_name, stream)
             self.add_column(column, stream)
 
-        # Refresh columns cache if required
-        if self.information_schema_columns and (len(columns_to_add) > 0 or len(columns_to_replace)):
-            self.cache_information_schema_columns(table_schemas=[self.schema_name])
+        # Refresh table cache if required
+        if self.table_cache and (len(columns_to_add) > 0 or len(columns_to_replace)):
+            self.table_cache = self.get_table_columns(table_schemas=[self.schema_name])
 
     def drop_column(self, column_name, stream):
         drop_column = "ALTER TABLE {} DROP COLUMN {}".format(self.table_name(stream, False), column_name)
@@ -685,12 +703,12 @@ class DbSync:
         table_name = self.table_name(stream, False, True)
         table_name_with_schema = self.table_name(stream, False)
 
-        if self.information_schema_columns:
-            found_tables = list(filter(lambda x: x['TABLE_SCHEMA'] == self.schema_name.lower() and
+        if self.table_cache:
+            found_tables = list(filter(lambda x: x['SCHEMA_NAME'] == self.schema_name.upper() and
                                                  f'"{x["TABLE_NAME"].upper()}"' == table_name,
-                                       self.information_schema_columns))
+                                       self.table_cache))
         else:
-            found_tables = [table for table in (self.get_tables(self.schema_name.lower()))
+            found_tables = [table for table in (self.get_tables([self.schema_name.upper()]))
                             if f'"{table["TABLE_NAME"].upper()}"' == table_name]
 
         if len(found_tables) == 0:
@@ -701,8 +719,8 @@ class DbSync:
             self.grant_privilege(self.schema_name, self.grantees, self.grant_select_on_all_tables_in_schema)
 
             # Refresh columns cache if required
-            if self.information_schema_columns:
-                self.cache_information_schema_columns(table_schemas=[self.schema_name])
+            if self.table_cache:
+                self.table_cache = self.get_table_columns(table_schemas=[self.schema_name])
         else:
             self.logger.info("Table '{}' exists".format(table_name_with_schema))
             self.update_columns()

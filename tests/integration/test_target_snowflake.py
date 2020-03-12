@@ -38,11 +38,6 @@ class TestIntegration(unittest.TestCase):
         if self.config['default_target_schema']:
             snowflake.query("DROP SCHEMA IF EXISTS {}".format(self.config['default_target_schema']))
 
-        # Delete target schema entries from PIPELINEWISE.COLUMNS
-        if self.config['stage']:
-            snowflake.query("CREATE TABLE IF NOT EXISTS {}.columns (table_schema VARCHAR, table_name VARCHAR, column_name VARCHAR, data_type VARCHAR)".format(snowflake.pipelinewise_schema))
-            snowflake.query("DELETE FROM {}.columns WHERE TABLE_SCHEMA ilike '{}'".format(snowflake.pipelinewise_schema, self.config['default_target_schema']))
-
     def persist_lines_with_cache(self, lines):
         """Enables table caching option and loads singer messages into snowflake.
 
@@ -54,8 +49,8 @@ class TestIntegration(unittest.TestCase):
         Selecting from a real table instead of INFORMATION_SCHEMA and keeping it
         in memory while the target-snowflake is running results better load performance.
         """
-        information_schema_cache = target_snowflake.load_information_schema_cache(self.config)
-        target_snowflake.persist_lines(self.config, lines, information_schema_cache)
+        table_cache = target_snowflake.load_table_cache(self.config)
+        target_snowflake.persist_lines(self.config, lines, table_cache)
 
     def remove_metadata_columns_from_rows(self, rows):
         """Removes metadata columns from a list of rows"""
@@ -585,113 +580,6 @@ class TestIntegration(unittest.TestCase):
 
         self.assert_logical_streams_are_in_snowflake_and_are_empty()
 
-    def test_information_schema_cache_create_and_update(self):
-        """Newly created and altered tables must be cached automatically for later use.
-
-        Information_schema_columns cache is a copy of snowflake INFORMATION_SCHAME.COLUMNS table to avoid the error of
-        'Information schema query returned too much data. Please repeat query with more selective predicates.'.
-        """
-        tap_lines_before_column_name_change = test_utils.get_test_tap_lines('messages-with-three-streams.json')
-        tap_lines_after_column_name_change = test_utils.get_test_tap_lines(
-            'messages-with-three-streams-modified-column.json')
-
-        # Load with default settings
-        self.persist_lines_with_cache(tap_lines_before_column_name_change)
-        self.persist_lines_with_cache(tap_lines_after_column_name_change)
-
-        # Get data form information_schema cache table
-        snowflake = DbSync(self.config)
-        target_schema = self.config.get('default_target_schema', '')
-        information_schema_cache = snowflake.query("""
-            SELECT table_schema
-                  ,table_name
-                  ,column_name
-                  ,data_type
-              FROM {}.columns
-             WHERE table_schema = '{}'
-             ORDER BY table_schema, table_name, column_name
-            """.format(
-                snowflake.pipelinewise_schema,
-                target_schema.upper()))
-
-        # Get the previous column name from information schema in test_table_two
-        previous_column_name = snowflake.query("""
-            SELECT column_name
-              FROM information_schema.columns
-             WHERE table_catalog = '{}'
-               AND table_schema = '{}'
-               AND table_name = 'TEST_TABLE_TWO'
-               AND ordinal_position = 1
-            """.format(
-            self.config.get('dbname', '').upper(),
-            target_schema.upper()))[0]["COLUMN_NAME"]
-
-        # Every column has to be in the cached information_schema with the latest versions
-        self.assertEqual(
-            information_schema_cache,
-            [
-                {'TABLE_SCHEMA': target_schema.upper(), 'TABLE_NAME': 'TEST_TABLE_ONE', 'COLUMN_NAME': 'C_INT',
-                 'DATA_TYPE': 'NUMBER'},
-                {'TABLE_SCHEMA': target_schema.upper(), 'TABLE_NAME': 'TEST_TABLE_ONE', 'COLUMN_NAME': 'C_PK',
-                 'DATA_TYPE': 'NUMBER'},
-                {'TABLE_SCHEMA': target_schema.upper(), 'TABLE_NAME': 'TEST_TABLE_ONE', 'COLUMN_NAME': 'C_VARCHAR',
-                 'DATA_TYPE': 'TEXT'},
-
-                {'TABLE_SCHEMA': target_schema.upper(), 'TABLE_NAME': 'TEST_TABLE_THREE', 'COLUMN_NAME': 'C_INT',
-                 'DATA_TYPE': 'NUMBER'},
-                {'TABLE_SCHEMA': target_schema.upper(), 'TABLE_NAME': 'TEST_TABLE_THREE', 'COLUMN_NAME': 'C_PK',
-                 'DATA_TYPE': 'NUMBER'},
-                {'TABLE_SCHEMA': target_schema.upper(), 'TABLE_NAME': 'TEST_TABLE_THREE', 'COLUMN_NAME': 'C_TIME',
-                 'DATA_TYPE': 'TIME'},
-                {'TABLE_SCHEMA': target_schema.upper(), 'TABLE_NAME': 'TEST_TABLE_THREE', 'COLUMN_NAME': 'C_TIME_RENAMED',
-                 'DATA_TYPE': 'TIME'},
-                {'TABLE_SCHEMA': target_schema.upper(), 'TABLE_NAME': 'TEST_TABLE_THREE', 'COLUMN_NAME': 'C_VARCHAR',
-                 'DATA_TYPE': 'TEXT'},
-
-                {'TABLE_SCHEMA': target_schema.upper(), 'TABLE_NAME': 'TEST_TABLE_TWO', 'COLUMN_NAME': 'C_DATE',
-                 'DATA_TYPE': 'TEXT'},
-                {'TABLE_SCHEMA': target_schema.upper(), 'TABLE_NAME': 'TEST_TABLE_TWO', 'COLUMN_NAME': previous_column_name,
-                 'DATA_TYPE': 'TIMESTAMP_NTZ'},
-                {'TABLE_SCHEMA': target_schema.upper(), 'TABLE_NAME': 'TEST_TABLE_TWO', 'COLUMN_NAME': 'C_INT',
-                 'DATA_TYPE': 'NUMBER'},
-                {'TABLE_SCHEMA': target_schema.upper(), 'TABLE_NAME': 'TEST_TABLE_TWO', 'COLUMN_NAME': 'C_PK',
-                 'DATA_TYPE': 'NUMBER'},
-                {'TABLE_SCHEMA': target_schema.upper(), 'TABLE_NAME': 'TEST_TABLE_TWO', 'COLUMN_NAME': 'C_VARCHAR',
-                 'DATA_TYPE': 'TEXT'}
-            ])
-
-    def test_information_schema_cache_outdated(self):
-        """If informations schema cache is not up to date then it should fail"""
-        tap_lines_with_multi_streams = test_utils.get_test_tap_lines('messages-with-three-streams.json')
-
-        # 1) Simulate an out of data cache:
-        # Table is in cache but not exists in database
-        snowflake = DbSync(self.config)
-        target_schema = self.config.get('default_target_schema', '').upper()
-        snowflake.query("""
-            CREATE TABLE IF NOT EXISTS {}.columns (table_schema VARCHAR, table_name VARCHAR, column_name VARCHAR, data_type VARCHAR)
-        """.format(snowflake.pipelinewise_schema))
-        snowflake.query("""
-            INSERT INTO {0}.columns (table_schema, table_name, column_name, data_type)
-            SELECT '{1}', 'TEST_TABLE_ONE', 'DUMMY_COLUMN_1', 'TEXT' UNION
-            SELECT '{1}', 'TEST_TABLE_ONE', 'DUMMY_COLUMN_2', 'TEXT' UNION
-            SELECT '{1}', 'TEST_TABLE_TWO', 'DUMMY_COLUMN_3', 'TEXT'
-        """.format(snowflake.pipelinewise_schema, target_schema))
-
-        # Loading into an outdated information_schema cache should fail with table not exists
-        with self.assertRaises(target_snowflake.InvalidTableStructureException):
-            self.persist_lines_with_cache(tap_lines_with_multi_streams)
-
-        # 2) Simulate an out of data cache:
-        # Table is in cache structure is not in sync with the actual table in the database
-        snowflake.query("CREATE SCHEMA IF NOT EXISTS {}".format(target_schema))
-        snowflake.query("CREATE OR REPLACE TABLE {}.test_table_one (C_PK NUMBER, C_INT NUMBER, C_VARCHAR TEXT)".format(target_schema))
-
-        # Loading into an outdated information_schema cache should fail with columns exists
-        # It should try adding the new column based on the values in cache but the column already exists
-        with self.assertRaises(Exception):
-            self.persist_lines_with_cache(tap_lines_with_multi_streams)
-
     @mock.patch('target_snowflake.emit_state')
     def test_flush_streams_with_no_intermediate_flushes(self, mock_emit_state):
         """Test emitting states when no intermediate flush required"""
@@ -930,3 +818,15 @@ class TestIntegration(unittest.TestCase):
         finally:
             del os.environ["AWS_ACCESS_KEY_ID"]
             del os.environ["AWS_SECRET_ACCESS_KEY"]
+
+    def test_too_many_records_exception(self):
+        """Test if query function raise exception if max_records exceeded"""
+        snowflake = DbSync(self.config)
+
+        # No max_record limit by default
+        sample_rows = snowflake.query("SELECT seq4() FROM TABLE(GENERATOR(ROWCOUNT => 50000))")
+        self.assertEqual(len(sample_rows), 50000)
+
+        # Should raise exception when max_records exceeded
+        with assert_raises(target_snowflake.db_sync.TooManyRecordsException):
+            snowflake.query("SELECT seq4() FROM TABLE(GENERATOR(ROWCOUNT => 50000))", max_records=10000)
