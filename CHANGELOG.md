@@ -1,9 +1,14 @@
-1.6.0 (2020-02-06)
+1.6.1 (2020-03-12)
+-------------------
+
+- Use SHOW SCHEMAS|TABLES|COLUMNS instead of INFORMATION_SCHEMA
+
+1.6.0 (2020-03-06)
 -------------------
 
 - Support usage of reserved words as table names.
 
-1.5.0 (2020-02)
+1.5.0 (2020-02-18)
 -------------------
 
 - Support custom logging configuration by setting `LOGGING_CONF_FILE` env variable to the absolute path of a .conf file
