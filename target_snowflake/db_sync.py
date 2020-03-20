@@ -414,7 +414,7 @@ class DbSync:
         bucket = self.connection_config['s3_bucket']
         self.s3.delete_object(Bucket=bucket, Key=s3_key)
 
-    def load_csv(self, s3_key, count):
+    def load_csv(self, s3_key, count, size_bytes):
         stream_schema_message = self.stream_schema_message
         stream = stream_schema_message['stream']
         self.logger.info("Loading {} rows into '{}'".format(count, self.table_name(stream, False)))
@@ -430,6 +430,8 @@ class DbSync:
 
         with self.open_connection() as connection:
             with connection.cursor(snowflake.connector.DictCursor) as cur:
+                inserts = 0
+                updates = 0
 
                 # Insert or Update with MERGE command if primary key defined
                 if len(self.stream_schema_message['key_properties']) > 0:
@@ -458,6 +460,12 @@ class DbSync:
                     self.logger.debug("SNOWFLAKE - {}".format(merge_sql))
                     cur.execute(merge_sql)
 
+                    # Get number of inserted and updated records - MERGE does insert and update
+                    results = cur.fetchall()
+                    if len(results) > 0:
+                        inserts = results[0].get('number of rows inserted', 0)
+                        updates = results[0].get('number of rows updated', 0)
+
                 # Insert only with COPY command if no primary key
                 else:
                     copy_sql = """COPY INTO {} ({}) FROM @{}/{}
@@ -472,7 +480,14 @@ class DbSync:
                     self.logger.debug("SNOWFLAKE - {}".format(copy_sql))
                     cur.execute(copy_sql)
 
-                self.logger.info("SNOWFLAKE - Merge into {}: {}".format(self.table_name(stream, False), cur.fetchall()))
+                    # Get number of inserted records - COPY does insert only
+                    results = cur.fetchall()
+                    if len(results) > 0:
+                        inserts = results[0].get('rows_loaded', 0)
+
+                self.logger.info('SNOWFLAKE - Load into {}: {}'.format(
+                    self.table_name(stream, False),
+                    {"inserts": inserts, "updates": updates, "size_bytes": size_bytes}))
 
     def primary_key_merge_condition(self):
         stream_schema_message = self.stream_schema_message

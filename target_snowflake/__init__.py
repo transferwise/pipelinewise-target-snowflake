@@ -405,8 +405,9 @@ def flush_records(stream, records_to_load, row_count, db_sync, temp_dir=None):
             csv_line = db_sync.record_to_csv_line(record)
             f.write(bytes(csv_line + '\n', 'UTF-8'))
 
+    size_bytes = os.path.getsize(csv_file)
     s3_key = db_sync.put_to_stage(csv_file, stream, row_count, temp_dir=temp_dir)
-    db_sync.load_csv(s3_key, row_count)
+    db_sync.load_csv(s3_key, row_count, size_bytes)
 
     os.remove(csv_file)
     db_sync.delete_from_stage(s3_key)
