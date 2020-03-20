@@ -485,9 +485,9 @@ class DbSync:
                     if len(results) > 0:
                         inserts = results[0].get('rows_loaded', 0)
 
-                self.logger.info('SNOWFLAKE - Load into {}: {}'.format(
+                self.logger.info('SNOWFLAKE - Loading into {}: {}'.format(
                     self.table_name(stream, False),
-                    {"inserts": inserts, "updates": updates, "size_bytes": size_bytes}))
+                    json.dumps({'inserts': inserts, 'updates': updates, 'size_bytes': size_bytes})))
 
     def primary_key_merge_condition(self):
         stream_schema_message = self.stream_schema_message
