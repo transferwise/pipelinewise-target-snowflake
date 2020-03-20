@@ -319,7 +319,7 @@ class DbSync:
                     queries = [query]
 
                 for q in queries:
-                    self.logger.debug("SNOWFLAKE - Running query: {}".format(q))
+                    self.logger.debug("Running query: {}".format(q))
                     cur.execute(q, params)
 
                     # Raise exception if returned rows greater than max allowed records
@@ -457,7 +457,7 @@ class DbSync:
                         ', '.join([c['name'] for c in columns_with_trans]),
                         ', '.join(['s.{}'.format(c['name']) for c in columns_with_trans])
                     )
-                    self.logger.debug("SNOWFLAKE - {}".format(merge_sql))
+                    self.logger.debug("Running query: {}".format(merge_sql))
                     cur.execute(merge_sql)
 
                     # Get number of inserted and updated records - MERGE does insert and update
@@ -477,7 +477,7 @@ class DbSync:
                         s3_key,
                         self.connection_config['file_format'],
                     )
-                    self.logger.debug("SNOWFLAKE - {}".format(copy_sql))
+                    self.logger.debug("Running query: {}".format(copy_sql))
                     cur.execute(copy_sql)
 
                     # Get number of inserted records - COPY does insert only
@@ -485,7 +485,7 @@ class DbSync:
                     if len(results) > 0:
                         inserts = results[0].get('rows_loaded', 0)
 
-                self.logger.info('SNOWFLAKE - Loading into {}: {}'.format(
+                self.logger.info('Loading into {}: {}'.format(
                     self.table_name(stream, False),
                     json.dumps({'inserts': inserts, 'updates': updates, 'size_bytes': size_bytes})))
 
