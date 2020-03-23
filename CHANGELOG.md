@@ -1,4 +1,4 @@
-1.6.2 (2020-03-20)
+1.6.2 (2020-03-23)
 -------------------
 
 - Log inserts, updates and csv size_bytes in a more consumable format
