@@ -1,9 +1,15 @@
 import unittest
 import os
+import gzip
+import tempfile
 
 from unittest.mock import patch
 
 import target_snowflake
+
+
+def _mock_record_to_csv_line(record):
+    return record
 
 
 class TestTargetSnowflake(unittest.TestCase):
@@ -13,7 +19,8 @@ class TestTargetSnowflake(unittest.TestCase):
 
     @patch('target_snowflake.flush_streams')
     @patch('target_snowflake.DbSync')
-    def test_persist_lines_with_40_records_and_batch_size_of_20_expect_flushing_once(self, dbSync_mock, flush_streams_mock):
+    def test_persist_lines_with_40_records_and_batch_size_of_20_expect_flushing_once(self, dbSync_mock,
+                                                                                     flush_streams_mock):
         self.config['batch_size_rows'] = 20
         self.config['flush_all_streams'] = True
 
@@ -79,3 +86,31 @@ class TestTargetSnowflake(unittest.TestCase):
             'key5': 'I\'m good',
             'key6': None
         }, record)
+
+    def test_write_record_to_uncompressed_file(self):
+        records = {'pk_1': 'data1,data2,data3,data4'}
+
+        # Write uncompressed CSV file
+        csv_file = tempfile.NamedTemporaryFile(delete=False)
+        with open(csv_file.name, 'wb') as f:
+            target_snowflake.write_record_to_file(f, records, _mock_record_to_csv_line)
+
+        # Read and validate uncompressed CSV file
+        with open(csv_file.name, 'rt') as f:
+            self.assertEquals(f.readlines(), ['data1,data2,data3,data4\n'])
+
+        os.remove(csv_file.name)
+
+    def test_write_record_to_compressed_file(self):
+        records = {'pk_1': 'data1,data2,data3,data4'}
+
+        # Write gzip compressed CSV file
+        csv_file = tempfile.NamedTemporaryFile(delete=False)
+        with gzip.open(csv_file.name, 'wb') as f:
+            target_snowflake.write_record_to_file(f, records, _mock_record_to_csv_line)
+
+        # Read and validate gzip compressed CSV file
+        with gzip.open(csv_file.name, 'rt') as f:
+            self.assertEquals(f.readlines(), ['data1,data2,data3,data4\n'])
+
+        os.remove(csv_file.name)
