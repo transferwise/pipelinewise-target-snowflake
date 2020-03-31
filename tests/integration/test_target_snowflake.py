@@ -830,3 +830,13 @@ class TestIntegration(unittest.TestCase):
         # Should raise exception when max_records exceeded
         with assert_raises(target_snowflake.db_sync.TooManyRecordsException):
             snowflake.query("SELECT seq4() FROM TABLE(GENERATOR(ROWCOUNT => 50000))", max_records=10000)
+
+    def test_loading_tables_with_no_compression(self):
+        """Loading multiple tables with compression turned off"""
+        tap_lines = test_utils.get_test_tap_lines('messages-with-three-streams.json')
+
+        # Turning off client-side encryption and load
+        self.config['no_compression'] = True
+        self.persist_lines_with_cache(tap_lines)
+
+        self.assert_three_streams_are_into_snowflake()
