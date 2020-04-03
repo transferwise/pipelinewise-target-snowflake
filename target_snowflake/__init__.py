@@ -3,6 +3,7 @@
 import argparse
 import io
 import json
+import gzip
 import logging
 import os
 import sys
@@ -128,6 +129,7 @@ def adjust_timestamps_in_record(record: Dict, schema: Dict) -> None:
         record: record containing properties and values
         schema: json schema that has types of each property
     """
+
     # creating this internal function to avoid duplicating code and too many nested blocks.
     def reset_new_value(record: Dict, key: str, format: str):
         try:
@@ -356,6 +358,7 @@ def flush_streams(
             records_to_load=streams[stream],
             row_count=row_count,
             db_sync=stream_to_sync[stream],
+            no_compression=config.get('no_compression'),
             delete_rows=config.get('hard_delete'),
             temp_dir=config.get('temp_dir')
         ) for stream in streams_to_flush)
@@ -382,10 +385,11 @@ def flush_streams(
     return flushed_state
 
 
-def load_stream_batch(stream, records_to_load, row_count, db_sync, delete_rows=False, temp_dir=None):
+def load_stream_batch(stream, records_to_load, row_count, db_sync, no_compression=False, delete_rows=False,
+                      temp_dir=None):
     # Load into snowflake
     if row_count[stream] > 0:
-        flush_records(stream, records_to_load, row_count[stream], db_sync, temp_dir)
+        flush_records(stream, records_to_load, row_count[stream], db_sync, temp_dir, no_compression)
 
         # Delete soft-deleted, flagged rows - where _sdc_deleted at is not null
         if delete_rows:
@@ -395,15 +399,25 @@ def load_stream_batch(stream, records_to_load, row_count, db_sync, delete_rows=F
         row_count[stream] = 0
 
 
-def flush_records(stream, records_to_load, row_count, db_sync, temp_dir=None):
+def write_record_to_file(outfile, records_to_load, record_to_csv_line_transformer):
+    for record in records_to_load.values():
+        csv_line = record_to_csv_line_transformer(record)
+        outfile.write(bytes(csv_line + '\n', 'UTF-8'))
+
+
+def flush_records(stream, records_to_load, row_count, db_sync, temp_dir=None, no_compression=False):
     if temp_dir:
         os.makedirs(temp_dir, exist_ok=True)
     csv_fd, csv_file = mkstemp(suffix='.csv', prefix='records_', dir=temp_dir)
+    record_to_csv_line_transformer = db_sync.record_to_csv_line
 
-    with open(csv_fd, 'w+b') as f:
-        for record in records_to_load.values():
-            csv_line = db_sync.record_to_csv_line(record)
-            f.write(bytes(csv_line + '\n', 'UTF-8'))
+    # Using gzip or plain file object
+    if no_compression:
+        with open(csv_fd, 'wb') as outfile:
+            write_record_to_file(outfile, records_to_load, record_to_csv_line_transformer)
+    else:
+        with gzip.open(csv_file, 'wb') as outfile:
+            write_record_to_file(outfile, records_to_load, record_to_csv_line_transformer)
 
     size_bytes = os.path.getsize(csv_file)
     s3_key = db_sync.put_to_stage(csv_file, stream, row_count, temp_dir=temp_dir)
