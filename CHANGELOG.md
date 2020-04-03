@@ -1,3 +1,8 @@
+1.6.3 (2020-04-03)
+-------------------
+
+- Generate compressed CSV files by default. Optionally can be disabled by the `no_compression` config option
+
 1.6.2 (2020-03-23)
 -------------------
 
