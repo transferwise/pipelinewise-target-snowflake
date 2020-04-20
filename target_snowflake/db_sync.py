@@ -438,7 +438,7 @@ class DbSync:
                     merge_sql = """MERGE INTO {} t
                         USING (
                             SELECT {}
-                              FROM @{}/{}
+                              FROM '@{}/{}'
                               (FILE_FORMAT => '{}')) s
                         ON {}
                         WHEN MATCHED THEN
@@ -468,7 +468,7 @@ class DbSync:
 
                 # Insert only with COPY command if no primary key
                 else:
-                    copy_sql = """COPY INTO {} ({}) FROM @{}/{}
+                    copy_sql = """COPY INTO {} ({}) FROM '@{}/{}'
                         FILE_FORMAT = (format_name='{}')
                     """.format(
                         self.table_name(stream, False),
