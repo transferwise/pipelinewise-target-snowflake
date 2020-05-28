@@ -485,6 +485,7 @@ class DbSync:
 
         with self.open_connection() as connection:
             with connection.cursor(snowflake.connector.DictCursor) as cur:
+                cur.execute("drop table if exists {}_tmp".format(self.table_name(stream, False)))
                 cur.execute(
                     "create or replace table {0}_tmp like {0}".format(
                         self.table_name(stream, False)
@@ -543,15 +544,11 @@ class DbSync:
                     # cur.execute(merge_sql)
                 # Insert only with COPY command if no primary key
                 else:
-                    copy_sql = """COPY INTO {0} ({1}) FROM {0}_tmp
-                    """.format(
-                        self.table_name(stream, False),
-                        ", ".join([c["name"] for c in columns_with_trans]),
-                        self.table_name(stream, False),
+                    logger.info("No primary keys, swapping tables")
+                    cur.execute(
+                        "alter table {0}_tmp swap with {0}".format(self.table_name(stream, False))
                     )
-                    logger.debug("SNOWFLAKE - {}".format(copy_sql))
-                    cur.execute(copy_sql)
-                cur.execute("drop table {}_tmp".format(self.table_name(stream, False)))
+                cur.execute("drop table if exists {}_tmp".format(self.table_name(stream, False)))
                 logger.info(
                     "SNOWFLAKE - Merge into {}: {}".format(
                         self.table_name(stream, False), cur.fetchall()
