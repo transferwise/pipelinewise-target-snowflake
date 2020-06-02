@@ -373,7 +373,18 @@ class DbSync:
         # Generating key in S3 bucket
         bucket = self.connection_config['s3_bucket']
         s3_key_prefix = self.connection_config.get('s3_key_prefix', '')
-        s3_key = "{}pipelinewise_{}_{}.csv".format(s3_key_prefix, stream, datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f"))
+        s3_file_naming_scheme = self.connection_config.get(
+            's3_file_naming_scheme', "pipelinewise_{stream}_{timecode}.{ext}"
+        )
+        s3_file_name = s3_file_naming_scheme
+        for k, v in {
+            "{stream}": stream,
+            "{timecode}": datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f"),
+            "{ext}": ".".join(file.split("/")[-1].split(".")[1:])
+        }.items():
+            if k in s3_file_name:
+                s3_file_name = s3_file_name.replace(k, v)
+        s3_key = "{}{}".format(s3_key_prefix, s3_file_name)
 
         self.logger.info("Target S3 bucket: {}, local file: {}, S3 key: {}".format(bucket, file, s3_key))
 
