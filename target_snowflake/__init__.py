@@ -16,7 +16,7 @@ from typing import Dict
 from dateutil import parser
 from dateutil.parser import ParserError
 from joblib import Parallel, delayed, parallel_backend
-from jsonschema import Draft4Validator, FormatChecker
+from jsonschema import Draft7Validator, FormatChecker
 from singer import get_logger
 
 from target_snowflake.db_sync import DbSync
@@ -245,7 +245,7 @@ def persist_lines(config, lines, table_cache=None) -> None:
             stream = o['stream']
 
             schemas[stream] = float_to_decimal(o['schema'])
-            validators[stream] = Draft4Validator(schemas[stream], format_checker=FormatChecker())
+            validators[stream] = Draft7Validator(schemas[stream], format_checker=FormatChecker())
 
             # flush records from previous stream SCHEMA
             # if same stream has been encountered again, it means the schema might have been altered

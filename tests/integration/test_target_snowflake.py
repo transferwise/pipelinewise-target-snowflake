@@ -277,6 +277,38 @@ class TestIntegration(unittest.TestCase):
         with assert_raises(Exception):
             self.persist_lines_with_cache(tap_lines)
 
+    def test_run_query(self):
+        """Running SQLs"""
+        snowflake = DbSync(self.config)
+
+        # Running single SQL should return as array
+        self.assertEqual(snowflake.query("SELECT 1 col1, 2 col2"),
+                         [{'COL1': 1, 'COL2': 2}])
+
+        # Running multiple SQLs should return the result of the last query
+        self.assertEqual(snowflake.query(["SELECT 1 col1, 2 col2",
+                                          "SELECT 3 col1, 4 col2",
+                                          "SELECT 5 col1, 6 col2"]),
+                         [{'COL1': 5, 'COL2': 6}])
+
+        # Running multiple SQLs should return empty list if the last query returns zero record
+        self.assertEqual(snowflake.query(["SELECT 1 col1, 2 col2",
+                                          "SELECT 3 col1, 4 col2",
+                                          "SELECT 5 col1, 6 col2 WHERE 1 = 2"]),
+                         [])
+
+        # Running multiple SQLs should return the result of the last query even if a previous query returns zero record
+        self.assertEqual(snowflake.query(["SELECT 1 col1, 2 col2 WHERE 1 =2 ",
+                                          "SELECT 3 col1, 4 col2",
+                                          "SELECT 5 col1, 6 col2"]),
+                         [{'COL1': 5, 'COL2': 6}])
+
+        # Running multiple SQLs should return empty list if every query returns zero record
+        self.assertEqual(snowflake.query(["SELECT 1 col1, 2 col2 WHERE 1 = 2 ",
+                                          "SELECT 3 col1, 4 col2 WHERE 1 = 2",
+                                          "SELECT 5 col1, 6 col2 WHERE 1 = 2"]),
+                         [])
+
     def test_loading_tables_with_no_encryption(self):
         """Loading multiple tables from the same input tap with various columns types"""
         tap_lines = test_utils.get_test_tap_lines('messages-with-three-streams.json')

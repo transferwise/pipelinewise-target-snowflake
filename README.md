@@ -52,12 +52,12 @@ It's reading incoming messages from STDIN and using the properites in `config.js
 
 ### Pre-requirements
 
-You need to create two objects in snowflake in one schema before start using this target.
+You need to create a few objects in snowflake in one schema before start using this target.
 
-1. A named external stage object on S3. This will be used to upload the CSV files to S3 and to MERGE data into snowflake tables.
+1. Create a named external stage object on S3. This will be used to upload the CSV files to S3 and to MERGE data into snowflake tables.
 
 ```
-CREATE STAGE {schema}.{stage_name}
+CREATE STAGE {database}.{schema}.{stage_name}
 url='s3://{s3_bucket}'
 credentials=(AWS_KEY_ID='{aws_key_id}' AWS_SECRET_KEY='{aws_secret_key}')
 encryption=(MASTER_KEY='{client_side_encryption_master_key}');
@@ -67,10 +67,41 @@ The `encryption` option is optional and used for client side encryption. If you 
 to define the same master key in the target `config.json`. Furhter details below in the Configuration settings section.
 Instead of `credentials` you can also use `storage_integration`.
 
-2. A named file format. This will be used by the MERGE/COPY commands to parse the CSV files correctly from S3:
+2. Create a named file format. This will be used by the MERGE/COPY commands to parse the CSV files correctly from S3:
 
-`CREATE file format IF NOT EXISTS {schema}.{file_format_name} type = 'CSV' escape='\\' field_optionally_enclosed_by='"';`
+```
+CREATE FILE FORMAT {database}.{schema}.{file_format_name}
+TYPE = 'CSV' ESCAPE='\\' FIELD_OPTIONALLY_ENCLOSED_BY='"';
+```
 
+3. Create a Role with all the required permissions:
+
+```
+CREATE OR REPLACE ROLE ppw_target_snowflake;
+GRANT USAGE ON DATABASE {database} TO ROLE ppw_target_snowflake;
+GRANT CREATE SCHEMA ON DATABASE {database} TO ROLE ppw_target_snowflake;
+
+GRANT USAGE ON SCHEMA {database}.{schema} TO role ppw_target_snowflake;
+GRANT USAGE ON STAGE {database}.{schema}.{stage_name} TO ROLE ppw_target_snowflake;
+GRANT USAGE ON FILE FORMAT {database}.{schema}.{file_format_name} TO ROLE ppw_target_snowflake;
+GRANT USAGE ON WAREHOUSE {warehouse} TO ROLE ppw_target_snowflake;
+```
+
+Replace `database`, `schema`, `warehouse`, `stage_name` and `file_format_name`
+between `{` and `}` characters to the actual values from point 1 and 2.
+
+4. Create a user and grant permission to the role:
+```
+CREATE OR REPLACE USER {user}
+PASSWORD = '{password}'
+DEFAULT_ROLE = ppw_target_snowflake
+DEFAULT_WAREHOUSE = '{warehouse}'
+MUST_CHANGE_PASSWORD = FALSE;
+
+GRANT ROLE ppw_target_snowflake TO USER {user};
+```
+
+Replace `warehouse` between `{` and `}` characters to the actual values from point 3.
 
 ### Configuration settings
 
@@ -113,7 +144,7 @@ Full list of options in `config.json`:
 | flush_all_streams                   | Boolean |            | (Default: False) Flush and load every stream into Snowflake when one batch is full. Warning: This may trigger the COPY command to use files with low number of records, and may cause performance problems. |
 | parallelism                         | Integer |            | (Default: 0) The number of threads used to flush tables. 0 will create a thread for each stream, up to parallelism_max. -1 will create a thread for each CPU core. Any other positive number will create that number of threads, up to parallelism_max. |
 | parallelism_max                     | Integer |            | (Default: 16) Max number of parallel threads to use when flushing tables. |
-| default_target_schema               | String  |            | Name of the schema where the tables will be created. If `schema_mapping` is not defined then every stream sent by the tap is loaded into this schema.    |
+| default_target_schema               | String  |            | Name of the schema where the tables will be created, **without** database prefix. If `schema_mapping` is not defined then every stream sent by the tap is loaded into this schema.    |
 | default_target_schema_select_permission | String  |            | Grant USAGE privilege on newly created schemas and grant SELECT privilege on newly created tables to a specific role or a list of roles. If `schema_mapping` is not defined then every stream sent by the tap is granted accordingly.   |
 | schema_mapping                      | Object  |            | Useful if you want to load multiple streams from one tap to multiple Snowflake schemas.<br><br>If the tap sends the `stream_id` in `<schema_name>-<table_name>` format then this option overwrites the `default_target_schema` value. Note, that using `schema_mapping` you can overwrite the `default_target_schema_select_permission` value to grant SELECT permissions to different groups per schemas or optionally you can create indices automatically for the replicated tables.<br><br> **Note**: This is an experimental feature and recommended to use via PipelineWise YAML files that will generate the object mapping in the right JSON format. For further info check a [PipelineWise YAML Example]
 | disable_table_cache                 | Boolean |            | (Default: False) By default the connector caches the available table structures in Snowflake at startup. In this way it doesn't need to run additional queries when ingesting data to check if altering the target tables is required. With `disable_table_cache` option you can turn off this caching. You will always see the most recent table structures but will cause an extra query runtime. |

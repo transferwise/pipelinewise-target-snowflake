@@ -327,8 +327,7 @@ class DbSync:
                         raise TooManyRecordsException(
                             f"Query returned too many records. This query can return max {max_records} records")
 
-                    if cur.rowcount > 0:
-                        result = cur.fetchall()
+                    result = cur.fetchall()
 
         return result
 
