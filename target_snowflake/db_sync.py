@@ -572,7 +572,7 @@ class DbSync:
                 # Get column data types by SHOW COLUMNS
                 show_tables = f"SHOW TERSE TABLES IN SCHEMA {self.connection_config['dbname']}.{schema}"
 
-                # Convert output of SHOW COLUMNS to table and insert restuls into the cache COLUMNS table
+                # Convert output of SHOW TABLES to table
                 select = f"""
                     SELECT "schema_name" AS schema_name
                           ,"name"        AS table_name
@@ -581,15 +581,25 @@ class DbSync:
                 queries.extend([show_tables, select])
 
                 # Run everything in one transaction
-                self.query(show_tables, max_records=9999)
+                try:
+                    tables = self.query(queries, max_records=9999)
+
+                # Catch exception when schema not exists and SHOW TABLES throws a ProgrammingError
+                # Regexp to extract snowflake error code and message from the exception message
+                # Do nothing if schema not exists
+                except snowflake.connector.errors.ProgrammingError as exc:
+                    if re.match('002043 \(02000\):.*\n.*does not exist.*', str(sys.exc_info()[1])):
+                        pass
+                    else:
+                        raise exc
         else:
             raise Exception("Cannot get table columns. List of table schemas empty")
 
         return tables
 
-    def get_table_columns(self, table_schemas=[], table_name=None):
+    def get_table_columns(self, table_schemas=[]):
         table_columns = []
-        if table_schemas or table_name:
+        if table_schemas:
             for schema in table_schemas:
                 queries = []
 
@@ -643,13 +653,17 @@ class DbSync:
         stream_schema_message = self.stream_schema_message
         stream = stream_schema_message['stream']
         table_name = self.table_name(stream, False, True)
+        all_table_columns = []
 
         if self.table_cache:
-            columns = list(filter(lambda x: x['SCHEMA_NAME'] == self.schema_name.upper() and
-                                            f'"{x["TABLE_NAME"].upper()}"' == table_name,
-                                  self.table_cache))
+            all_table_columns = self.table_cache
         else:
-            columns = self.get_table_columns(table_schemas=[self.schema_name], table_name=table_name)
+            all_table_columns = self.get_table_columns(table_schemas=[self.schema_name])
+
+        # Find the specific table
+        columns = list(filter(lambda x: x['SCHEMA_NAME'] == self.schema_name.upper() and
+                                        f'"{x["TABLE_NAME"].upper()}"' == table_name,
+                              all_table_columns))
 
         columns_dict = {column['COLUMN_NAME'].upper(): column for column in columns}
 
