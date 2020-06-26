@@ -38,6 +38,10 @@ class TestIntegration(unittest.TestCase):
         if self.config['default_target_schema']:
             snowflake.query("DROP SCHEMA IF EXISTS {}".format(self.config['default_target_schema']))
 
+    def persist_lines(self, lines):
+        """Loads singer messages into snowflake without table caching option"""
+        target_snowflake.persist_lines(self.config, lines)
+
     def persist_lines_with_cache(self, lines):
         """Enables table caching option and loads singer messages into snowflake.
 
@@ -571,27 +575,92 @@ class TestIntegration(unittest.TestCase):
             table_one,
             [{'C_INT': 1, 'C_PK': 1, 'C_VARCHAR': '1'}])
 
-        # Table two should have versioned column
+        # Table two should have a versioned column and a new column
         self.assertEquals(
             table_two,
             [
                 {previous_column_name: datetime.datetime(2019, 2, 1, 15, 12, 45), 'C_INT': 1, 'C_PK': 1,
-                 'C_VARCHAR': '1', 'C_DATE': None},
+                 'C_VARCHAR': '1', 'C_DATE': None, 'C_NEW_COLUMN': None},
                 {previous_column_name: datetime.datetime(2019, 2, 10, 2), 'C_INT': 2, 'C_PK': 2, 'C_VARCHAR': '2',
-                 'C_DATE': '2019-02-12 02:00:00'},
-                {previous_column_name: None, 'C_INT': 3, 'C_PK': 3, 'C_VARCHAR': '2', 'C_DATE': '2019-02-15 02:00:00'}
+                 'C_DATE': '2019-02-12 02:00:00', 'C_NEW_COLUMN': 'data 1'},
+                {previous_column_name: None, 'C_INT': 3, 'C_PK': 3, 'C_VARCHAR': '2', 'C_DATE': '2019-02-15 02:00:00',
+                 'C_NEW_COLUMN': 'data 2'}
             ]
         )
 
-        # Table three should have renamed columns
+        # Table three should have a renamed columns and a new column
         self.assertEqual(
             table_three,
             [
-                {'C_INT': 1, 'C_PK': 1, 'C_TIME': datetime.time(4, 0), 'C_VARCHAR': '1', 'C_TIME_RENAMED': None},
-                {'C_INT': 2, 'C_PK': 2, 'C_TIME': datetime.time(7, 15), 'C_VARCHAR': '2', 'C_TIME_RENAMED': None},
+                {'C_INT': 1, 'C_PK': 1, 'C_TIME': datetime.time(4, 0), 'C_VARCHAR': '1', 'C_TIME_RENAMED': None,
+                 'C_NEW_COLUMN': None},
+                {'C_INT': 2, 'C_PK': 2, 'C_TIME': datetime.time(7, 15), 'C_VARCHAR': '2', 'C_TIME_RENAMED': None,
+                 'C_NEW_COLUMN': None},
                 {'C_INT': 3, 'C_PK': 3, 'C_TIME': datetime.time(23, 0, 3), 'C_VARCHAR': '3',
-                 'C_TIME_RENAMED': datetime.time(8, 15)},
-                {'C_INT': 4, 'C_PK': 4, 'C_TIME': None, 'C_VARCHAR': '4', 'C_TIME_RENAMED': datetime.time(23, 0, 3)}
+                 'C_TIME_RENAMED': datetime.time(8, 15), 'C_NEW_COLUMN': 'data 1'},
+                {'C_INT': 4, 'C_PK': 4, 'C_TIME': None, 'C_VARCHAR': '4', 'C_TIME_RENAMED': datetime.time(23, 0, 3),
+                 'C_NEW_COLUMN': 'data 2'}
+            ])
+
+    def test_column_name_change_without_table_cache(self):
+        """Tests correct renaming of snowflake columns after source change with not using table caching"""
+        tap_lines_before_column_name_change = test_utils.get_test_tap_lines('messages-with-three-streams.json')
+        tap_lines_after_column_name_change = test_utils.get_test_tap_lines(
+            'messages-with-three-streams-modified-column.json')
+
+        # Load with default settings
+        self.persist_lines(tap_lines_before_column_name_change)
+        self.persist_lines(tap_lines_after_column_name_change)
+
+        # Get loaded rows from tables
+        snowflake = DbSync(self.config)
+        target_schema = self.config.get('default_target_schema', '')
+        table_one = snowflake.query("SELECT * FROM {}.test_table_one ORDER BY c_pk".format(target_schema))
+        table_two = snowflake.query("SELECT * FROM {}.test_table_two ORDER BY c_pk".format(target_schema))
+        table_three = snowflake.query("SELECT * FROM {}.test_table_three ORDER BY c_pk".format(target_schema))
+
+        # Get the previous column name from information schema in test_table_two
+        previous_column_name = snowflake.query("""
+            SELECT column_name
+              FROM information_schema.columns
+             WHERE table_catalog = '{}'
+               AND table_schema = '{}'
+               AND table_name = 'TEST_TABLE_TWO'
+               AND ordinal_position = 1
+            """.format(
+            self.config.get('dbname', '').upper(),
+            target_schema.upper()))[0]["COLUMN_NAME"]
+
+        # Table one should have no changes
+        self.assertEqual(
+            table_one,
+            [{'C_INT': 1, 'C_PK': 1, 'C_VARCHAR': '1'}])
+
+        # Table two should have a versioned column and a new column
+        self.assertEquals(
+            table_two,
+            [
+                {previous_column_name: datetime.datetime(2019, 2, 1, 15, 12, 45), 'C_INT': 1, 'C_PK': 1,
+                 'C_VARCHAR': '1', 'C_DATE': None, 'C_NEW_COLUMN': None},
+                {previous_column_name: datetime.datetime(2019, 2, 10, 2), 'C_INT': 2, 'C_PK': 2, 'C_VARCHAR': '2',
+                 'C_DATE': '2019-02-12 02:00:00', 'C_NEW_COLUMN': 'data 1'},
+                {previous_column_name: None, 'C_INT': 3, 'C_PK': 3, 'C_VARCHAR': '2', 'C_DATE': '2019-02-15 02:00:00',
+                 'C_NEW_COLUMN': 'data 2'}
+            ]
+        )
+
+        # Table three should have a renamed columns and a new column
+        self.assertEqual(
+            table_three,
+            [
+                {'C_INT': 1, 'C_PK': 1, 'C_TIME': datetime.time(4, 0), 'C_VARCHAR': '1', 'C_TIME_RENAMED': None,
+                 'C_NEW_COLUMN': None},
+                {'C_INT': 2, 'C_PK': 2, 'C_TIME': datetime.time(7, 15), 'C_VARCHAR': '2', 'C_TIME_RENAMED': None,
+                 'C_NEW_COLUMN': None},
+                {'C_INT': 3, 'C_PK': 3, 'C_TIME': datetime.time(23, 0, 3), 'C_VARCHAR': '3',
+                 'C_TIME_RENAMED': datetime.time(8, 15), 'C_NEW_COLUMN': 'data 1'},
+                {'C_INT': 4, 'C_PK': 4, 'C_TIME': None, 'C_VARCHAR': '4', 'C_TIME_RENAMED': datetime.time(23, 0, 3),
+                 'C_NEW_COLUMN': 'data 2'}
             ])
 
     def test_logical_streams_from_pg_with_hard_delete_and_default_batch_size_should_pass(self):
