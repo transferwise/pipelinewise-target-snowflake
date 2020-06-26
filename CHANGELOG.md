@@ -1,3 +1,9 @@
+1.6.6 (2020-06-26)
+-------------------
+
+- Fixed an issue when new columns sometimes not added to target table
+- Fixed an issue when the query runner returned incorrect value when multiple queries running in one transaction
+
 1.6.5 (2020-06-17)
 -------------------
 
