@@ -1,6 +1,8 @@
 import os
 import json
+from dotenv import load_dotenv
 
+load_dotenv()
 
 def get_db_config():
     config = {}
@@ -26,6 +28,7 @@ def get_db_config():
     config['aws_secret_access_key'] = os.environ.get('TARGET_SNOWFLAKE_AWS_SECRET_ACCESS_KEY')
     config['s3_bucket'] = os.environ.get('TARGET_SNOWFLAKE_S3_BUCKET')
     config['s3_key_prefix'] = os.environ.get('TARGET_SNOWFLAKE_S3_KEY_PREFIX')
+    config['s3_acl'] = os.environ.get('TARGET_SNOWFLAKE_S3_ACL')
 
     # External stage in snowflake with client side encryption details
     config['client_side_encryption_master_key'] = os.environ.get('CLIENT_SIDE_ENCRYPTION_MASTER_KEY')
