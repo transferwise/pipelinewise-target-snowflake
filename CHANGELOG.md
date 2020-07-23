@@ -1,3 +1,9 @@
+1.7.0 (2020-07-23)
+-------------------
+
+- Add `s3_acl` option to support ACL for S3 upload
+- Fixed an issue when no primary key error logged as `INFO` and not as `ERROR`
+
 1.6.6 (2020-06-26)
 -------------------
 
