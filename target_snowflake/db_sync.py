@@ -351,7 +351,7 @@ class DbSync:
         try:
             key_props = [str(flatten[p]) for p in self.stream_schema_message['key_properties']]
         except Exception as exc:
-            self.logger.info("Cannot find {} primary key(s) in record: {}".format(self.stream_schema_message['key_properties'],
+            self.logger.error("Cannot find {} primary key(s) in record: {}".format(self.stream_schema_message['key_properties'],
                                                                      flatten))
             raise exc
         return ','.join(key_props)
