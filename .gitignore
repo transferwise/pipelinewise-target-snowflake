@@ -2,7 +2,6 @@
 .vscode
 .idea/*
 
-
 # Python
 __pycache__/
 *.py[cod]
@@ -30,3 +29,6 @@ tmp
 # Docs
 docs/_build/
 docs/_templates/
+
+# Environment
+.env
