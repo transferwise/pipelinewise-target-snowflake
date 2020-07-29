@@ -37,6 +37,25 @@ class TestTargetSnowflake(unittest.TestCase):
 
         flush_streams_mock.assert_called_once()
 
+    @patch('target_snowflake.flush_streams')
+    @patch('target_snowflake.DbSync')
+    def test_persist_lines_with_same_schema_expect_flushing_once(self, dbSync_mock,
+                                                                 flush_streams_mock):
+        self.config['batch_size_rows'] = 20
+
+        with open(f'{os.path.dirname(__file__)}/resources/same-schemas-multiple-times.json', 'r') as f:
+            lines = f.readlines()
+
+        instance = dbSync_mock.return_value
+        instance.create_schema_if_not_exists.return_value = None
+        instance.sync_table.return_value = None
+
+        flush_streams_mock.return_value = '{"currently_syncing": null}'
+
+        target_snowflake.persist_lines(self.config, lines)
+
+        flush_streams_mock.assert_called_once()
+
     def test_adjust_timestamps_in_record(self):
         record = {
             'key1': '1',
