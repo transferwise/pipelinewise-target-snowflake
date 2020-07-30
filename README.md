@@ -131,12 +131,14 @@ Full list of options in `config.json`:
 | user                                | String  | Yes        | Snowflake User                                                |
 | password                            | String  | Yes        | Snowflake Password                                            |
 | warehouse                           | String  | Yes        | Snowflake virtual warehouse name                              |
-| aws_access_key_id                   | String  | No         | S3 Access Key Id. If not provided, AWS_ACCESS_KEY_ID environment variable or IAM role will be used |
-| aws_secret_access_key               | String  | No         | S3 Secret Access Key. If not provided, AWS_SECRET_ACCESS_KEY environment variable or IAM role will be used |
-| aws_session_token                   | String  | No         | AWS Session token. If not provided, AWS_SESSION_TOKEN environment variable will be used |
-| s3_acl                              | String  | No         | S3 ACL name                                                |
+| aws_access_key_id                   | String  | No         | S3 Access Key Id. If not provided, `AWS_ACCESS_KEY_ID` environment variable or IAM role will be used |
+| aws_secret_access_key               | String  | No         | S3 Secret Access Key. If not provided, `AWS_SECRET_ACCESS_KEY` environment variable or IAM role will be used |
+| aws_session_token                   | String  | No         | AWS Session token. If not provided, `AWS_SESSION_TOKEN` environment variable will be used |
+| aws_profile                         | String  | No         | AWS profile name for profile based authentication. If not provided, `AWS_PROFILE` environment variable will be used. |
 | s3_bucket                           | String  | Yes        | S3 Bucket name                                                |
 | s3_key_prefix                       | String  | No         | (Default: None) A static prefix before the generated S3 key names. Using prefixes you can upload files into specific directories in the S3 bucket. |
+| s3_endpoint_url                     | String  | No         | The complete URL to use for the constructed client. This is allowing to use non-native s3 account. |
+| s3_acl                              | String  | No         | S3 ACL name to set on the uploaded files                                                   |
 | stage                               | String  | Yes        | Named external stage name created at pre-requirements section. Has to be a fully qualified name including the schema name |
 | file_format                         | String  | Yes        | Named file format name created at pre-requirements section. Has to be a fully qualified name including the schema name. |
 | batch_size_rows                     | Integer |            | (Default: 100000) Maximum number of rows in each batch. At the end of each batch, the rows in the batch are loaded into Snowflake. |

@@ -3,6 +3,7 @@ import json
 import unittest
 import mock
 import os
+import botocore
 
 from nose.tools import assert_raises
 
@@ -915,24 +916,89 @@ class TestIntegration(unittest.TestCase):
 
         self.assert_three_streams_are_into_snowflake()
 
-    def test_using_aws_environment_variables(self):
-        """Test loading data with aws in the environment rather than explicitly provided access keys"""
+    def test_aws_env_vars(self):
+        """Test loading data with credentials defined in AWS environment variables
+        than explicitly provided access keys"""
         tap_lines = test_utils.get_test_tap_lines("messages-with-three-streams.json")
 
         try:
-            os.environ["AWS_ACCESS_KEY_ID"] = os.environ.get(
-                "TARGET_SNOWFLAKE_AWS_ACCESS_KEY"
-            )
-            os.environ["AWS_SECRET_ACCESS_KEY"] = os.environ.get(
-                "TARGET_SNOWFLAKE_AWS_SECRET_ACCESS_KEY"
-            )
-            self.config["aws_access_key_id"] = None
-            self.config["aws_secret_access_key"] = None
+            # Save original config to restore later
+            orig_config = self.config.copy()
 
-            target_snowflake.persist_lines(self.config, tap_lines)
+            # Move aws access key and secret from config into environment variables
+            os.environ['AWS_ACCESS_KEY_ID'] = os.environ.get('TARGET_SNOWFLAKE_AWS_ACCESS_KEY')
+            os.environ['AWS_SECRET_ACCESS_KEY'] = os.environ.get('TARGET_SNOWFLAKE_AWS_SECRET_ACCESS_KEY')
+            del self.config['aws_access_key_id']
+            del self.config['aws_secret_access_key']
+
+            # Create a new S3 client using env vars
+            snowflake = DbSync(self.config)
+            snowflake.create_s3_client()
+
+        # Restore the original state to not confuse other tests
         finally:
-            del os.environ["AWS_ACCESS_KEY_ID"]
-            del os.environ["AWS_SECRET_ACCESS_KEY"]
+            del os.environ['AWS_ACCESS_KEY_ID']
+            del os.environ['AWS_SECRET_ACCESS_KEY']
+            self.config = orig_config.copy()
+
+    def test_profile_based_auth(self):
+        """Test AWS profile based authentication rather than access keys"""
+        try:
+            # Save original config to restore later
+            orig_config = self.config.copy()
+
+            # Remove access keys from config and add profile name
+            del self.config['aws_access_key_id']
+            del self.config['aws_secret_access_key']
+            self.config['aws_profile'] = 'fake-profile'
+
+            # Create a new S3 client using profile based authentication
+            with assert_raises(botocore.exceptions.ProfileNotFound):
+                snowflake = DbSync(self.config)
+                snowflake.create_s3_client()
+
+        # Restore the original state to not confuse other tests
+        finally:
+            self.config = orig_config.copy()
+
+    def test_profile_based_auth_aws_env_var(self):
+        """Test AWS profile based authentication using AWS environment variables"""
+        try:
+            # Save original config to restore later
+            orig_config = self.config.copy()
+
+            # Remove access keys from config and add profile name environment variable
+            del self.config['aws_access_key_id']
+            del self.config['aws_secret_access_key']
+            os.environ['AWS_PROFILE'] = 'fake_profile'
+
+            # Create a new S3 client using profile based authentication
+            with assert_raises(botocore.exceptions.ProfileNotFound):
+                snowflake = DbSync(self.config)
+                snowflake.create_s3_client()
+
+        # Restore the original state to not confuse other tests
+        finally:
+            del os.environ['AWS_PROFILE']
+            self.config = orig_config.copy()
+
+    def test_s3_custom_endpoint_url(self):
+        """Test S3 connection with custom region and endpoint URL"""
+        try:
+            # Save original config to restore later
+            orig_config = self.config.copy()
+
+            # Define custom S3 endpoint
+            self.config['s3_endpoint_url'] = 'fake-endpoint-url'
+
+            # Botocore should raise ValurError in case of fake S3 endpoint url
+            with assert_raises(ValueError):
+                snowflake = DbSync(self.config)
+                snowflake.create_s3_client()
+
+        # Restore the original state to not confuse other tests
+        finally:
+            self.config = orig_config.copy()
 
     def test_too_many_records_exception(self):
         """Test if query function raise exception if max_records exceeded"""
