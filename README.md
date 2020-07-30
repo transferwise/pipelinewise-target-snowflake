@@ -138,6 +138,7 @@ Full list of options in `config.json`:
 | s3_bucket                           | String  | Yes        | S3 Bucket name                                                |
 | s3_key_prefix                       | String  | No         | (Default: None) A static prefix before the generated S3 key names. Using prefixes you can upload files into specific directories in the S3 bucket. |
 | s3_endpoint_url                     | String  | No         | The complete URL to use for the constructed client. This is allowing to use non-native s3 account. |
+| s3_region_name                      | String  | No         | Default region when creating new connections |
 | s3_acl                              | String  | No         | S3 ACL name to set on the uploaded files                                                   |
 | stage                               | String  | Yes        | Named external stage name created at pre-requirements section. Has to be a fully qualified name including the schema name |
 | file_format                         | String  | Yes        | Named file format name created at pre-requirements section. Has to be a fully qualified name including the schema name. |
