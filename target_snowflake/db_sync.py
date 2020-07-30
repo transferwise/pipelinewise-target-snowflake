@@ -288,12 +288,33 @@ class DbSync:
             self.data_flattening_max_level = self.connection_config.get('data_flattening_max_level', 0)
             self.flatten_schema = flatten_schema(stream_schema_message['schema'], max_level=self.data_flattening_max_level)
 
-        self.s3 = boto3.client(
-            's3',
-            aws_access_key_id=self.connection_config.get('aws_access_key_id'),
-            aws_secret_access_key=self.connection_config.get('aws_secret_access_key'),
-            aws_session_token=self.connection_config.get('aws_session_token')
-        )
+        self.s3 = self.create_s3_client()
+
+    def create_s3_client(self, config=None):
+        if not config:
+            config = self.connection_config
+
+        # Get the required parameters from config file and/or environment variables
+        aws_profile = config.get('aws_profile') or os.environ.get('AWS_PROFILE')
+        aws_access_key_id = config.get('aws_access_key_id') or os.environ.get('AWS_ACCESS_KEY_ID')
+        aws_secret_access_key = config.get('aws_secret_access_key') or os.environ.get('AWS_SECRET_ACCESS_KEY')
+        aws_session_token = config.get('aws_session_token') or os.environ.get('AWS_SESSION_TOKEN')
+
+        # AWS credentials based authentication
+        if aws_access_key_id and aws_secret_access_key:
+            aws_session = boto3.session.Session(
+                aws_access_key_id=aws_access_key_id,
+                aws_secret_access_key=aws_secret_access_key,
+                aws_session_token=aws_session_token
+            )
+        # AWS Profile based authentication
+        else:
+            aws_session = boto3.session.Session(profile_name=aws_profile)
+
+        # Create the s3 client
+        return aws_session.client('s3',
+                                  region_name=config.get('s3_region_name'),
+                                  endpoint_url=config.get('s3_endpoint_url'))
 
     def open_connection(self):
         return snowflake.connector.connect(
