@@ -1,3 +1,12 @@
+1.8.0 (2020-08-03)
+-------------------
+
+- Fixed an issue when `pipelinewise-target-snowflake` failed when `QUOTED_IDENTIFIERS_IGNORE_CASE` snowflake parameter set to true
+- Add `aws_profile` option to support Profile based authentication to S3
+- Add option to authenticate to S3 using `AWS_PROFILE`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_SESSION_TOKEN` environment variables
+- Add `s3_endpoint_url` and `s3_region_name` options to support non-native S3 accounts
+- Flush stream only if the new schema is not the same as the previous one
+
 1.7.0 (2020-07-23)
 -------------------
 
