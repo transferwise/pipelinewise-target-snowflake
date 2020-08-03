@@ -323,7 +323,11 @@ class DbSync:
             account=self.connection_config['account'],
             database=self.connection_config['dbname'],
             warehouse=self.connection_config['warehouse'],
-            autocommit=True
+            autocommit=True,
+            session_parameters={
+                # Quoted identifiers should be case sensitive
+                'QUOTED_IDENTIFIERS_IGNORE_CASE': 'FALSE'
+            }
         )
 
     def query(self, query, params=None, max_records=0):

@@ -1021,3 +1021,22 @@ class TestIntegration(unittest.TestCase):
         self.persist_lines_with_cache(tap_lines)
 
         self.assert_three_streams_are_into_snowflake()
+
+    def test_quoted_identifiers_ignore_case_session_parameter(self):
+        """Test if QUOTED_IDENTIFIERS_IGNORE_CASE session parameter set to FALSE"""
+        snowflake = DbSync(self.config)
+
+        # Set QUOTED_IDENTIFIERS_IGNORE_CASE to True on user level
+        snowflake.query(f"ALTER USER {self.config['user']} SET QUOTED_IDENTIFIERS_IGNORE_CASE = TRUE")
+
+        # Quoted column names should be case sensitive even if the
+        # QUOTED_IDENTIFIERS_IGNORE_CASE parameter set to TRUE on user or account level
+        result = snowflake.query('SELECT 1 AS "Foo", 1 AS "foo", 1 AS "FOO", 1 AS foo, 1 AS FOO')
+        self.assertEqual(result, [{
+            'Foo': 1,
+            'foo': 1,
+            'FOO': 1
+        }])
+
+        # Reset parameters default
+        snowflake.query(f"ALTER USER {self.config['user']} UNSET QUOTED_IDENTIFIERS_IGNORE_CASE")
