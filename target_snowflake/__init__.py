@@ -243,47 +243,52 @@ def persist_lines(config, lines, table_cache=None) -> None:
                 raise Exception("Line is missing required key 'stream': {}".format(line))
 
             stream = o['stream']
+            new_schema = float_to_decimal(o['schema'])
 
-            schemas[stream] = float_to_decimal(o['schema'])
-            validators[stream] = Draft7Validator(schemas[stream], format_checker=FormatChecker())
+            # Update and flush only if the the schema is new or different than
+            # the previously used version of the schema
+            if stream not in schemas or schemas[stream] != new_schema:
 
-            # flush records from previous stream SCHEMA
-            # if same stream has been encountered again, it means the schema might have been altered
-            # so previous records need to be flushed
-            if row_count.get(stream, 0) > 0:
-                flushed_state = flush_streams(records_to_load, row_count, stream_to_sync, config, state, flushed_state)
+                schemas[stream] = new_schema
+                validators[stream] = Draft7Validator(schemas[stream], format_checker=FormatChecker())
 
-                # emit latest encountered state
-                emit_state(flushed_state)
+                # flush records from previous stream SCHEMA
+                # if same stream has been encountered again, it means the schema might have been altered
+                # so previous records need to be flushed
+                if row_count.get(stream, 0) > 0:
+                    flushed_state = flush_streams(records_to_load, row_count, stream_to_sync, config, state, flushed_state)
 
-            # key_properties key must be available in the SCHEMA message.
-            if 'key_properties' not in o:
-                raise Exception("key_properties field is required")
+                    # emit latest encountered state
+                    emit_state(flushed_state)
 
-            # Log based and Incremental replications on tables with no Primary Key
-            # cause duplicates when merging UPDATE events.
-            # Stop loading data by default if no Primary Key.
-            #
-            # If you want to load tables with no Primary Key:
-            #  1) Set ` 'primary_key_required': false ` in the target-snowflake config.json
-            #  or
-            #  2) Use fastsync [postgres-to-snowflake, mysql-to-snowflake, etc.]
-            if config.get('primary_key_required', True) and len(o['key_properties']) == 0:
-                LOGGER.critical("Primary key is set to mandatory but not defined in the [{}] stream".format(stream))
-                raise Exception("key_properties field is required")
+                # key_properties key must be available in the SCHEMA message.
+                if 'key_properties' not in o:
+                    raise Exception("key_properties field is required")
 
-            key_properties[stream] = o['key_properties']
+                # Log based and Incremental replications on tables with no Primary Key
+                # cause duplicates when merging UPDATE events.
+                # Stop loading data by default if no Primary Key.
+                #
+                # If you want to load tables with no Primary Key:
+                #  1) Set ` 'primary_key_required': false ` in the target-snowflake config.json
+                #  or
+                #  2) Use fastsync [postgres-to-snowflake, mysql-to-snowflake, etc.]
+                if config.get('primary_key_required', True) and len(o['key_properties']) == 0:
+                    LOGGER.critical("Primary key is set to mandatory but not defined in the [{}] stream".format(stream))
+                    raise Exception("key_properties field is required")
 
-            if config.get('add_metadata_columns') or config.get('hard_delete'):
-                stream_to_sync[stream] = DbSync(config, add_metadata_columns_to_schema(o), table_cache)
-            else:
-                stream_to_sync[stream] = DbSync(config, o, table_cache)
+                key_properties[stream] = o['key_properties']
 
-            stream_to_sync[stream].create_schema_if_not_exists()
-            stream_to_sync[stream].sync_table()
+                if config.get('add_metadata_columns') or config.get('hard_delete'):
+                    stream_to_sync[stream] = DbSync(config, add_metadata_columns_to_schema(o), table_cache)
+                else:
+                    stream_to_sync[stream] = DbSync(config, o, table_cache)
 
-            row_count[stream] = 0
-            total_row_count[stream] = 0
+                stream_to_sync[stream].create_schema_if_not_exists()
+                stream_to_sync[stream].sync_table()
+
+                row_count[stream] = 0
+                total_row_count[stream] = 0
 
         elif t == 'ACTIVATE_VERSION':
             LOGGER.debug('ACTIVATE_VERSION message')

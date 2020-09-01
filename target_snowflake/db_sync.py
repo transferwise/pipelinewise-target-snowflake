@@ -288,12 +288,33 @@ class DbSync:
             self.data_flattening_max_level = self.connection_config.get('data_flattening_max_level', 0)
             self.flatten_schema = flatten_schema(stream_schema_message['schema'], max_level=self.data_flattening_max_level)
 
-        self.s3 = boto3.client(
-            's3',
-            aws_access_key_id=self.connection_config.get('aws_access_key_id'),
-            aws_secret_access_key=self.connection_config.get('aws_secret_access_key'),
-            aws_session_token=self.connection_config.get('aws_session_token')
-        )
+        self.s3 = self.create_s3_client()
+
+    def create_s3_client(self, config=None):
+        if not config:
+            config = self.connection_config
+
+        # Get the required parameters from config file and/or environment variables
+        aws_profile = config.get('aws_profile') or os.environ.get('AWS_PROFILE')
+        aws_access_key_id = config.get('aws_access_key_id') or os.environ.get('AWS_ACCESS_KEY_ID')
+        aws_secret_access_key = config.get('aws_secret_access_key') or os.environ.get('AWS_SECRET_ACCESS_KEY')
+        aws_session_token = config.get('aws_session_token') or os.environ.get('AWS_SESSION_TOKEN')
+
+        # AWS credentials based authentication
+        if aws_access_key_id and aws_secret_access_key:
+            aws_session = boto3.session.Session(
+                aws_access_key_id=aws_access_key_id,
+                aws_secret_access_key=aws_secret_access_key,
+                aws_session_token=aws_session_token
+            )
+        # AWS Profile based authentication
+        else:
+            aws_session = boto3.session.Session(profile_name=aws_profile)
+
+        # Create the s3 client
+        return aws_session.client('s3',
+                                  region_name=config.get('s3_region_name'),
+                                  endpoint_url=config.get('s3_endpoint_url'))
 
     def open_connection(self):
         return snowflake.connector.connect(
@@ -302,7 +323,11 @@ class DbSync:
             account=self.connection_config['account'],
             database=self.connection_config['dbname'],
             warehouse=self.connection_config['warehouse'],
-            autocommit=True
+            autocommit=True,
+            session_parameters={
+                # Quoted identifiers should be case sensitive
+                'QUOTED_IDENTIFIERS_IGNORE_CASE': 'FALSE'
+            }
         )
 
     def query(self, query, params=None, max_records=0):
@@ -351,7 +376,7 @@ class DbSync:
         try:
             key_props = [str(flatten[p]) for p in self.stream_schema_message['key_properties']]
         except Exception as exc:
-            self.logger.info("Cannot find {} primary key(s) in record: {}".format(self.stream_schema_message['key_properties'],
+            self.logger.error("Cannot find {} primary key(s) in record: {}".format(self.stream_schema_message['key_properties'],
                                                                      flatten))
             raise exc
         return ','.join(key_props)
@@ -371,6 +396,7 @@ class DbSync:
 
         # Generating key in S3 bucket
         bucket = self.connection_config['s3_bucket']
+        s3_acl = self.connection_config.get('s3_acl')
         s3_key_prefix = self.connection_config.get('s3_key_prefix', '')
         s3_file_naming_scheme = self.connection_config.get(
             's3_file_naming_scheme', "pipelinewise_{stream}_{timecode}.{ext}"
@@ -403,19 +429,22 @@ class DbSync:
             )
 
             # Upload to s3
+            extra_args = {'ACL': s3_acl} if s3_acl else dict()
+
             # Send key and iv in the metadata, that will be required to decrypt and upload the encrypted file
-            metadata = {
+            extra_args['Metadata'] = {
                 'x-amz-key': encryption_metadata.key,
                 'x-amz-iv': encryption_metadata.iv
             }
-            self.s3.upload_file(encrypted_file, bucket, s3_key, ExtraArgs={'Metadata': metadata})
+            self.s3.upload_file(encrypted_file, bucket, s3_key, ExtraArgs=extra_args)
 
             # Remove the uploaded encrypted file
             os.remove(encrypted_file)
 
         # Upload to S3 without encrypting
         else:
-            self.s3.upload_file(file, bucket, s3_key)
+            extra_args = {'ACL': s3_acl} if s3_acl else None
+            self.s3.upload_file(file, bucket, s3_key, ExtraArgs=extra_args)
 
         return s3_key
 
@@ -583,7 +612,7 @@ class DbSync:
                 # Get column data types by SHOW COLUMNS
                 show_tables = f"SHOW TERSE TABLES IN SCHEMA {self.connection_config['dbname']}.{schema}"
 
-                # Convert output of SHOW COLUMNS to table and insert restuls into the cache COLUMNS table
+                # Convert output of SHOW TABLES to table
                 select = f"""
                     SELECT "schema_name" AS schema_name
                           ,"name"        AS table_name
@@ -592,15 +621,25 @@ class DbSync:
                 queries.extend([show_tables, select])
 
                 # Run everything in one transaction
-                self.query(show_tables, max_records=9999)
+                try:
+                    tables = self.query(queries, max_records=9999)
+
+                # Catch exception when schema not exists and SHOW TABLES throws a ProgrammingError
+                # Regexp to extract snowflake error code and message from the exception message
+                # Do nothing if schema not exists
+                except snowflake.connector.errors.ProgrammingError as exc:
+                    if re.match('002043 \(02000\):.*\n.*does not exist.*', str(sys.exc_info()[1])):
+                        pass
+                    else:
+                        raise exc
         else:
             raise Exception("Cannot get table columns. List of table schemas empty")
 
         return tables
 
-    def get_table_columns(self, table_schemas=[], table_name=None):
+    def get_table_columns(self, table_schemas=[]):
         table_columns = []
-        if table_schemas or table_name:
+        if table_schemas:
             for schema in table_schemas:
                 queries = []
 
@@ -654,13 +693,17 @@ class DbSync:
         stream_schema_message = self.stream_schema_message
         stream = stream_schema_message['stream']
         table_name = self.table_name(stream, False, True)
+        all_table_columns = []
 
         if self.table_cache:
-            columns = list(filter(lambda x: x['SCHEMA_NAME'] == self.schema_name.upper() and
-                                            f'"{x["TABLE_NAME"].upper()}"' == table_name,
-                                  self.table_cache))
+            all_table_columns = self.table_cache
         else:
-            columns = self.get_table_columns(table_schemas=[self.schema_name], table_name=table_name)
+            all_table_columns = self.get_table_columns(table_schemas=[self.schema_name])
+
+        # Find the specific table
+        columns = list(filter(lambda x: x['SCHEMA_NAME'] == self.schema_name.upper() and
+                                        f'"{x["TABLE_NAME"].upper()}"' == table_name,
+                              all_table_columns))
 
         columns_dict = {column['COLUMN_NAME'].upper(): column for column in columns}
 

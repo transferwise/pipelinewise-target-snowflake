@@ -131,11 +131,15 @@ Full list of options in `config.json`:
 | user                                | String  | Yes        | Snowflake User                                                |
 | password                            | String  | Yes        | Snowflake Password                                            |
 | warehouse                           | String  | Yes        | Snowflake virtual warehouse name                              |
-| aws_access_key_id                   | String  | No         | S3 Access Key Id. If not provided, AWS_ACCESS_KEY_ID environment variable or IAM role will be used |
-| aws_secret_access_key               | String  | No         | S3 Secret Access Key. If not provided, AWS_SECRET_ACCESS_KEY environment variable or IAM role will be used |
-| aws_session_token                   | String  | No         | AWS Session token. If not provided, AWS_SESSION_TOKEN environment variable will be used |
+| aws_access_key_id                   | String  | No         | S3 Access Key Id. If not provided, `AWS_ACCESS_KEY_ID` environment variable or IAM role will be used |
+| aws_secret_access_key               | String  | No         | S3 Secret Access Key. If not provided, `AWS_SECRET_ACCESS_KEY` environment variable or IAM role will be used |
+| aws_session_token                   | String  | No         | AWS Session token. If not provided, `AWS_SESSION_TOKEN` environment variable will be used |
+| aws_profile                         | String  | No         | AWS profile name for profile based authentication. If not provided, `AWS_PROFILE` environment variable will be used. |
 | s3_bucket                           | String  | Yes        | S3 Bucket name                                                |
-| s3_key_prefix                       | String  |            | (Default: None) A static prefix before the generated S3 key names. Using prefixes you can upload files into specific directories in the S3 bucket. |
+| s3_key_prefix                       | String  | No         | (Default: None) A static prefix before the generated S3 key names. Using prefixes you can upload files into specific directories in the S3 bucket. |
+| s3_endpoint_url                     | String  | No         | The complete URL to use for the constructed client. This is allowing to use non-native s3 account. |
+| s3_region_name                      | String  | No         | Default region when creating new connections |
+| s3_acl                              | String  | No         | S3 ACL name to set on the uploaded files                                                   |
 | s3_file_naming_scheme               | String  | No         | (Default: `pipelinewise_{stream}_{timecode}.{ext}`) A parameterized string which specifies how each file should be named in S3. Variables allowed are: `{stream}`, `{timecode}`, and `{ext}` |
 | retain_s3_files                     | Boolean | No         | (Default: False) Specify 'True' to keep files in S3 after importing is complete. Default behavior is False, which removes all files from S3 after loading. |
 | stage                               | String  | Yes        | Named external stage name created at pre-requirements section. Has to be a fully qualified name including the schema name |
@@ -160,7 +164,7 @@ Full list of options in `config.json`:
 
 ### To run tests:
 
-1. Define environment variables that requires running the tests
+1. Define the environment variables that are required to run the tests by creating a `.env` file in `tests/integration`, or by exporting the variables below.
 ```
   export TARGET_SNOWFLAKE_ACCOUNT=<snowflake-account-name>
   export TARGET_SNOWFLAKE_DBNAME=<snowflake-database-name>
@@ -170,6 +174,7 @@ Full list of options in `config.json`:
   export TARGET_SNOWFLAKE_SCHEMA=<snowflake-schema>
   export TARGET_SNOWFLAKE_AWS_ACCESS_KEY=<aws-access-key-id>
   export TARGET_SNOWFLAKE_AWS_SECRET_ACCESS_KEY=<aws-access-secret-access-key>
+  export TARGET_SNOWFLAKE_S3_ACL=<s3-target-acl>
   export TARGET_SNOWFLAKE_S3_BUCKET=<s3-external-bucket>
   export TARGET_SNOWFLAKE_S3_KEY_PREFIX=<bucket-directory>
   export TARGET_SNOWFLAKE_STAGE=<stage-object-with-schema-name>
