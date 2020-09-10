@@ -429,7 +429,7 @@ def flush_records(stream, records_to_load, row_count, db_sync, temp_dir=None, no
     db_sync.load_csv(s3_key, row_count, size_bytes)
 
     os.remove(csv_file)
-    db_sync.delete_from_stage(s3_key)
+    db_sync.delete_from_stage(stream, s3_key)
 
 
 def main():
