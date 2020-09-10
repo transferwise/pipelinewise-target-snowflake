@@ -421,8 +421,9 @@ def flush_records(stream, records_to_load, row_count, db_sync, temp_dir=None, no
         with open(csv_fd, 'wb') as outfile:
             write_record_to_file(outfile, records_to_load, record_to_csv_line_transformer)
     else:
-        with gzip.open(csv_file, 'wb') as outfile:
-            write_record_to_file(outfile, records_to_load, record_to_csv_line_transformer)
+        with open(csv_fd, 'wb') as outfile:
+            with gzip.GzipFile(filename=csv_file, mode='wb',fileobj=outfile) as gzipfile:
+                write_record_to_file(gzipfile, records_to_load, record_to_csv_line_transformer)
 
     size_bytes = os.path.getsize(csv_file)
     s3_key = db_sync.put_to_stage(csv_file, stream, row_count, temp_dir=temp_dir)
