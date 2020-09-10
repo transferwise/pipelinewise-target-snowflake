@@ -381,6 +381,9 @@ class DbSync:
             raise exc
         return ','.join(key_props)
 
+    def get_csv_header_line(self):
+        return ','.join([name for name in self.flatten_schema])
+
     def record_to_csv_line(self, record):
         flatten = flatten_record(record, self.flatten_schema, max_level=self.data_flattening_max_level)
 
@@ -453,7 +456,7 @@ class DbSync:
         bucket = self.connection_config['s3_bucket']
         self.s3.delete_object(Bucket=bucket, Key=s3_key)
 
-    def load_csv(self, s3_key, count, size_bytes):
+    def load_csv(self, s3_key, count, size_bytes, with_header):
         stream_schema_message = self.stream_schema_message
         stream = stream_schema_message['stream']
         self.logger.info("Loading {} rows into '{}'".format(count, self.table_name(stream, False)))
@@ -478,7 +481,8 @@ class DbSync:
                         USING (
                             SELECT {}
                               FROM '@{}/{}'
-                              (FILE_FORMAT => '{}')) s
+                              ( TYPE = CSV
+                                SKIP_HEADER = {})) s
                         ON {}
                         WHEN MATCHED THEN
                             UPDATE SET {}
@@ -490,7 +494,7 @@ class DbSync:
                         ', '.join(["{}(${}) {}".format(c['trans'], i + 1, c['name']) for i, c in enumerate(columns_with_trans)]),
                         self.connection_config['stage'],
                         s3_key,
-                        self.connection_config['file_format'],
+                        1 if with_header else 0,
                         self.primary_key_merge_condition(),
                         ', '.join(['{}=s.{}'.format(c['name'], c['name']) for c in columns_with_trans]),
                         ', '.join([c['name'] for c in columns_with_trans]),
@@ -508,13 +512,16 @@ class DbSync:
                 # Insert only with COPY command if no primary key
                 else:
                     copy_sql = """COPY INTO {} ({}) FROM '@{}/{}'
-                        FILE_FORMAT = (format_name='{}')
+                        FILE_FORMAT = (
+                            TYPE = CSV
+                            SKIP_HEADER = {}
+                        )
                     """.format(
                         self.table_name(stream, False),
                         ', '.join([c['name'] for c in columns_with_trans]),
                         self.connection_config['stage'],
                         s3_key,
-                        self.connection_config['file_format'],
+                        1 if with_header else 0,
                     )
                     self.logger.debug("Running query: {}".format(copy_sql))
                     cur.execute(copy_sql)

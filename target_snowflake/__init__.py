@@ -416,20 +416,24 @@ def flush_records(stream, records_to_load, row_count, db_sync, temp_dir=None,
     if temp_dir:
         os.makedirs(temp_dir, exist_ok=True)
     record_to_csv_line_transformer = db_sync.record_to_csv_line
-
+    with_header = retain_s3_files
     # Using gzip or plain file object
     if no_compression:
         csv_fd, csv_file = mkstemp(suffix='.csv', prefix='records_', dir=temp_dir)
         with open(csv_fd, 'wb') as outfile:
+            if with_header:
+                outfile.write(db_sync.get_csv_header_line() + "\n")
             write_record_to_file(outfile, records_to_load, record_to_csv_line_transformer)
     else:
         csv_fd, csv_file = mkstemp(suffix='.csv.gz', prefix='records_', dir=temp_dir)
         with gzip.open(csv_file, 'wb') as outfile:
+            if with_header:
+                outfile.write(db_sync.get_csv_header_line() + "\n")
             write_record_to_file(outfile, records_to_load, record_to_csv_line_transformer)
 
     size_bytes = os.path.getsize(csv_file)
     s3_key = db_sync.put_to_stage(csv_file, stream, row_count, temp_dir=temp_dir)
-    db_sync.load_csv(s3_key, row_count, size_bytes)
+    db_sync.load_csv(s3_key, row_count, size_bytes, with_header)
 
     os.remove(csv_file)
     if not retain_s3_files:
