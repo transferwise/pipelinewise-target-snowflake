@@ -17,11 +17,13 @@ class SnowflakeUploadClient:
     def upload_file(self, file, stream, temp_dir=None):
         # Generating key in S3 bucket
         key = os.path.basename(file)
+        normFile = os.path.normpath(file).replace('\\', '/')
+        
         compression = '' if self.connection_config.get('no_compression', '') else "SOURCE_COMPRESSION=GZIP"
         stage = self.dbLink.get_stage_name(stream)
 
-        self.logger.info(f"Target internal stage: {stage}, local file: {file}, key: {key}")
-        cmd = f"PUT 'file:///{file}' '@{stage}' {compression}"
+        self.logger.info(f"Target internal stage: {stage}, local file: {normFile}, key: {key}")
+        cmd = f"PUT 'file://{normFile}' '@{stage}' {compression}"
         self.logger.info(cmd)
         
         with self.dbLink.open_connection() as connection:
