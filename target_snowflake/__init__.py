@@ -422,13 +422,13 @@ def flush_records(stream, records_to_load, row_count, db_sync, temp_dir=None,
         csv_fd, csv_file = mkstemp(suffix='.csv', prefix='records_', dir=temp_dir)
         with open(csv_fd, 'wb') as outfile:
             if with_header:
-                outfile.write(db_sync.get_csv_header_line() + "\n")
+                outfile.write((db_sync.get_csv_header_line() + "\n").encode("utf-8"))
             write_record_to_file(outfile, records_to_load, record_to_csv_line_transformer)
     else:
         csv_fd, csv_file = mkstemp(suffix='.csv.gz', prefix='records_', dir=temp_dir)
         with gzip.open(csv_file, 'wb') as outfile:
             if with_header:
-                outfile.write(db_sync.get_csv_header_line() + "\n")
+                outfile.write((db_sync.get_csv_header_line() + "\n").encode("utf-8"))
             write_record_to_file(outfile, records_to_load, record_to_csv_line_transformer)
 
     size_bytes = os.path.getsize(csv_file)
