@@ -14,6 +14,8 @@ from singer import get_logger
 from snowflake.connector.encryption_util import SnowflakeEncryptionUtil
 from snowflake.connector.remote_storage_util import SnowflakeFileEncryptionMaterial
 
+from target_snowflake.s3_upload_client import S3UploadClient
+from target_snowflake.snowflake_upload_client import SnowflakeUploadClient
 
 class TooManyRecordsException(Exception):
     """Exception to raise when query returns more records than max_records"""
@@ -22,7 +24,7 @@ class TooManyRecordsException(Exception):
 
 def validate_config(config):
     errors = []
-    required_config_keys = [
+    s3_required_config_keys = [
         'account',
         'dbname',
         'user',
@@ -33,10 +35,22 @@ def validate_config(config):
         'file_format'
     ]
 
+    snowflake_required_config_keys = [
+        'account',
+        'dbname',
+        'user',
+        'password',
+        'warehouse',
+        'file_format'
+    ]
+
+    required_config_keys = s3_required_config_keys if  config.get('s3_bucket', None) else snowflake_required_config_keys
     # Check if mandatory keys exist
     for k in required_config_keys:
         if not config.get(k, None):
             errors.append("Required key is missing from config: [{}]".format(k))
+    
+
 
     # Check target schema config
     config_default_target_schema = config.get('default_target_schema', None)
@@ -226,11 +240,12 @@ class DbSync:
             self.logger.error("Invalid configuration:\n   * {}".format('\n   * '.join(config_errors)))
             sys.exit(1)
 
-        stage = stream_name_to_dict(self.connection_config['stage'], separator='.')
-        if not stage['schema_name']:
-            self.logger.error(
-                "The named external stage object in config has to use the <schema>.<stage_name> format.")
-            sys.exit(1)
+        if self.connection_config.get('stage', None):
+            stage = stream_name_to_dict(self.connection_config['stage'], separator='.')
+            if not stage['schema_name']:
+                self.logger.error(
+                    "The named external stage object in config has to use the <schema>.<stage_name> format.")
+                sys.exit(1)
 
         self.schema_name = None
         self.grantees = None
@@ -288,33 +303,7 @@ class DbSync:
             self.data_flattening_max_level = self.connection_config.get('data_flattening_max_level', 0)
             self.flatten_schema = flatten_schema(stream_schema_message['schema'], max_level=self.data_flattening_max_level)
 
-        self.s3 = self.create_s3_client()
-
-    def create_s3_client(self, config=None):
-        if not config:
-            config = self.connection_config
-
-        # Get the required parameters from config file and/or environment variables
-        aws_profile = config.get('aws_profile') or os.environ.get('AWS_PROFILE')
-        aws_access_key_id = config.get('aws_access_key_id') or os.environ.get('AWS_ACCESS_KEY_ID')
-        aws_secret_access_key = config.get('aws_secret_access_key') or os.environ.get('AWS_SECRET_ACCESS_KEY')
-        aws_session_token = config.get('aws_session_token') or os.environ.get('AWS_SESSION_TOKEN')
-
-        # AWS credentials based authentication
-        if aws_access_key_id and aws_secret_access_key:
-            aws_session = boto3.session.Session(
-                aws_access_key_id=aws_access_key_id,
-                aws_secret_access_key=aws_secret_access_key,
-                aws_session_token=aws_session_token
-            )
-        # AWS Profile based authentication
-        else:
-            aws_session = boto3.session.Session(profile_name=aws_profile)
-
-        # Create the s3 client
-        return aws_session.client('s3',
-                                  region_name=config.get('s3_region_name'),
-                                  endpoint_url=config.get('s3_endpoint_url'))
+        self.uploadClient = S3UploadClient(connection_config) if connection_config.get('s3_bucket', None) else SnowflakeUploadClient(connection_config, self) 
 
     def open_connection(self):
         return snowflake.connector.connect(
@@ -392,55 +381,21 @@ class DbSync:
         )
 
     def put_to_stage(self, file, stream, count, temp_dir=None):
-        self.logger.info("Uploading {} rows to external snowflake stage on S3".format(count))
+        self.logger.info("Uploading {} rows to stage".format(count))
+        return self.uploadClient.upload_file(file, stream, temp_dir)
 
-        # Generating key in S3 bucket
-        bucket = self.connection_config['s3_bucket']
-        s3_acl = self.connection_config.get('s3_acl')
-        s3_key_prefix = self.connection_config.get('s3_key_prefix', '')
-        s3_key = "{}pipelinewise_{}_{}.csv".format(s3_key_prefix, stream, datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f"))
+    def delete_from_stage(self, stream, s3_key):
+        self.logger.info("Deleting {} from stage".format(s3_key))
+        self.uploadClient.delete_object(stream, s3_key)
 
-        self.logger.info("Target S3 bucket: {}, local file: {}, S3 key: {}".format(bucket, file, s3_key))
-
-        # Encrypt csv if client side encryption enabled
-        master_key = self.connection_config.get('client_side_encryption_master_key', '')
-        if master_key != '':
-            # Encrypt the file
-            encryption_material = SnowflakeFileEncryptionMaterial(
-                query_stage_master_key=master_key,
-                query_id='',
-                smk_id=0
-            )
-            encryption_metadata, encrypted_file = SnowflakeEncryptionUtil.encrypt_file(
-                encryption_material,
-                file,
-                tmp_dir=temp_dir
-            )
-
-            # Upload to s3
-            extra_args = {'ACL': s3_acl} if s3_acl else dict()
-
-            # Send key and iv in the metadata, that will be required to decrypt and upload the encrypted file
-            extra_args['Metadata'] = {
-                'x-amz-key': encryption_metadata.key,
-                'x-amz-iv': encryption_metadata.iv
-            }
-            self.s3.upload_file(encrypted_file, bucket, s3_key, ExtraArgs=extra_args)
-
-            # Remove the uploaded encrypted file
-            os.remove(encrypted_file)
-
-        # Upload to S3 without encrypting
-        else:
-            extra_args = {'ACL': s3_acl} if s3_acl else None
-            self.s3.upload_file(file, bucket, s3_key, ExtraArgs=extra_args)
-
-        return s3_key
-
-    def delete_from_stage(self, s3_key):
-        self.logger.info("Deleting {} from external snowflake stage on S3".format(s3_key))
-        bucket = self.connection_config['s3_bucket']
-        self.s3.delete_object(Bucket=bucket, Key=s3_key)
+    def get_stage_name(self, stream):
+        stage = self.connection_config.get('stage', None)
+        if stage: 
+            return stage
+        
+        table_name = self.table_name(stream, False, without_schema=True)
+        return f"{self.schema_name}.%{table_name}"
+        
 
     def load_csv(self, s3_key, count, size_bytes):
         stream_schema_message = self.stream_schema_message
@@ -477,7 +432,7 @@ class DbSync:
                     """.format(
                         self.table_name(stream, False),
                         ', '.join(["{}(${}) {}".format(c['trans'], i + 1, c['name']) for i, c in enumerate(columns_with_trans)]),
-                        self.connection_config['stage'],
+                        self.get_stage_name(stream),
                         s3_key,
                         self.connection_config['file_format'],
                         self.primary_key_merge_condition(),
@@ -501,7 +456,7 @@ class DbSync:
                     """.format(
                         self.table_name(stream, False),
                         ', '.join([c['name'] for c in columns_with_trans]),
-                        self.connection_config['stage'],
+                        self.get_stage_name(stream),
                         s3_key,
                         self.connection_config['file_format'],
                     )
