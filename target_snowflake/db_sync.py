@@ -481,7 +481,7 @@ class DbSync:
                         USING (
                             SELECT {}
                               FROM '@{}/{}'
-                              (FILE_FORMAT => '{}')) s
+                              (FILE_FORMAT => '{}')
                         ) s
                         ON {}
                         WHEN MATCHED THEN
