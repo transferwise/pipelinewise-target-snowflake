@@ -408,7 +408,7 @@ class DbSync:
         for k, v in {
             "{stream}": stream,
             "{timecode}": datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f"),
-            "{ext}": ".".join(file.split("/")[-1].split(".")[1:])
+            "{ext}": ".".join(file.replace("\\", "/").split("/")[-1].split(".")[1:])
         }.items():
             if k in s3_file_name:
                 s3_file_name = s3_file_name.replace(k, v)

@@ -416,7 +416,6 @@ def flush_records(stream, records_to_load, row_count, db_sync, temp_dir=None,
     if temp_dir:
         os.makedirs(temp_dir, exist_ok=True)
     record_to_csv_line_transformer = db_sync.record_to_csv_line
-    with_header = retain_s3_files
     # Using gzip or plain file object
     if no_compression:
         csv_fd, csv_file = mkstemp(suffix='.csv', prefix='records_', dir=temp_dir)
