@@ -1057,16 +1057,17 @@ class TestIntegration(unittest.TestCase):
                                  f"WHERE query_tag like '%PPW test tap run at {current_time}%'"
                                  "GROUP BY query_tag "
                                  "ORDER BY 1")
+        target_schema = self.config['default_target_schema']
         self.assertEqual(result, [{
-            'QUERY_TAG': f'PPW test tap run at {current_time}. Loading into test_pk.test_pk."TEST_TABLE_ONE"',
+            'QUERY_TAG': f'PPW test tap run at {current_time}. Loading into {target_schema}."TEST_TABLE_ONE"',
             'QUERIES': 12
             },
             {
-            'QUERY_TAG': f'PPW test tap run at {current_time}. Loading into test_pk.test_pk."TEST_TABLE_THREE"',
+            'QUERY_TAG': f'PPW test tap run at {current_time}. Loading into {target_schema}."TEST_TABLE_THREE"',
             'QUERIES': 10
             },
             {
-            'QUERY_TAG': f'PPW test tap run at {current_time}. Loading into test_pk.test_pk."TEST_TABLE_TWO"',
+            'QUERY_TAG': f'PPW test tap run at {current_time}. Loading into {target_schema}."TEST_TABLE_TWO"',
             'QUERIES': 10
             },
             {

@@ -366,7 +366,7 @@ class DbSync:
                 'QUOTED_IDENTIFIERS_IGNORE_CASE': 'FALSE',
                 'QUERY_TAG': create_query_tag(self.connection_config.get('query_tag'),
                                               schema=self.schema_name,
-                                              table=self.table_name(stream, False))
+                                              table=self.table_name(stream, False, True))
             }
         )
 
