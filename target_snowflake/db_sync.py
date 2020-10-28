@@ -190,6 +190,39 @@ def stream_name_to_dict(stream_name, separator='-'):
         'table_name': table_name
     }
 
+
+def create_query_tag(query_tag_pattern: str, schema: str = None, table: str = None) -> str:
+    """
+    Generate a string to tag executed queries in Snowflake.
+    Replaces tokens `schema` and `table` with the appropriate values.
+
+    Example with tokens:
+        'Loading data into {schema}.{table}'
+
+    Args:
+        query_tag_pattern:
+        schema: optional value to replace {schema} token in query_tag_pattern
+        table: optional value to replace {table} token in query_tag_pattern
+
+    Returns:
+        String if query_tag_patter defined otherwise None
+    """
+    if not query_tag_pattern:
+        return None
+
+    query_tag = query_tag_pattern
+
+    # replace tokens
+    for k, v in {
+        '{schema}': schema or 'unknown-schema',
+        '{table}': table or 'unknown-table'
+    }.items():
+        if k in query_tag:
+            query_tag = query_tag.replace(k, v)
+
+    return query_tag
+
+
 # pylint: disable=too-many-public-methods,too-many-instance-attributes
 class DbSync:
     def __init__(self, connection_config, stream_schema_message=None, table_cache=None):
@@ -317,6 +350,10 @@ class DbSync:
                                   endpoint_url=config.get('s3_endpoint_url'))
 
     def open_connection(self):
+        stream = None
+        if self.stream_schema_message:
+            stream = self.stream_schema_message['stream']
+
         return snowflake.connector.connect(
             user=self.connection_config['user'],
             password=self.connection_config['password'],
@@ -326,7 +363,10 @@ class DbSync:
             autocommit=True,
             session_parameters={
                 # Quoted identifiers should be case sensitive
-                'QUOTED_IDENTIFIERS_IGNORE_CASE': 'FALSE'
+                'QUOTED_IDENTIFIERS_IGNORE_CASE': 'FALSE',
+                'QUERY_TAG': create_query_tag(self.connection_config.get('query_tag'),
+                                              schema=self.schema_name,
+                                              table=self.table_name(stream, False, True))
             }
         )
 
@@ -357,6 +397,9 @@ class DbSync:
         return result
 
     def table_name(self, stream_name, is_temporary, without_schema = False):
+        if not stream_name:
+            return None
+
         stream_dict = stream_name_to_dict(stream_name)
         table_name = stream_dict['table_name']
         sf_table_name = table_name.replace('.', '_').replace('-', '_').lower()

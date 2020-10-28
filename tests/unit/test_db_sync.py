@@ -355,3 +355,13 @@ class TestDBSync(unittest.TestCase):
         for idx, (should_use_flatten_schema, record, expected_output) in enumerate(test_cases):
             output = flatten_record(record, flatten_schema if should_use_flatten_schema else None)
             self.assertEqual(output, expected_output, f"Test {idx} failed. Testcase: {test_cases[idx]}")
+
+    def test_create_query_tag(self):
+        assert db_sync.create_query_tag(None) is None
+        assert db_sync.create_query_tag('This is a test query tag') == 'This is a test query tag'
+        assert db_sync.create_query_tag('Loading into {schema}.{table}',
+                                        schema='test_schema',
+                                        table='test_table') == 'Loading into test_schema.test_table'
+        assert db_sync.create_query_tag('Loading into {schema}.{table}',
+                                        schema=None,
+                                        table=None) == 'Loading into unknown-schema.unknown-table'
