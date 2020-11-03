@@ -216,7 +216,6 @@ class DbSync:
 
         # Validate connection configuration
         config_errors = validate_config(connection_config)
-
         # Exit if config has errors
         if len(config_errors) > 0:
             logger.error("Invalid configuration:\n   * {}".format("\n   * ".join(config_errors)))
@@ -475,6 +474,7 @@ class DbSync:
     def load_csv(self, s3_key, count):
         stream_schema_message = self.stream_schema_message
         stream = stream_schema_message["stream"]
+
         logger.info("Loading {} rows into '{}'".format(count, self.table_name(stream, False)))
 
         # Get list if columns with types
@@ -503,7 +503,12 @@ class DbSync:
                 )
                 cur.execute(copy_sql)
                 # Insert or Update with MERGE command if primary key defined
-                if len(self.stream_schema_message["key_properties"]) > 0:
+                if not self.stream_schema_message.get("bookmark_properties"):
+                    logger.info(f"{stream} does not use bookmarking, swapping tables")
+                    cur.execute(
+                        "alter table {0}_tmp swap with {0}".format(self.table_name(stream, False))
+                    )
+                elif len(self.stream_schema_message["key_properties"]) > 0:
                     table_name = self.table_name(stream, False)
                     queries = list()
                     queries.append(
@@ -523,25 +528,6 @@ class DbSync:
                         )
                     )
                     self.query(queries)
-                    merge_sql = """MERGE INTO {0} t
-                        USING {0}_tmp s
-                        ON {1}
-                        WHEN MATCHED THEN
-                            UPDATE SET {2}
-                        WHEN NOT MATCHED THEN
-                            INSERT ({3})
-                            VALUES ({4})
-                    """.format(
-                        self.table_name(stream, False),
-                        self.primary_key_merge_condition(),
-                        ", ".join(
-                            ["{}=s.{}".format(c["name"], c["name"]) for c in columns_with_trans]
-                        ),
-                        ", ".join([c["name"] for c in columns_with_trans]),
-                        ", ".join(["s.{}".format(c["name"]) for c in columns_with_trans]),
-                    )
-                    # logger.debug("SNOWFLAKE - {}".format(merge_sql))
-                    # cur.execute(merge_sql)
                 # Insert only with COPY command if no primary key
                 else:
                     logger.info("No primary keys, swapping tables")
