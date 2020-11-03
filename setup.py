@@ -22,7 +22,7 @@ setup(
         "idna==2.8",
         "singer-python==5.9.0",
         "snowflake-connector-python==2.1.1",
-        "boto3==1.10.44",
+        "boto3==1.10.45",
         "botocore==1.13.44",
         "inflection==0.3.1",
         "joblib==0.14.1",
