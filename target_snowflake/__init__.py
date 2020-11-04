@@ -167,10 +167,11 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
                 records_to_load[stream][primary_key_string] = o["record"]
 
             if row_count[stream] >= batch_size_rows:
-                if stream not in tables_created:
-                    stream_to_sync[stream].create_targets()
-                    tables_created.append(stream)
-                # flush all streams, delete records if needed, reset counts and then emit current state
+                for stream in records_to_load.keys():
+                    if stream not in tables_created:
+                        stream_to_sync[stream].create_targets()
+                        tables_created.append(stream)
+                    # flush all streams, delete records if needed, reset counts and then emit current state
                 flush_all_streams(records_to_load, row_count, stream_to_sync, config)
                 # emit last encountered state
                 emit_state(state)
@@ -189,9 +190,10 @@ def persist_lines(config, lines, information_schema_cache=None) -> None:
             # if same stream has been encountered again, it means the schema might have been altered
             # so previous records need to be flushed
             if row_count.get(stream, 0) > 0:
-                if stream not in tables_created:
-                    stream_to_sync[stream].create_targets()
-                    tables_created.append(stream)
+                for stream in records_to_load.keys():
+                    if stream not in tables_created:
+                        stream_to_sync[stream].create_targets()
+                        tables_created.append(stream)
 
                 flush_all_streams(records_to_load, row_count, stream_to_sync, config)
                 # emit latest encountered state
