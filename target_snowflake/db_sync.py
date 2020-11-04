@@ -471,11 +471,19 @@ class DbSync:
             )
             self.query([delete, insert])
 
-    def load_csv(self, s3_key, count):
+    def create_targets(self):
         stream_schema_message = self.stream_schema_message
         stream = stream_schema_message["stream"]
+        table_name = self.table_name(stream, False)
+        logger.info(f"Creating target {table_name}_tmp")
+        with self.open_connection() as connection:
+            with connection.cursor(snowflake.connector.DictCursor) as cur:
+                cur.execute(f"drop table if exists {table_name}_tmp")
+                cur.execute(f"create or replace table {table_name}_tmp like {table_name}")
 
-        logger.info("Loading {} rows into '{}'".format(count, self.table_name(stream, False)))
+    def finalize_table(self):
+        stream_schema_message = self.stream_schema_message
+        stream = stream_schema_message["stream"]
 
         # Get list if columns with types
         columns_with_trans = [
@@ -485,23 +493,6 @@ class DbSync:
 
         with self.open_connection() as connection:
             with connection.cursor(snowflake.connector.DictCursor) as cur:
-                cur.execute("drop table if exists {}_tmp".format(self.table_name(stream, False)))
-                cur.execute(
-                    "create or replace table {0}_tmp like {0}".format(
-                        self.table_name(stream, False)
-                    )
-                )
-                copy_sql = """COPY INTO {}_tmp ({}) FROM @{}/{}
-                        FILE_FORMAT = (format_name='{}')
-                        ON_ERROR = CONTINUE
-                    """.format(
-                    self.table_name(stream, False),
-                    ", ".join([c["name"] for c in columns_with_trans]),
-                    self.connection_config["stage"],
-                    s3_key,
-                    self.connection_config["file_format"],
-                )
-                cur.execute(copy_sql)
                 # Insert or Update with MERGE command if primary key defined
                 if not self.stream_schema_message.get("bookmark_properties"):
                     logger.info(f"{stream} does not use bookmarking, swapping tables")
@@ -540,6 +531,32 @@ class DbSync:
                         self.table_name(stream, False), cur.fetchall()
                     )
                 )
+
+    def load_csv(self, s3_key, count):
+        stream_schema_message = self.stream_schema_message
+        stream = stream_schema_message["stream"]
+
+        logger.info("Loading {} rows into '{}'".format(count, self.table_name(stream, False)))
+
+        # Get list if columns with types
+        columns_with_trans = [
+            {"name": safe_column_name(name), "trans": column_trans(name, schema)}
+            for (name, schema) in self.flatten_schema.items()
+        ]
+
+        with self.open_connection() as connection:
+            with connection.cursor(snowflake.connector.DictCursor) as cur:
+                copy_sql = """COPY INTO {}_tmp ({}) FROM @{}/{}
+                        FILE_FORMAT = (format_name='{}')
+                        ON_ERROR = CONTINUE
+                    """.format(
+                    self.table_name(stream, False),
+                    ", ".join([c["name"] for c in columns_with_trans]),
+                    self.connection_config["stage"],
+                    s3_key,
+                    self.connection_config["file_format"],
+                )
+                cur.execute(copy_sql)
 
     def primary_key_merge_condition(self):
         stream_schema_message = self.stream_schema_message
