@@ -13,6 +13,7 @@ from target_snowflake.db_sync import DbSync
 from target_snowflake.s3_upload_client import S3UploadClient
 
 from snowflake.connector.errors import ProgrammingError
+from snowflake.connector.errors import DatabaseError
 
 try:
     import tests.utils as test_utils
@@ -1087,3 +1088,15 @@ class TestIntegration(unittest.TestCase):
         self.persist_lines_with_cache(tap_lines)
 
         self.assert_three_streams_are_into_snowflake()
+
+    def test_custom_role(self):
+        """Test if custom role can be used"""
+        tap_lines = test_utils.get_test_tap_lines('messages-with-three-streams.json')
+
+        # Set custom role
+        self.config['role'] = 'invalid-not-existing-role'
+
+        # Using not existing or not authorized role should raise snowflake Database exception:
+        # 250001 (08001): Role 'INVALID-ROLE' specified in the connect string does not exist or not authorized.
+        with assert_raises(DatabaseError):
+            self.persist_lines_with_cache(tap_lines)

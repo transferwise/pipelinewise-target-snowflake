@@ -370,6 +370,7 @@ class DbSync:
             account=self.connection_config['account'],
             database=self.connection_config['dbname'],
             warehouse=self.connection_config['warehouse'],
+            role=self.connection_config.get('role', None),
             autocommit=True,
             session_parameters={
                 # Quoted identifiers should be case sensitive
