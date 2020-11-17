@@ -136,6 +136,7 @@ Full list of options in `config.json`:
 | user                                | String  | Yes        | Snowflake User                                                |
 | password                            | String  | Yes        | Snowflake Password                                            |
 | warehouse                           | String  | Yes        | Snowflake virtual warehouse name                              |
+| role                                | String  | No         | Snowflake role to use. If not defined then the user's default role will be used |
 | aws_access_key_id                   | String  | No         | S3 Access Key Id. If not provided, `AWS_ACCESS_KEY_ID` environment variable or IAM role will be used |
 | aws_secret_access_key               | String  | No         | S3 Secret Access Key. If not provided, `AWS_SECRET_ACCESS_KEY` environment variable or IAM role will be used |
 | aws_session_token                   | String  | No         | AWS Session token. If not provided, `AWS_SESSION_TOKEN` environment variable will be used |
