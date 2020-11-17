@@ -1,11 +1,7 @@
 import os
-import boto3
-import datetime
-import snowflake.connector
 
 from singer import get_logger
-from snowflake.connector.encryption_util import SnowflakeEncryptionUtil
-from snowflake.connector.remote_storage_util import SnowflakeFileEncryptionMaterial
+
 
 class SnowflakeUploadClient: 
      
@@ -31,11 +27,9 @@ class SnowflakeUploadClient:
 
         return key
 
-
     def delete_object(self, stream, key):
         self.logger.info("Deleting {} from internal snowflake stage".format(key))
         stage = self.dbLink.get_stage_name(stream)
 
         with self.dbLink.open_connection() as connection:
             connection.cursor().execute(f"REMOVE '@{stage}/{key}'")
-

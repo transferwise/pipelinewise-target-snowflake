@@ -5,13 +5,13 @@ from singer import get_logger
 from snowflake.connector.encryption_util import SnowflakeEncryptionUtil
 from snowflake.connector.remote_storage_util import SnowflakeFileEncryptionMaterial
 
+
 class S3UploadClient: 
      
     def __init__(self, connection_config):
         self.connection_config = connection_config
         self.logger = get_logger('target_snowflake')
         self.s3 = self.create_s3_client()
-
 
     def create_s3_client(self, config=None):
         if not config:
