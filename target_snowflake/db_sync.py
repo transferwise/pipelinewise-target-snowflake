@@ -1,21 +1,17 @@
-import os
 import json
 import sys
-import boto3
 import snowflake.connector
 import collections
 import inflection
 import re
 import itertools
 import time
-import datetime
 
 from singer import get_logger
-from snowflake.connector.encryption_util import SnowflakeEncryptionUtil
-from snowflake.connector.remote_storage_util import SnowflakeFileEncryptionMaterial
 
 from target_snowflake.s3_upload_client import S3UploadClient
 from target_snowflake.snowflake_upload_client import SnowflakeUploadClient
+
 
 class TooManyRecordsException(Exception):
     """Exception to raise when query returns more records than max_records"""
@@ -145,7 +141,7 @@ def flatten_schema(d, parent_key=[], sep='__', level=0, max_level=0):
         new_key = flatten_key(k, parent_key, sep)
         if 'type' in v.keys():
             if 'object' in v['type'] and 'properties' in v and level < max_level:
-                items.extend(flatten_schema(v, parent_key + [k], sep=sep, level=level+1, max_level=max_level).items())
+                items.extend(flatten_schema(v, parent_key + [k], sep=sep, level=level + 1, max_level=max_level).items())
             else:
                 items.append((new_key, v))
         else:
@@ -168,22 +164,26 @@ def flatten_schema(d, parent_key=[], sep='__', level=0, max_level=0):
 
     return dict(sorted_items)
 
+
 def _should_json_dump_value(key, value, flatten_schema=None):
     if isinstance(value, (dict, list)):
         return True
 
-    if flatten_schema and key in flatten_schema and 'type' in flatten_schema[key] and set(flatten_schema[key]['type']) == {'null', 'object', 'array'}:
+    if flatten_schema and key in flatten_schema and 'type' in flatten_schema[key] and set(
+            flatten_schema[key]['type']) == {'null', 'object', 'array'}:
         return True
 
     return False
 
-#pylint: disable-msg=too-many-arguments
+
+# pylint: disable-msg=too-many-arguments
 def flatten_record(d, flatten_schema=None, parent_key=[], sep='__', level=0, max_level=0):
     items = []
     for k, v in d.items():
         new_key = flatten_key(k, parent_key, sep)
         if isinstance(v, collections.MutableMapping) and level < max_level:
-            items.extend(flatten_record(v, flatten_schema, parent_key + [k], sep=sep, level=level+1, max_level=max_level).items())
+            items.extend(flatten_record(v, flatten_schema, parent_key + [k], sep=sep, level=level + 1,
+                                        max_level=max_level).items())
         else:
             items.append((new_key, json.dumps(v) if _should_json_dump_value(k, v, flatten_schema) else v))
 
@@ -192,6 +192,7 @@ def flatten_record(d, flatten_schema=None, parent_key=[], sep='__', level=0, max
 
 def primary_column_names(stream_schema_message):
     return [safe_column_name(p) for p in stream_schema_message['key_properties']]
+
 
 def stream_name_to_dict(stream_name, separator='-'):
     catalog_name = None
@@ -321,7 +322,10 @@ class DbSync:
                 self.schema_name = config_default_target_schema
 
             if not self.schema_name:
-                raise Exception("Target schema name not defined in config. Neither 'default_target_schema' (string) nor 'schema_mapping' (object) defines target schema for {} stream.".format(stream_name))
+                raise Exception(
+                    "Target schema name not defined in config. "
+                    "Neither 'default_target_schema' (string) nor 'schema_mapping' (object) defines "
+                    "target schema for {} stream.".format(stream_name))
 
             #  Define grantees
             #  ---------------
@@ -341,12 +345,19 @@ class DbSync:
             #                                                           }
             self.grantees = self.connection_config.get('default_target_schema_select_permissions')
             if config_schema_mapping and stream_schema_name in config_schema_mapping:
-                self.grantees = config_schema_mapping[stream_schema_name].get('target_schema_select_permissions', self.grantees)
+                self.grantees = config_schema_mapping[stream_schema_name].get('target_schema_select_permissions',
+                                                                              self.grantees)
 
             self.data_flattening_max_level = self.connection_config.get('data_flattening_max_level', 0)
-            self.flatten_schema = flatten_schema(stream_schema_message['schema'], max_level=self.data_flattening_max_level)
+            self.flatten_schema = flatten_schema(stream_schema_message['schema'],
+                                                 max_level=self.data_flattening_max_level)
 
-        self.uploadClient = S3UploadClient(connection_config) if connection_config.get('s3_bucket', None) else SnowflakeUploadClient(connection_config, self) 
+        # Use external stage
+        if connection_config.get('s3_bucket', None):
+            self.uploadClient = S3UploadClient(connection_config)
+        # Use table stage
+        else:
+            self.uploadClient = SnowflakeUploadClient(connection_config, self)
 
     def open_connection(self):
         stream = None
@@ -395,7 +406,7 @@ class DbSync:
 
         return result
 
-    def table_name(self, stream_name, is_temporary, without_schema = False):
+    def table_name(self, stream_name, is_temporary, without_schema=False):
         if not stream_name:
             return None
 
@@ -418,7 +429,8 @@ class DbSync:
         try:
             key_props = [str(flatten[p]) for p in self.stream_schema_message['key_properties']]
         except Exception as exc:
-            self.logger.error("Cannot find {} primary key(s) in record: {}".format(self.stream_schema_message['key_properties'],
+            self.logger.error(
+                "Cannot find {} primary key(s) in record: {}".format(self.stream_schema_message['key_properties'],
                                                                      flatten))
             raise exc
         return ','.join(key_props)
@@ -428,7 +440,8 @@ class DbSync:
 
         return ','.join(
             [
-                json.dumps(flatten[name], ensure_ascii=False) if name in flatten and (flatten[name] == 0 or flatten[name]) else ''
+                json.dumps(flatten[name], ensure_ascii=False) if name in flatten and (
+                            flatten[name] == 0 or flatten[name]) else ''
                 for name in self.flatten_schema
             ]
         )
@@ -443,12 +456,11 @@ class DbSync:
 
     def get_stage_name(self, stream):
         stage = self.connection_config.get('stage', None)
-        if stage: 
+        if stage:
             return stage
-        
+
         table_name = self.table_name(stream, False, without_schema=True)
         return f"{self.schema_name}.%{table_name}"
-        
 
     def load_csv(self, s3_key, count, size_bytes):
         stream_schema_message = self.stream_schema_message
@@ -484,7 +496,8 @@ class DbSync:
                             VALUES ({})
                     """.format(
                         self.table_name(stream, False),
-                        ', '.join(["{}(${}) {}".format(c['trans'], i + 1, c['name']) for i, c in enumerate(columns_with_trans)]),
+                        ', '.join(["{}(${}) {}".format(c['trans'], i + 1, c['name']) for i, c in
+                                   enumerate(columns_with_trans)]),
                         self.get_stage_name(stream),
                         s3_key,
                         self.connection_config['file_format'],
@@ -753,7 +766,10 @@ class DbSync:
         self.query(drop_column)
 
     def version_column(self, column_name, stream):
-        version_column = "ALTER TABLE {} RENAME COLUMN {} TO \"{}_{}\"".format(self.table_name(stream, False), column_name, column_name.replace("\"",""), time.strftime("%Y%m%d_%H%M"))
+        version_column = "ALTER TABLE {} RENAME COLUMN {} TO \"{}_{}\"".format(self.table_name(stream, False),
+                                                                               column_name,
+                                                                               column_name.replace("\"", ""),
+                                                                               time.strftime("%Y%m%d_%H%M"))
         self.logger.info('Dropping column: {}'.format(version_column))
         self.query(version_column)
 
