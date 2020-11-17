@@ -1076,3 +1076,14 @@ class TestIntegration(unittest.TestCase):
             'QUERIES': 4
             }
         ])
+
+    def test_table_stage(self):
+        """Test if data can be loaded via table stages"""
+        tap_lines = test_utils.get_test_tap_lines('messages-with-three-streams.json')
+
+        # Set s3_bucket and stage to None to use table stages
+        self.config['s3_bucket'] = None
+        self.config['stage'] = None
+        self.persist_lines_with_cache(tap_lines)
+
+        self.assert_three_streams_are_into_snowflake()

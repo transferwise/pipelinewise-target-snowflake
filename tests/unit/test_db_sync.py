@@ -37,11 +37,7 @@ class TestDBSync(unittest.TestCase):
             'user': "dummy-value",
             'password': "dummy-value",
             'warehouse': "dummy-value",
-            'aws_access_key_id': "dummy-value",
-            'aws_secret_access_key': "dummy-value",
-            's3_bucket': "dummy-value",
             'default_target_schema': "dummy-value",
-            'stage': "dummy-value",
             'file_format': "dummy-value"
         }
 
@@ -51,7 +47,7 @@ class TestDBSync(unittest.TestCase):
         # Empty configuration should fail - (nr_of_errors >= 0)
         self.assertGreater(len(validator(empty_config)), 0)
 
-        # Minimal configuratino should pass - (nr_of_errors == 0)
+        # Minimal configuration should pass - (nr_of_errors == 0)
         self.assertEqual(len(validator(minimal_config)), 0)
 
         # Configuration without schema references - (nr_of_errors >= 0)
@@ -68,6 +64,22 @@ class TestDBSync(unittest.TestCase):
             }
         }
         self.assertEqual(len(validator(config_with_schema_mapping)), 0)
+
+        # Configuration with external stage
+        config_with_external_stage = minimal_config.copy()
+        config_with_external_stage['s3_bucket'] = 'dummy-value'
+        config_with_external_stage['stage'] = 'dummy-value'
+        self.assertEqual(len(validator(config_with_external_stage)), 0)
+
+        # Configuration with invalid stage: Only s3_bucket defined - (nr_of_errors >= 0)
+        config_with_external_stage = minimal_config.copy()
+        config_with_external_stage['s3_bucket'] = 'dummy-value'
+        self.assertGreater(len(validator(config_with_external_stage)), 0)
+
+        # Configuration with invalid stage: Only stage defined - (nr_of_errors >= 0)
+        config_with_external_stage = minimal_config.copy()
+        config_with_external_stage['stage'] = 'dummy-value'
+        self.assertGreater(len(validator(config_with_external_stage)), 0)
 
     def test_column_type_mapping(self):
         """Test JSON type to Snowflake column type mappings"""
