@@ -54,27 +54,14 @@ It's reading incoming messages from STDIN and using the properites in `config.js
 
 You need to create a few objects in snowflake in one schema before start using this target.
 
-1. Create a named external stage object on S3. This will be used to upload the CSV files to S3 and to MERGE data into snowflake tables.
-
-```
-CREATE STAGE {database}.{schema}.{stage_name}
-url='s3://{s3_bucket}'
-credentials=(AWS_KEY_ID='{aws_key_id}' AWS_SECRET_KEY='{aws_secret_key}')
-encryption=(MASTER_KEY='{client_side_encryption_master_key}');
-```
-
-The `encryption` option is optional and used for client side encryption. If you want client side encryption enabled you'll need
-to define the same master key in the target `config.json`. Furhter details below in the Configuration settings section.
-Instead of `credentials` you can also use `storage_integration`.
-
-2. Create a named file format. This will be used by the MERGE/COPY commands to parse the CSV files correctly from S3:
+1. Create a named file format. This will be used by the MERGE/COPY commands to parse the CSV files correctly from S3:
 
 ```
 CREATE FILE FORMAT {database}.{schema}.{file_format_name}
 TYPE = 'CSV' ESCAPE='\\' FIELD_OPTIONALLY_ENCLOSED_BY='"';
 ```
 
-3. Create a Role with all the required permissions:
+2. Create a Role with all the required permissions:
 
 ```
 CREATE OR REPLACE ROLE ppw_target_snowflake;
@@ -82,7 +69,6 @@ GRANT USAGE ON DATABASE {database} TO ROLE ppw_target_snowflake;
 GRANT CREATE SCHEMA ON DATABASE {database} TO ROLE ppw_target_snowflake;
 
 GRANT USAGE ON SCHEMA {database}.{schema} TO role ppw_target_snowflake;
-GRANT USAGE ON STAGE {database}.{schema}.{stage_name} TO ROLE ppw_target_snowflake;
 GRANT USAGE ON FILE FORMAT {database}.{schema}.{file_format_name} TO ROLE ppw_target_snowflake;
 GRANT USAGE ON WAREHOUSE {warehouse} TO ROLE ppw_target_snowflake;
 ```
@@ -90,7 +76,7 @@ GRANT USAGE ON WAREHOUSE {warehouse} TO ROLE ppw_target_snowflake;
 Replace `database`, `schema`, `warehouse`, `stage_name` and `file_format_name`
 between `{` and `}` characters to the actual values from point 1 and 2.
 
-4. Create a user and grant permission to the role:
+3. Create a user and grant permission to the role:
 ```
 CREATE OR REPLACE USER {user}
 PASSWORD = '{password}'
@@ -102,6 +88,27 @@ GRANT ROLE ppw_target_snowflake TO USER {user};
 ```
 
 Replace `warehouse` between `{` and `}` characters to the actual values from point 3.
+
+4. **Optional external stage**:
+
+By default [table stages](https://docs.snowflake.com/en/user-guide/data-load-local-file-system-create-stage.html#table-stages) are used to load data into snowflake tables. If you want to use external stages with s3 or s3 compatible storage engines then you need to create a STAGE object:
+
+```
+CREATE STAGE {database}.{schema}.{stage_name}
+url='s3://{s3_bucket}'
+credentials=(AWS_KEY_ID='{aws_key_id}' AWS_SECRET_KEY='{aws_secret_key}')
+encryption=(MASTER_KEY='{client_side_encryption_master_key}');
+
+GRANT USAGE ON STAGE {database}.{schema}.{stage_name} TO ROLE ppw_target_snowflake;
+```
+
+Notes:
+* To use external stages you need to define `s3_bucket` and `stage` values in `config.json` as well.
+* The `encryption` option is optional and used for client side encryption.
+* If you want client side encryption enabled you need to define the same master key in the target `config.json`.
+* Instead of `credentials` you can also use [storage_integration](https://docs.snowflake.com/en/sql-reference/sql/create-storage-integration.html)
+
+Further details below in the Configuration settings section.
 
 ### Configuration settings
 
@@ -115,8 +122,6 @@ Running the the target connector requires a `config.json` file. Example with the
      "user": "my_user",
      "password": "password",
      "warehouse": "my_virtual_warehouse",
-     "s3_bucket": "bucket_name",
-     "stage": "snowflake_external_stage_object_name",
      "file_format": "snowflake_file_format_object_name",
      "default_target_schema": "my_target_schema"
    }
@@ -135,12 +140,12 @@ Full list of options in `config.json`:
 | aws_secret_access_key               | String  | No         | S3 Secret Access Key. If not provided, `AWS_SECRET_ACCESS_KEY` environment variable or IAM role will be used |
 | aws_session_token                   | String  | No         | AWS Session token. If not provided, `AWS_SESSION_TOKEN` environment variable will be used |
 | aws_profile                         | String  | No         | AWS profile name for profile based authentication. If not provided, `AWS_PROFILE` environment variable will be used. |
-| s3_bucket                           | String  | No         | S3 Bucket name. Required if to use S3 External stage ß                                            |
+| s3_bucket                           | String  | No         | S3 Bucket name. Required if to use S3 External stage. When this is defined then `stage` has to be defined as well. |                                            |
 | s3_key_prefix                       | String  | No         | (Default: None) A static prefix before the generated S3 key names. Using prefixes you can upload files into specific directories in the S3 bucket. |
 | s3_endpoint_url                     | String  | No         | The complete URL to use for the constructed client. This is allowing to use non-native s3 account. |
 | s3_region_name                      | String  | No         | Default region when creating new connections |
 | s3_acl                              | String  | No         | S3 ACL name to set on the uploaded files                                                   |
-| stage                               | String  | No         | Named external stage name created at pre-requirements section. Has to be a fully qualified name including the schema name. If not specified, table internal stage are used |
+| stage                               | String  | No         | Named external stage name created at pre-requirements section. Has to be a fully qualified name including the schema name. If not specified, table internal stage are used. When this is defined then `s3_bucket` has to be defined as well. |
 | file_format                         | String  | Yes        | Named file format name created at pre-requirements section. Has to be a fully qualified name including the schema name. |
 | batch_size_rows                     | Integer |            | (Default: 100000) Maximum number of rows in each batch. At the end of each batch, the rows in the batch are loaded into Snowflake. |
 | flush_all_streams                   | Boolean |            | (Default: False) Flush and load every stream into Snowflake when one batch is full. Warning: This may trigger the COPY command to use files with low number of records, and may cause performance problems. |
@@ -159,7 +164,6 @@ Full list of options in `config.json`:
 | validate_records                    | Boolean |            | (Default: False) Validate every single record message to the corresponding JSON schema. This option is disabled by default and invalid RECORD messages will fail only at load time by Snowflake. Enabling this option will detect invalid records earlier but could cause performance degradation. |
 | temp_dir                            | String  |            | (Default: platform-dependent) Directory of temporary CSV files with RECORD messages. |
 | no_compression                      | Boolean |            | (Default: False) Generate uncompressed CSV files when loading to Snowflake. Normally, by default GZIP compressed files are generated. |
-| query_tag                           | String  |            | (Default: None) Optional string to tag executed queries in Snowflake. Replaces tokens `schema` and `table` with the appropriate values. The tags are displayed in the output of the Snowflake `QUERY_HISTORY`, `QUERY_HISTORY_BY_*` functions. |
 
 ### To run tests:
 
