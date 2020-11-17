@@ -44,13 +44,23 @@ def validate_config(config):
         'file_format'
     ]
 
-    required_config_keys = s3_required_config_keys if  config.get('s3_bucket', None) else snowflake_required_config_keys
+    required_config_keys = []
+
+    # Use external stages if both s3_bucket and stage defined
+    if config.get('s3_bucket', None) and config.get('stage', None):
+        required_config_keys = s3_required_config_keys
+    # Use table stage if none s3_bucket and stage defined
+    elif not config.get('s3_bucket', None) and not config.get('stage', None):
+        required_config_keys = snowflake_required_config_keys
+    else:
+        errors.append("Only one of 's3_bucket' or 'stage' keys defined in config. "
+                      "Use both of them if you want to use an external stage when loading data into snowflake "
+                      "or don't use any of them if you want ot use table stages.")
+
     # Check if mandatory keys exist
     for k in required_config_keys:
         if not config.get(k, None):
             errors.append("Required key is missing from config: [{}]".format(k))
-    
-
 
     # Check target schema config
     config_default_target_schema = config.get('default_target_schema', None)
