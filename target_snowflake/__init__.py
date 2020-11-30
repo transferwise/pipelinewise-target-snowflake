@@ -365,7 +365,8 @@ def flush_streams(
             db_sync=stream_to_sync[stream],
             no_compression=config.get('no_compression'),
             delete_rows=config.get('hard_delete'),
-            temp_dir=config.get('temp_dir')
+            temp_dir=config.get('temp_dir'),
+            load_via_snowpipe=config.get('load_via_snowpipe')
         ) for stream in streams_to_flush)
 
     # reset flushed stream records to empty to avoid flushing same records
@@ -391,10 +392,10 @@ def flush_streams(
 
 
 def load_stream_batch(stream, records_to_load, row_count, db_sync, no_compression=False, delete_rows=False,
-                      temp_dir=None):
+                      temp_dir=None, load_via_snowpipe=False):
     # Load into snowflake
     if row_count[stream] > 0:
-        flush_records(stream, records_to_load, row_count[stream], db_sync, temp_dir, no_compression)
+        flush_records(stream, records_to_load, row_count[stream], db_sync, temp_dir, no_compression, load_via_snowpipe)
 
         # Delete soft-deleted, flagged rows - where _sdc_deleted at is not null
         if delete_rows:
@@ -410,7 +411,7 @@ def write_record_to_file(outfile, records_to_load, record_to_csv_line_transforme
         outfile.write(bytes(csv_line + '\n', 'UTF-8'))
 
 
-def flush_records(stream, records_to_load, row_count, db_sync, temp_dir=None, no_compression=False):
+def flush_records(stream, records_to_load, row_count, db_sync, temp_dir=None, no_compression=False, load_via_snowpipe=False):
     if temp_dir:
         os.makedirs(temp_dir, exist_ok=True)
     csv_fd, csv_file = mkstemp(suffix='.csv', prefix='records_', dir=temp_dir)
@@ -426,11 +427,16 @@ def flush_records(stream, records_to_load, row_count, db_sync, temp_dir=None, no
                 write_record_to_file(gzipfile, records_to_load, record_to_csv_line_transformer)
 
     size_bytes = os.path.getsize(csv_file)
-    s3_key = db_sync.put_to_stage(csv_file, stream, row_count, temp_dir=temp_dir)
-    db_sync.load_csv(s3_key, row_count, size_bytes)
 
-    os.remove(csv_file)
-    db_sync.delete_from_stage(stream, s3_key)
+    if load_via_snowpipe:
+        s3_key, s3_folder_name = db_sync.upload_to_stage(csv_file, stream, row_count, temp_dir=temp_dir)
+        db_sync.load_via_snowpipe(s3_key, s3_folder_name)
+        os.remove(csv_file)
+    else:
+        s3_key = db_sync.put_to_stage(csv_file, stream, row_count, temp_dir=temp_dir)
+        db_sync.load_csv(s3_key, row_count, size_bytes)
+        os.remove(csv_file)
+        db_sync.delete_from_stage(stream, s3_key)
 
 
 def main():

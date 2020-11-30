@@ -11,6 +11,7 @@ from singer import get_logger
 
 from target_snowflake.s3_upload_client import S3UploadClient
 from target_snowflake.snowflake_upload_client import SnowflakeUploadClient
+from target_snowflake.load_via_snowpipe import LoadViaSnowpipe
 
 
 class TooManyRecordsException(Exception):
@@ -353,7 +354,9 @@ class DbSync:
                                                  max_level=self.data_flattening_max_level)
 
         # Use external stage
-        if connection_config.get('s3_bucket', None):
+        if connection_config.get('load_via_snowpipe', None):
+            self.viaSnowpipe = LoadViaSnowpipe(connection_config, self)
+        elif connection_config.get('s3_bucket', None):
             self.uploadClient = S3UploadClient(connection_config)
         # Use table stage
         else:
@@ -446,6 +449,13 @@ class DbSync:
                 for name in self.flatten_schema
             ]
         )
+    def upload_to_stage(self, file, stream, count, temp_dir=None):
+        self.logger.info("Uploading {} rows to stage".format(count))
+        return self.viaSnowpipe.upload_file(file, stream, temp_dir)
+    
+    def load_via_snowpipe(self, s3_key, s3_folder_name):
+        self.logger.info('Loading the file via snowpipe')
+        return self.viaSnowpipe.load_via_snowpipe(self, s3_key, s3_folder_name)
 
     def put_to_stage(self, file, stream, count, temp_dir=None):
         self.logger.info("Uploading {} rows to stage".format(count))
