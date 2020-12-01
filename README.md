@@ -218,6 +218,25 @@ Full list of options in `config.json`:
   pylint target_snowflake -d C,W,unexpected-keyword-arg,duplicate-code
 ```
 
+## Developing the Target in Docker
+Docker simplifies the development workflow by pre-packaging dev requirements
+and removing environment complications. 
+
+To develop with docker:
+1. Copy the `.docker-env-example` as `.docker-env` and populate it with the needed
+   test credentials.
+2. Build the work container with 
+```
+docker build . -t ppw-snowflake-target
+```
+3. Now you can run your tests with `docker run --env-file .docker-env ppw-snowflake-target <command>`, where `<command>` is one of:
+* `test --unit` (runs unit tests)
+* `test --integration` (runs integration tests)
+* `test` (runs both unit and integration tests)
+* `lint` (runs pylint)
+
+You can also combine them, so `test --unit lint` will run unit tests and then lint your code. 
+
 ## License
 
 Apache License Version 2.0

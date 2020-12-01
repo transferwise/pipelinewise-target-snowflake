@@ -33,3 +33,4 @@ docs/_templates/
 
 # Environment
 .env
+.docker-env
