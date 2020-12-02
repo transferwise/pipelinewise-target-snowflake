@@ -239,8 +239,8 @@ def create_query_tag(query_tag_pattern: str, schema: str = None, table: str = No
 
     # replace tokens, taking care of json formatted value compatibility
     for k, v in {
-        '{schema}': json.dumps(schema)[1:-1] if schema else None,
-        '{table}': json.dumps(table)[1:-1] if table else None
+        '{schema}': json.dumps(schema.strip('"')).strip('"') if schema else None,
+        '{table}': json.dumps(table.strip('"')).strip('"') if table else None
     }.items():
         if k in query_tag:
             query_tag = query_tag.replace(k, v or '')
@@ -376,8 +376,8 @@ class DbSync:
                 # Quoted identifiers should be case sensitive
                 'QUOTED_IDENTIFIERS_IGNORE_CASE': 'FALSE',
                 'QUERY_TAG': create_query_tag(self.connection_config.get('query_tag'),
-                                              schema=self.schema_name.strip('"'),
-                                              table=self.table_name(stream, False, True).strip('"'))
+                                              schema=self.schema_name,
+                                              table=self.table_name(stream, False, True))
             }
         )
 
