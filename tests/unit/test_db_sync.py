@@ -383,6 +383,7 @@ class TestDBSync(unittest.TestCase):
         json_query_tag = db_sync.create_query_tag('{"schema": "{schema}", "table": "{table}"}',
                                                   schema='test_schema',
                                                   table='test_table')
+        # Load the generated JSON formatted query tag to make sure it's a valid JSON
         assert json.loads(json_query_tag) == {
             'schema': 'test_schema',
             'table': 'test_table'
@@ -392,6 +393,7 @@ class TestDBSync(unittest.TestCase):
         json_query_tag = db_sync.create_query_tag('{"schema": "{schema}", "table": "{table}"}',
                                                   schema='"test_schema"',
                                                   table='"test_table"')
+        # Load the generated JSON formatted query tag to make sure it's a valid JSON
         assert json.loads(json_query_tag) == {
             'schema': '"test_schema"',
             'table': '"test_table"'
