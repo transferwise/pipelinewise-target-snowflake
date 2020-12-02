@@ -1,4 +1,5 @@
 import unittest
+import json
 
 from target_snowflake import db_sync
 
@@ -376,4 +377,22 @@ class TestDBSync(unittest.TestCase):
                                         table='test_table') == 'Loading into test_schema.test_table'
         assert db_sync.create_query_tag('Loading into {schema}.{table}',
                                         schema=None,
-                                        table=None) == 'Loading into unknown-schema.unknown-table'
+                                        table=None) == 'Loading into .'
+
+        # JSON formatted query tags with variables
+        json_query_tag = db_sync.create_query_tag('{"schema": "{schema}", "table": "{table}"}',
+                                                  schema='test_schema',
+                                                  table='test_table')
+        assert json.loads(json_query_tag) == {
+            'schema': 'test_schema',
+            'table': 'test_table'
+        }
+
+        # JSON formatted query tags with quoted variables
+        json_query_tag = db_sync.create_query_tag('{"schema": "{schema}", "table": "{table}"}',
+                                                  schema='"test_schema"',
+                                                  table='"test_table"')
+        assert json.loads(json_query_tag) == {
+            'schema': '"test_schema"',
+            'table': '"test_table"'
+        }

@@ -237,13 +237,13 @@ def create_query_tag(query_tag_pattern: str, schema: str = None, table: str = No
 
     query_tag = query_tag_pattern
 
-    # replace tokens
+    # replace tokens, taking care of json formatted value compatibility
     for k, v in {
-        '{schema}': schema or 'unknown-schema',
-        '{table}': table or 'unknown-table'
+        '{schema}': json.dumps(schema)[1:-1] if schema else None,
+        '{table}': json.dumps(table)[1:-1] if table else None
     }.items():
         if k in query_tag:
-            query_tag = query_tag.replace(k, v)
+            query_tag = query_tag.replace(k, v or '')
 
     return query_tag
 
