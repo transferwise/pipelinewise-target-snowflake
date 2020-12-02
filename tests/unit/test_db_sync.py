@@ -389,6 +389,16 @@ class TestDBSync(unittest.TestCase):
             'table': 'test_table'
         }
 
+        # JSON formatted query tags with variables quotes in the middle
+        json_query_tag = db_sync.create_query_tag('{"schema": "{schema}", "table": "{table}"}',
+                                                  schema='test"schema',
+                                                  table='test"table')
+        # Load the generated JSON formatted query tag to make sure it's a valid JSON
+        assert json.loads(json_query_tag) == {
+            'schema': 'test"schema',
+            'table': 'test"table'
+        }
+
         # JSON formatted query tags with quoted variables
         json_query_tag = db_sync.create_query_tag('{"schema": "{schema}", "table": "{table}"}',
                                                   schema='"test_schema"',
