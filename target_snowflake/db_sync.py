@@ -216,7 +216,7 @@ def stream_name_to_dict(stream_name, separator='-'):
     }
 
 
-def create_query_tag(query_tag_pattern: str, schema: str = None, table: str = None) -> str:
+def create_query_tag(query_tag_pattern: str, database: str = None, schema: str = None, table: str = None) -> str:
     """
     Generate a string to tag executed queries in Snowflake.
     Replaces tokens `schema` and `table` with the appropriate values.
@@ -226,8 +226,9 @@ def create_query_tag(query_tag_pattern: str, schema: str = None, table: str = No
 
     Args:
         query_tag_pattern:
-        schema: optional value to replace {schema} token in query_tag_pattern
-        table: optional value to replace {table} token in query_tag_pattern
+        database: optional value to replace {{database}} token in query_tag_pattern
+        schema: optional value to replace {{schema}} token in query_tag_pattern
+        table: optional value to replace {{table}} token in query_tag_pattern
 
     Returns:
         String if query_tag_patter defined otherwise None
@@ -237,13 +238,14 @@ def create_query_tag(query_tag_pattern: str, schema: str = None, table: str = No
 
     query_tag = query_tag_pattern
 
-    # replace tokens
+    # replace tokens, taking care of json formatted value compatibility
     for k, v in {
-        '{schema}': schema or 'unknown-schema',
-        '{table}': table or 'unknown-table'
+        '{{database}}': json.dumps(database.strip('"')).strip('"') if database else None,
+        '{{schema}}': json.dumps(schema.strip('"')).strip('"') if schema else None,
+        '{{table}}': json.dumps(table.strip('"')).strip('"') if table else None
     }.items():
         if k in query_tag:
-            query_tag = query_tag.replace(k, v)
+            query_tag = query_tag.replace(k, v or '')
 
     return query_tag
 
@@ -376,6 +378,7 @@ class DbSync:
                 # Quoted identifiers should be case sensitive
                 'QUOTED_IDENTIFIERS_IGNORE_CASE': 'FALSE',
                 'QUERY_TAG': create_query_tag(self.connection_config.get('query_tag'),
+                                              database=self.connection_config['dbname'],
                                               schema=self.schema_name,
                                               table=self.table_name(stream, False, True))
             }

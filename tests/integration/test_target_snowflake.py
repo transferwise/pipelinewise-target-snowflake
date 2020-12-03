@@ -1050,7 +1050,8 @@ class TestIntegration(unittest.TestCase):
         current_time = datetime.datetime.now().strftime('%H:%M:%s')
 
         # Tag queries with dynamic schema and table tokens
-        self.config['query_tag'] = f'PPW test tap run at {current_time}. Loading into {{schema}}.{{table}}'
+        self.config['query_tag'] = f'PPW test tap run at {current_time}. ' \
+                                   f'Loading into {{{{database}}}}.{{{{schema}}}}.{{{{table}}}}'
         self.persist_lines_with_cache(tap_lines)
 
         # Get query tags from QUERY_HISTORY
@@ -1059,22 +1060,23 @@ class TestIntegration(unittest.TestCase):
                                  f"WHERE query_tag like '%PPW test tap run at {current_time}%'"
                                  "GROUP BY query_tag "
                                  "ORDER BY 1")
+        target_db = self.config['dbname']
         target_schema = self.config['default_target_schema']
         self.assertEqual(result, [{
-            'QUERY_TAG': f'PPW test tap run at {current_time}. Loading into {target_schema}."TEST_TABLE_ONE"',
+            'QUERY_TAG': f'PPW test tap run at {current_time}. Loading into {target_db}..',
+            'QUERIES': 4
+            },
+            {
+            'QUERY_TAG': f'PPW test tap run at {current_time}. Loading into {target_db}.{target_schema}.TEST_TABLE_ONE',
             'QUERIES': 12
             },
             {
-            'QUERY_TAG': f'PPW test tap run at {current_time}. Loading into {target_schema}."TEST_TABLE_THREE"',
+            'QUERY_TAG': f'PPW test tap run at {current_time}. Loading into {target_db}.{target_schema}.TEST_TABLE_THREE',
             'QUERIES': 10
             },
             {
-            'QUERY_TAG': f'PPW test tap run at {current_time}. Loading into {target_schema}."TEST_TABLE_TWO"',
+            'QUERY_TAG': f'PPW test tap run at {current_time}. Loading into {target_db}.{target_schema}.TEST_TABLE_TWO',
             'QUERIES': 10
-            },
-            {
-            'QUERY_TAG': f'PPW test tap run at {current_time}. Loading into unknown-schema.unknown-table',
-            'QUERIES': 4
             }
         ])
 
