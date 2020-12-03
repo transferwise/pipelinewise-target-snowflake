@@ -22,6 +22,7 @@ def get_db_config():
     config['default_target_schema'] = os.environ.get("TARGET_SNOWFLAKE_SCHEMA")
     config['stage'] = os.environ.get("TARGET_SNOWFLAKE_STAGE")
     config['file_format'] = os.environ.get("TARGET_SNOWFLAKE_FILE_FORMAT")
+    config['load_via_snowpipe'] = os.environ.get("TARGET_SNOWFLAKE_LOAD_VIA_SNOWPIPE")
 
     # AWS IAM and S3 bucket
     config['aws_access_key_id'] = os.environ.get('TARGET_SNOWFLAKE_AWS_ACCESS_KEY')
@@ -43,7 +44,7 @@ def get_db_config():
     config['hard_delete'] = None
     config['flush_all_streams'] = None
     config['validate_records'] = None
-
+    # breakpoint()
     return config
 
 

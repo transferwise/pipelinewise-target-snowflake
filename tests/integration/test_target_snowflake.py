@@ -39,7 +39,8 @@ class TestIntegration(unittest.TestCase):
 
         # Drop target schema
         if self.config['default_target_schema']:
-            snowflake.query("DROP SCHEMA IF EXISTS {}".format(self.config['default_target_schema']))
+            snowflake.query("SELECT COUNT(1) FROM {}.TEST_DATA;".format(self.config['default_target_schema']))
+            #snowflake.query("DROP SCHEMA IF EXISTS {}".format(self.config['default_target_schema']))
 
     def persist_lines(self, lines):
         """Loads singer messages into snowflake without table caching option"""
