@@ -14,7 +14,8 @@ from cryptography.hazmat.primitives.serialization import load_pem_private_key, \
     NoEncryption
 from cryptography.hazmat.backends import default_backend
 from target_snowflake.s3_upload_client import S3UploadClient
-# from target_snowflake import RecordValidationException
+from snowflake.connector.errors import ProgrammingError
+# from snowflake.connector import DictCursor
 class LoadViaSnowpipe: 
 
     def __init__(self, connection_config, dbLink):
@@ -31,7 +32,7 @@ class LoadViaSnowpipe:
             raise Exception("Cannot run load via snowpipe without s3 bucket")
         s3_folder_name = "{}/".format(self.dbLink.table_name(stream, None, True).lower().replace('"',''))
         if not s3_folder_name:
-            raise 
+            raise Exception("S3 folder name is empty")
         # BUG: // in prefix, s3_key_prefix already has /
         s3_key_prefix = "{}{}".format(self.connection_config.get('s3_key_prefix', ''),s3_folder_name)
         try:
@@ -53,28 +54,30 @@ class LoadViaSnowpipe:
         return s3_key
 
     def load_via_snowpipe(self,s3_key):
-        obj_name = self.s3_folder_name.replace('/','')
-        pipe_name = "{0}.{1}.{2}_s3pipe".format(self.connection_config['dbname'],self.schema_name,obj_name)
+        obj_name = getattr(self, 's3_folder_name', None).replace('/', '')
+        if not obj_name:
+            raise Exception("S3 folder name cannot be empty.")
+        pipe_name = "{0}.{1}.{2}_s3_pipe".format(self.connection_config['dbname'], self.dbLink.schema_name, obj_name)
 
         create_pipe_sql = """create pipe if not exists {0} as
                             copy into {1}.{2}.{3} from @{1}.{4}
                             file_format = (format_name =  {1}.{5} );""".format(
                                 pipe_name,
                                 self.connection_config['dbname'],
-                                self.schema_name,
+                                self.dbLink.schema_name,
                                 obj_name,
                                 self.connection_config['stage'],
                                 self.connection_config['file_format'])
-
+        breakpoint()
         pipe_status_sql = "select system$pipe_status('{}');".format(pipe_name)
 
-        with self.open_connection() as connection:
-            with connection.cursor(snowflake.connector.DictCursor) as cur:
+        with self.dbLink.open_connection() as connection:
+            with connection.cursor() as cur:
                 # Create snowpipe if it does not exist
                 try:
                     cur.execute(pipe_status_sql)
                     self.logger.info("""snowpipe "{}" already exists!!""".format(pipe_name))
-                except snowflake.connector.errors.ProgrammingError as excp:
+                except ProgrammingError as excp:
                     self.logger.info("""snowpipe "{}" does not exist. Creating...""".format(pipe_name))
                     cur.execute(create_pipe_sql)
                 finally:
@@ -82,15 +85,15 @@ class LoadViaSnowpipe:
 
         # If you generated an encrypted private key, implement this method to return
         # the passphrase for decrypting your private key.
-        def get_private_key_passphrase():
-            return "CkYt-3fngCdm65P2"
+        # def get_private_key_passphrase(): #os.getenv('') #cartridge template grab 
+        #     return ''
 
-        with open("/tmp/rsa_key.p8", 'rb') as pem_in:
+        with open("/upd_rsa_key.p8", 'rb') as pem_in:
             # pemlines = pem_in.read()
-            private_key_obj = load_pem_private_key(pem_in.read(),password=get_private_key_passphrase().encode(),backend=default_backend())
+            private_key_obj = load_pem_private_key(pem_in.read(),password=None,backend=default_backend())
 
         private_key_text = private_key_obj.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()).decode('utf-8')
-
+        # breakpoint()
         file_list=[s3_key]
         self.logger.info(file_list)
 
@@ -113,7 +116,7 @@ class LoadViaSnowpipe:
             resp = ingest_manager.ingest_files(staged_file_list)
         except HTTPError as e:
             # HTTP error, may need to retry
-            selogger.error(e)
+            self.logger.error(e)
             exit(1)
 
         # This means Snowflake has received file and will start loading

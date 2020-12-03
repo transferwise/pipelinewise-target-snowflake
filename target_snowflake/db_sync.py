@@ -453,9 +453,10 @@ class DbSync:
         self.logger.info("Uploading {} rows to stage".format(count))
         return self.viaSnowpipe.upload_file(file, stream, temp_dir)
     
-    def load_via_snowpipe(self, s3_key, s3_folder_name):
+    def load_via_snowpipe(self, s3_key):
         self.logger.info('Loading the file via snowpipe')
-        return self.viaSnowpipe.load_via_snowpipe(self, s3_key, s3_folder_name)
+        # breakpoint()
+        return self.viaSnowpipe.load_via_snowpipe(s3_key)
 
     def put_to_stage(self, file, stream, count, temp_dir=None):
         self.logger.info("Uploading {} rows to stage".format(count))

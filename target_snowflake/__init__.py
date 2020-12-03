@@ -349,8 +349,8 @@ def flush_streams(
             parallelism = max_parallelism
         else:
             parallelism = n_streams_to_flush
-    # breakpoint()
-    # parallelism=1
+    breakpoint()
+    parallelism=1
     # Select the required streams to flush
     if filter_streams:
         streams_to_flush = filter_streams
@@ -431,8 +431,8 @@ def flush_records(stream, records_to_load, row_count, db_sync, temp_dir=None, no
     size_bytes = os.path.getsize(csv_file)
 
     if load_via_snowpipe.lower() == 'true':
-        s3_key, s3_folder_name = db_sync.upload_to_stage(csv_file, stream, row_count, temp_dir=temp_dir)
-        db_sync.load_via_snowpipe(s3_key, s3_folder_name)
+        s3_key = db_sync.upload_to_stage(csv_file, stream, row_count, temp_dir=temp_dir)
+        db_sync.load_via_snowpipe(s3_key)
         os.remove(csv_file)
     else:
         s3_key = db_sync.put_to_stage(csv_file, stream, row_count, temp_dir=temp_dir)
