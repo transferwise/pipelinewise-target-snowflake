@@ -349,7 +349,8 @@ def flush_streams(
             parallelism = max_parallelism
         else:
             parallelism = n_streams_to_flush
-
+    # breakpoint()
+    # parallelism=1
     # Select the required streams to flush
     if filter_streams:
         streams_to_flush = filter_streams
@@ -393,6 +394,7 @@ def flush_streams(
 
 def load_stream_batch(stream, records_to_load, row_count, db_sync, no_compression=False, delete_rows=False,
                       temp_dir=None, load_via_snowpipe=False):
+
     # Load into snowflake
     if row_count[stream] > 0:
         flush_records(stream, records_to_load, row_count[stream], db_sync, temp_dir, no_compression, load_via_snowpipe)
@@ -428,7 +430,7 @@ def flush_records(stream, records_to_load, row_count, db_sync, temp_dir=None, no
 
     size_bytes = os.path.getsize(csv_file)
 
-    if load_via_snowpipe:
+    if load_via_snowpipe.lower() == 'true':
         s3_key, s3_folder_name = db_sync.upload_to_stage(csv_file, stream, row_count, temp_dir=temp_dir)
         db_sync.load_via_snowpipe(s3_key, s3_folder_name)
         os.remove(csv_file)

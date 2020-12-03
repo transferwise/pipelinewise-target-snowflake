@@ -14,11 +14,10 @@ from cryptography.hazmat.primitives.serialization import load_pem_private_key, \
     NoEncryption
 from cryptography.hazmat.backends import default_backend
 from target_snowflake.s3_upload_client import S3UploadClient
-from target_snowflake import RecordValidationException
+# from target_snowflake import RecordValidationException
 class LoadViaSnowpipe: 
 
     def __init__(self, connection_config, dbLink):
-        # breakpoint()
         self.connection_config = connection_config
         self.logger = get_logger('target_snowflake')
         self.s3_upload_client = S3UploadClient(connection_config)
@@ -33,7 +32,8 @@ class LoadViaSnowpipe:
         s3_folder_name = "{}/".format(self.dbLink.table_name(stream, None, True).lower().replace('"',''))
         if not s3_folder_name:
             raise 
-        s3_key_prefix = "{}/{}".format(self.connection_config.get('s3_key_prefix', ''),s3_folder_name)
+        # BUG: // in prefix, s3_key_prefix already has /
+        s3_key_prefix = "{}{}".format(self.connection_config.get('s3_key_prefix', ''),s3_folder_name)
         try:
             self.s3_upload_client.s3.head_object(Bucket=bucket, Key=s3_key_prefix)
             self.logger.info(f"S3 key prefix: {s3_key_prefix} already exists!!")  
@@ -45,9 +45,10 @@ class LoadViaSnowpipe:
         self.s3_folder_name = s3_folder_name
         return  s3_folder_name
 
-    def upload_file(self, file, stream,temp_dir=None):
-        self.create_s3_folder(stream)
-        s3_key_prefix = "{}/{}".format(self.connection_config.get('s3_key_prefix', ''),s3_folder_name)
+    def upload_file(self, file, stream, temp_dir=None):
+        s3_folder_name = self.create_s3_folder(stream)
+        # SAME bug
+        s3_key_prefix = "{}{}".format(self.connection_config.get('s3_key_prefix', ''), s3_folder_name)
         s3_key = self.s3_upload_client.upload_file(file, stream, s3_key_prefix=s3_key_prefix)
         return s3_key
 

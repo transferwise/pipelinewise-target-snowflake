@@ -354,9 +354,9 @@ class DbSync:
                                                  max_level=self.data_flattening_max_level)
 
         # Use external stage
-        if connection_config.get('load_via_snowpipe', None):
+        if connection_config.get('load_via_snowpipe').lower() == 'true':
             self.viaSnowpipe = LoadViaSnowpipe(connection_config, self)
-        elif connection_config.get('s3_bucket', None):
+        if connection_config.get('s3_bucket', None):
             self.uploadClient = S3UploadClient(connection_config)
         # Use table stage
         else:
