@@ -1,3 +1,9 @@
+1.10.0 (2020-12-03)
+-------------------
+
+- Add `{{database}}` token to `query_tag` parameter
+- Use Jinja style `query_tag` template variables
+
 1.9.1 (2020-12-02)
 -------------------
 
