@@ -372,18 +372,18 @@ class TestDBSync(unittest.TestCase):
     def test_create_query_tag(self):
         assert db_sync.create_query_tag(None) is None
         assert db_sync.create_query_tag('This is a test query tag') == 'This is a test query tag'
-        assert db_sync.create_query_tag('Loading into {database}.{schema}.{table}',
+        assert db_sync.create_query_tag('Loading into {{database}}.{{schema}}.{{table}}',
                                         database='test_database',
                                         schema='test_schema',
                                         table='test_table') == 'Loading into test_database.test_schema.test_table'
-        assert db_sync.create_query_tag('Loading into {database}.{schema}.{table}',
+        assert db_sync.create_query_tag('Loading into {{database}}.{{schema}}.{{table}}',
                                         database=None,
                                         schema=None,
                                         table=None) == 'Loading into ..'
 
         # JSON formatted query tags with variables
         json_query_tag = db_sync.create_query_tag(
-            '{"database": "{database}", "schema": "{schema}", "table": "{table}"}',
+            '{"database": "{{database}}", "schema": "{{schema}}", "table": "{{table}}"}',
             database='test_database',
             schema='test_schema',
             table='test_table')
@@ -396,7 +396,7 @@ class TestDBSync(unittest.TestCase):
 
         # JSON formatted query tags with variables quotes in the middle
         json_query_tag = db_sync.create_query_tag(
-            '{"database": "{database}", "schema": "{schema}", "table": "{table}"}',
+            '{"database": "{{database}}", "schema": "{{schema}}", "table": "{{table}}"}',
             database='test"database',
             schema='test"schema',
             table='test"table')
@@ -410,7 +410,7 @@ class TestDBSync(unittest.TestCase):
 
         # JSON formatted query tags with quoted variables
         json_query_tag = db_sync.create_query_tag(
-            '{"database": "{database}", "schema": "{schema}", "table": "{table}"}',
+            '{"database": "{{database}}", "schema": "{{schema}}", "table": "{{table}}"}',
             database='"test_database"',
             schema='"test_schema"',
             table='"test_table"')

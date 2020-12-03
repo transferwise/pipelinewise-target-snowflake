@@ -1050,7 +1050,8 @@ class TestIntegration(unittest.TestCase):
         current_time = datetime.datetime.now().strftime('%H:%M:%s')
 
         # Tag queries with dynamic schema and table tokens
-        self.config['query_tag'] = f'PPW test tap run at {current_time}. Loading into {{database}}.{{schema}}.{{table}}'
+        self.config['query_tag'] = f'PPW test tap run at {current_time}. ' \
+                                   f'Loading into {{{{database}}}}.{{{{schema}}}}.{{{{table}}}}'
         self.persist_lines_with_cache(tap_lines)
 
         # Get query tags from QUERY_HISTORY

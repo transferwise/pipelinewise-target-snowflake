@@ -226,9 +226,9 @@ def create_query_tag(query_tag_pattern: str, database: str = None, schema: str =
 
     Args:
         query_tag_pattern:
-        database: optional value to replace {database} token in query_tag_pattern
-        schema: optional value to replace {schema} token in query_tag_pattern
-        table: optional value to replace {table} token in query_tag_pattern
+        database: optional value to replace {{database}} token in query_tag_pattern
+        schema: optional value to replace {{schema}} token in query_tag_pattern
+        table: optional value to replace {{table}} token in query_tag_pattern
 
     Returns:
         String if query_tag_patter defined otherwise None
@@ -240,9 +240,9 @@ def create_query_tag(query_tag_pattern: str, database: str = None, schema: str =
 
     # replace tokens, taking care of json formatted value compatibility
     for k, v in {
-        '{database}': json.dumps(database.strip('"')).strip('"') if database else None,
-        '{schema}': json.dumps(schema.strip('"')).strip('"') if schema else None,
-        '{table}': json.dumps(table.strip('"')).strip('"') if table else None
+        '{{database}}': json.dumps(database.strip('"')).strip('"') if database else None,
+        '{{schema}}': json.dumps(schema.strip('"')).strip('"') if schema else None,
+        '{{table}}': json.dumps(table.strip('"')).strip('"') if table else None
     }.items():
         if k in query_tag:
             query_tag = query_tag.replace(k, v or '')
