@@ -31,6 +31,10 @@ def get_db_config():
     config['s3_key_prefix'] = os.environ.get('TARGET_SNOWFLAKE_S3_KEY_PREFIX')
     config['s3_acl'] = os.environ.get('TARGET_SNOWFLAKE_S3_ACL')
 
+    # Pivate Key for snowpipe details
+    config['private_key_path'] = os.environ.get('TARGET_SNOWFLAKE_PRIVATE_KEY_PATH')
+    config['private_key_password'] = os.environ.get('TARGET_SNOWFLAKE_PRIVATE_KEY_PASSWORD')
+
     # External stage in snowflake with client side encryption details
     config['client_side_encryption_master_key'] = os.environ.get('CLIENT_SIDE_ENCRYPTION_MASTER_KEY')
 
