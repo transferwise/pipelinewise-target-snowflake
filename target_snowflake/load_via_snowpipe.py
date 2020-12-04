@@ -68,7 +68,6 @@ class LoadViaSnowpipe:
                                 obj_name,
                                 self.connection_config['stage'],
                                 self.connection_config['file_format'])
-
         pipe_status_sql = "select system$pipe_status('{}');".format(pipe_name)
 
         with self.dbLink.open_connection() as connection:
@@ -95,7 +94,6 @@ class LoadViaSnowpipe:
             private_key_obj = load_pem_private_key(pem_in.read(),password=password,backend=default_backend())
 
         private_key_text = private_key_obj.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()).decode('utf-8')
-
         file_list=[s3_key]
         self.logger.info(file_list)
 
