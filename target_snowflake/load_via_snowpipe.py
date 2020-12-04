@@ -68,7 +68,7 @@ class LoadViaSnowpipe:
                                 obj_name,
                                 self.connection_config['stage'],
                                 self.connection_config['file_format'])
-        breakpoint()
+
         pipe_status_sql = "select system$pipe_status('{}');".format(pipe_name)
 
         with self.dbLink.open_connection() as connection:
@@ -88,12 +88,14 @@ class LoadViaSnowpipe:
         # def get_private_key_passphrase(): #os.getenv('') #cartridge template grab 
         #     return ''
 
-        with open("/upd_rsa_key.p8", 'rb') as pem_in:
+        key_path = getattr(self.connection_config, "private_key_path", "/rsa_key.p8")
+        password = getattr(self.connection_config, "private_key_password", None)
+        with open(key_path, 'rb') as pem_in:
             # pemlines = pem_in.read()
-            private_key_obj = load_pem_private_key(pem_in.read(),password=None,backend=default_backend())
+            private_key_obj = load_pem_private_key(pem_in.read(),password=password,backend=default_backend())
 
         private_key_text = private_key_obj.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()).decode('utf-8')
-        # breakpoint()
+
         file_list=[s3_key]
         self.logger.info(file_list)
 
