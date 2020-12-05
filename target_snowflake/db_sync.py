@@ -353,7 +353,7 @@ class DbSync:
             self.flatten_schema = flatten_schema(stream_schema_message['schema'],
                                                  max_level=self.data_flattening_max_level)
 
-        # Use external stage
+        # Use snowpipe over copy command
         if connection_config.get('load_via_snowpipe').lower() == 'true':
             self.viaSnowpipe = LoadViaSnowpipe(connection_config, self)
         if connection_config.get('s3_bucket', None):
@@ -449,13 +449,9 @@ class DbSync:
                 for name in self.flatten_schema
             ]
         )
-    def upload_to_stage(self, file, stream, count, temp_dir=None):
-        self.logger.info("Uploading {} rows to stage".format(count))
-        return self.viaSnowpipe.upload_file(file, stream, temp_dir)
-    
+
     def load_via_snowpipe(self, s3_key):
         self.logger.info('Loading the file via snowpipe')
-        # breakpoint()
         return self.viaSnowpipe.load_via_snowpipe(s3_key)
 
     def put_to_stage(self, file, stream, count, temp_dir=None):

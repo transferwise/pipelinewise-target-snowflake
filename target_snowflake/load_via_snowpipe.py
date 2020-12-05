@@ -14,60 +14,44 @@ from cryptography.hazmat.primitives.serialization import load_pem_private_key, \
     NoEncryption
 from cryptography.hazmat.backends import default_backend
 from target_snowflake.s3_upload_client import S3UploadClient
+import target_snowflake.db_sync
 from snowflake.connector.errors import ProgrammingError
 # from snowflake.connector import DictCursor
-class LoadViaSnowpipe: 
+class LoadViaSnowpipe:
 
     def __init__(self, connection_config, dbLink):
         self.connection_config = connection_config
         self.logger = get_logger('target_snowflake')
-        self.s3_upload_client = S3UploadClient(connection_config)
         self.dbLink = dbLink
 
+    def load_via_snowpipe(self, s3_key):
 
-    def create_s3_folder(self, stream):
-        
-        bucket = self.connection_config.get('s3_bucket', None)
-        if not bucket:
-            raise Exception("Cannot run load via snowpipe without s3 bucket")
-        s3_folder_name = "{}/".format(self.dbLink.table_name(stream, None, True).lower().replace('"',''))
-        if not s3_folder_name:
-            raise Exception("S3 folder name is empty")
-        # BUG: // in prefix, s3_key_prefix already has /
-        s3_key_prefix = "{}{}".format(self.connection_config.get('s3_key_prefix', ''),s3_folder_name)
-        try:
-            self.s3_upload_client.s3.head_object(Bucket=bucket, Key=s3_key_prefix)
-            self.logger.info(f"S3 key prefix: {s3_key_prefix} already exists!!")  
-        except botocore.errorfactory.ClientError as e:
-            if e.response['Error']['Code'] == '404':
-                self.logger.info(f"S3 key prefix: {s3_key_prefix} does not exist\nCreating s3 prefix...")
-                self.s3_upload_client.s3.put_object(Bucket=bucket, Key=s3_key_prefix)
+        # Get list if columns with types
+        columns_with_trans = [
+            {
+                "name": safe_column_name(name),
+                "trans": column_trans(schema)
+            }
+            for (name, schema) in flatten_schema.items()
+        ]
 
-        self.s3_folder_name = s3_folder_name
-        return  s3_folder_name
-
-    def upload_file(self, file, stream, temp_dir=None):
-        s3_folder_name = self.create_s3_folder(stream)
-        # SAME bug
-        s3_key_prefix = "{}{}".format(self.connection_config.get('s3_key_prefix', ''), s3_folder_name)
-        s3_key = self.s3_upload_client.upload_file(file, stream, s3_key_prefix=s3_key_prefix)
-        return s3_key
-
-    def load_via_snowpipe(self,s3_key):
-        obj_name = getattr(self, 's3_folder_name', None).replace('/', '')
-        if not obj_name:
-            raise Exception("S3 folder name cannot be empty.")
         pipe_name = "{0}.{1}.{2}_s3_pipe".format(self.connection_config['dbname'], self.dbLink.schema_name, obj_name)
 
-        create_pipe_sql = """create pipe if not exists {0} as
-                            copy into {1}.{2}.{3} from @{1}.{4}
-                            file_format = (format_name =  {1}.{5} );""".format(
-                                pipe_name,
-                                self.connection_config['dbname'],
-                                self.dbLink.schema_name,
-                                obj_name,
-                                self.connection_config['stage'],
-                                self.connection_config['file_format'])
+        pipe_args = dict(
+            pipe_name= pipe_name,
+            db_name = self.connection_config['dbname'],
+            schema_name = self.dbLink.schema_name,
+            obj_name = obj_name,
+            stage = self.connection_config['stage'],
+            file_format = self.connection_config['file_format'],
+            cols = ', '.join([c['name'] for c in columns_with_trans]),
+        )
+
+        create_pipe_sql = """create pipe {pipe_name} as
+                            copy into {db_name}.{schema_name}.{obj_name} ({cols})
+                            from @{db_name}.{stage}
+                            file_format = (format_name = {db_name}.{file_format} );""".format(**pipe_args)
+
         pipe_status_sql = "select system$pipe_status('{}');".format(pipe_name)
 
         with self.dbLink.open_connection() as connection:
@@ -84,7 +68,7 @@ class LoadViaSnowpipe:
 
         # If you generated an encrypted private key, implement this method to return
         # the passphrase for decrypting your private key.
-        # def get_private_key_passphrase(): #os.getenv('') #cartridge template grab 
+        # def get_private_key_passphrase(): #os.getenv('') #cartridge template grab
         #     return ''
 
         key_path = getattr(self.connection_config, "private_key_path", "/rsa_key.p8")
