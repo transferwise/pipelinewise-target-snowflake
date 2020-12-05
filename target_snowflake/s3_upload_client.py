@@ -4,7 +4,6 @@ import datetime
 from singer import get_logger
 from snowflake.connector.encryption_util import SnowflakeEncryptionUtil
 from snowflake.connector.remote_storage_util import SnowflakeFileEncryptionMaterial
-import target_snowflake.db_sync
 
 class S3UploadClient:
 
@@ -45,14 +44,6 @@ class S3UploadClient:
         bucket = self.connection_config['s3_bucket']
         s3_acl = self.connection_config.get('s3_acl')
 
-        load_via_snowpipe = os.environ.get('TARGET_SNOWFLAKE_LOAD_VIA_SNOWPIPE')
-
-        if load_via_snowpipe.lower() == 'true':
-            path_arr = [
-                "{}/".format(self.connection_config.get('s3_key_prefix', '')),
-                "{}/".format(target_snowflake.db_sync.table_name(stream, None, False).lower().replace('"','').replace('.','__'))
-                ]
-            s3_key_prefix = "".join(path_arr)
         s3_key = "{}pipelinewise_{}_{}.csv".format(s3_key_prefix, stream, datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f"))
 
         self.logger.info("Target S3 bucket: {}, local file: {}, S3 key: {}".format(bucket, file, s3_key))

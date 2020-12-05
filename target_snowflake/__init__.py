@@ -432,7 +432,7 @@ def flush_records(stream, records_to_load, row_count, db_sync, temp_dir=None, no
     s3_key = db_sync.put_to_stage(csv_file, stream, row_count, temp_dir=temp_dir)
 
     if load_via_snowpipe.lower() == 'true':
-        db_sync.load_via_snowpipe(s3_key)
+        db_sync.load_via_snowpipe(s3_key, stream)
         os.remove(csv_file)
     else:
         db_sync.load_csv(s3_key, row_count, size_bytes)

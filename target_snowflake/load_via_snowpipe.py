@@ -32,7 +32,7 @@ class LoadViaSnowpipe:
                 "name": safe_column_name(name),
                 "trans": column_trans(schema)
             }
-            for (name, schema) in flatten_schema.items()
+            for (name, schema) in target_snowflake.db_sync.flatten_schema().items()
         ]
 
         pipe_name = "{0}.{1}.{2}_s3_pipe".format(self.connection_config['dbname'], self.dbLink.schema_name, obj_name)
