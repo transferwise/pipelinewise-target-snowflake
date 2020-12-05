@@ -32,6 +32,7 @@ docs/_build/
 docs/_templates/
 
 # Environment
+.env
 .docker-env
 snowpipe_tests/
 build/
