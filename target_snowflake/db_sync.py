@@ -588,7 +588,7 @@ class DbSync:
                             copy into {db_name}.{obj_name} ({cols})
                             from @{db_name}.{stage}
                             file_format = (format_name = {db_name}.{file_format} );""".format(**pipe_args)
-
+        drop_pipe_sql = """ drop pipe if exists {pipe_name}; """.format(**pipe_args)
         pipe_status_sql = "select system$pipe_status('{}');".format(pipe_name)
 
         with self.open_connection() as connection:
@@ -643,13 +643,18 @@ class DbSync:
         # This means Snowflake has received file and will start loading
         assert(resp['responseCode'] == 'SUCCESS')
 
-        # Needs to wait for a while to get result in history
+        # Needs to wait for a while to perform transfer, delete pipe after transfer
         while True:
             history_resp = ingest_manager.get_history()
 
             if len(history_resp['files']) > 0:
                 self.logger.info('Ingest Report:\n')
                 self.logger.info(history_resp)
+                with self.open_connection() as connection:
+                    with connection.cursor() as cur:
+                        cur.execute(drop_pipe_sql)
+
+                cur.close()
                 break
             else:
                 # wait for 20 seconds

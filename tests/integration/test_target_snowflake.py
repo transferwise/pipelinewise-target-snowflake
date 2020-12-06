@@ -39,8 +39,12 @@ class TestIntegration(unittest.TestCase):
 
         # Drop target schema
         if self.config['default_target_schema']:
-            snowflake.query("SELECT COUNT(1) FROM {}.ASTHMA_TERMS;".format(self.config['default_target_schema']))
             #snowflake.query("DROP SCHEMA IF EXISTS {}".format(self.config['default_target_schema']))
+            drop_table_queries = snowflake.query("SELECT 'DROP TABLE EXO_EL_STAGE.' || table_name || ';' FROM  INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME LIKE 'TEST_TABLE%';")
+            queries=[]
+            for query in drop_table_queries:
+                queries.append(list(query.values())[0])
+            snowflake.query(queries)
 
     def persist_lines(self, lines):
         """Loads singer messages into snowflake without table caching option"""
