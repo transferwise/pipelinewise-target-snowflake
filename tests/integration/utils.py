@@ -22,6 +22,7 @@ def get_db_config():
     config['default_target_schema'] = os.environ.get("TARGET_SNOWFLAKE_SCHEMA")
     config['stage'] = os.environ.get("TARGET_SNOWFLAKE_STAGE")
     config['file_format'] = os.environ.get("TARGET_SNOWFLAKE_FILE_FORMAT")
+    config['load_via_snowpipe'] = os.environ.get("TARGET_SNOWFLAKE_LOAD_VIA_SNOWPIPE")
 
     # AWS IAM and S3 bucket
     config['aws_access_key_id'] = os.environ.get('TARGET_SNOWFLAKE_AWS_ACCESS_KEY')
@@ -29,6 +30,10 @@ def get_db_config():
     config['s3_bucket'] = os.environ.get('TARGET_SNOWFLAKE_S3_BUCKET')
     config['s3_key_prefix'] = os.environ.get('TARGET_SNOWFLAKE_S3_KEY_PREFIX')
     config['s3_acl'] = os.environ.get('TARGET_SNOWFLAKE_S3_ACL')
+
+    # Pivate Key for snowpipe details
+    config['private_key_path'] = os.environ.get('TARGET_SNOWFLAKE_PRIVATE_KEY_PATH')
+    config['private_key_password'] = os.environ.get('TARGET_SNOWFLAKE_PRIVATE_KEY_PASSWORD')
 
     # External stage in snowflake with client side encryption details
     config['client_side_encryption_master_key'] = os.environ.get('CLIENT_SIDE_ENCRYPTION_MASTER_KEY')

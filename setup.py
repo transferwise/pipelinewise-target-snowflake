@@ -21,18 +21,18 @@ setup(name="pipelinewise-target-snowflake",
           'idna==2.7',
           'pipelinewise-singer-python==1.*',
           'snowflake-connector-python==2.3.6',
-          'boto3==1.16.20',
-          'urllib3==1.24.3',
           'inflection==0.3.1',
           'joblib==0.16.0',
-          'python-dateutil==2.8.1'
+          'python-dateutil==2.8.1',
+          'snowflake-ingest==1.0.2'
       ],
       extras_require={
           "test": [
               "nose==1.3.7",
               "mock==3.0.5",
               "pylint==2.4.2",
-              "python-dotenv==0.14.0"
+              "python-dotenv==0.14.0",
+              "pytest"
           ]
       },
       entry_points="""

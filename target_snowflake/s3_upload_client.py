@@ -5,9 +5,8 @@ from singer import get_logger
 from snowflake.connector.encryption_util import SnowflakeEncryptionUtil
 from snowflake.connector.remote_storage_util import SnowflakeFileEncryptionMaterial
 
+class S3UploadClient:
 
-class S3UploadClient: 
-     
     def __init__(self, connection_config):
         self.connection_config = connection_config
         self.logger = get_logger('target_snowflake')
@@ -39,11 +38,12 @@ class S3UploadClient:
                                   region_name=config.get('s3_region_name'),
                                   endpoint_url=config.get('s3_endpoint_url'))
 
-    def upload_file(self, file, stream, temp_dir=None):
+
+    def upload_file(self, file, stream, temp_dir=None, s3_key_prefix=None):
         # Generating key in S3 bucket
         bucket = self.connection_config['s3_bucket']
         s3_acl = self.connection_config.get('s3_acl')
-        s3_key_prefix = self.connection_config.get('s3_key_prefix', '')
+
         s3_key = "{}pipelinewise_{}_{}.csv".format(s3_key_prefix, stream, datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f"))
 
         self.logger.info("Target S3 bucket: {}, local file: {}, S3 key: {}".format(bucket, file, s3_key))

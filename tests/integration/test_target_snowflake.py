@@ -36,8 +36,6 @@ class TestIntegration(unittest.TestCase):
     def setUp(self):
         self.config = test_utils.get_test_config()
         snowflake = DbSync(self.config)
-
-        # Drop target schema
         if self.config['default_target_schema']:
             snowflake.query("DROP SCHEMA IF EXISTS {}".format(self.config['default_target_schema']))
 

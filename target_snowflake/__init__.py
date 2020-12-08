@@ -18,6 +18,7 @@ from dateutil.parser import ParserError
 from joblib import Parallel, delayed, parallel_backend
 from jsonschema import Draft7Validator, FormatChecker
 from singer import get_logger
+from distutils.util import strtobool
 
 from target_snowflake.db_sync import DbSync
 
@@ -356,6 +357,8 @@ def flush_streams(
     else:
         streams_to_flush = streams.keys()
 
+    can_use_snowpipe = _verify_snowpipe_usage(stream_to_sync, config)
+
     # Single-host, thread-based parallelism
     with parallel_backend('threading', n_jobs=parallelism):
         Parallel()(delayed(load_stream_batch)(
@@ -365,7 +368,8 @@ def flush_streams(
             db_sync=stream_to_sync[stream],
             no_compression=config.get('no_compression'),
             delete_rows=config.get('hard_delete'),
-            temp_dir=config.get('temp_dir')
+            temp_dir=config.get('temp_dir'),
+            load_via_snowpipe=can_use_snowpipe[stream],
         ) for stream in streams_to_flush)
 
     # reset flushed stream records to empty to avoid flushing same records
@@ -390,11 +394,33 @@ def flush_streams(
     return flushed_state
 
 
+def _verify_snowpipe_usage(stream_to_sync, config):
+    load_via_snowpipe = strtobool(config.get('load_via_snowpipe', 'False'))
+    result = {}
+
+    if not load_via_snowpipe:
+        result = dict((stream,0) for stream in stream_to_sync)
+    # if snowpipe option selected and data with primary keys found
+    # by default can not use snowpipe with primary keys, but can be overridden
+    else:
+        LOGGER.info("Trying to use snowpipe for every stream. "
+                    "Care, Snowpipe is designed to perform direct transfers(copy) only "
+                    "and can not perform consolidated transfer(merge)")
+        for stream, db_sync in stream_to_sync.items():
+            if len(db_sync.stream_schema_message['key_properties']) > 0:
+                LOGGER.warning("Primary key %s found for the table %s", 
+                               db_sync.stream_schema_message['key_properties'],
+                               stream)
+                result[stream] = 0
+    return result
+
+
 def load_stream_batch(stream, records_to_load, row_count, db_sync, no_compression=False, delete_rows=False,
-                      temp_dir=None):
+                      temp_dir=None, load_via_snowpipe=False):
+
     # Load into snowflake
     if row_count[stream] > 0:
-        flush_records(stream, records_to_load, row_count[stream], db_sync, temp_dir, no_compression)
+        flush_records(stream, records_to_load, row_count[stream], db_sync, temp_dir, no_compression, load_via_snowpipe)
 
         # Delete soft-deleted, flagged rows - where _sdc_deleted at is not null
         if delete_rows:
@@ -410,7 +436,7 @@ def write_record_to_file(outfile, records_to_load, record_to_csv_line_transforme
         outfile.write(bytes(csv_line + '\n', 'UTF-8'))
 
 
-def flush_records(stream, records_to_load, row_count, db_sync, temp_dir=None, no_compression=False):
+def flush_records(stream, records_to_load, row_count, db_sync, temp_dir=None, no_compression=False, load_via_snowpipe=False):
     if temp_dir:
         os.makedirs(temp_dir, exist_ok=True)
     csv_fd, csv_file = mkstemp(suffix='.csv', prefix='records_', dir=temp_dir)
@@ -426,11 +452,16 @@ def flush_records(stream, records_to_load, row_count, db_sync, temp_dir=None, no
                 write_record_to_file(gzipfile, records_to_load, record_to_csv_line_transformer)
 
     size_bytes = os.path.getsize(csv_file)
-    s3_key = db_sync.put_to_stage(csv_file, stream, row_count, temp_dir=temp_dir)
-    db_sync.load_csv(s3_key, row_count, size_bytes)
 
-    os.remove(csv_file)
-    db_sync.delete_from_stage(stream, s3_key)
+    s3_key = db_sync.put_to_stage(csv_file, stream, row_count, temp_dir=temp_dir, load_via_snowpipe=load_via_snowpipe)
+
+    if load_via_snowpipe:
+        db_sync.load_via_snowpipe(s3_key, stream)
+        os.remove(csv_file)
+    else:
+        db_sync.load_csv(s3_key, row_count, size_bytes)
+        os.remove(csv_file)
+        db_sync.delete_from_stage(stream, s3_key)
 
 
 def main():

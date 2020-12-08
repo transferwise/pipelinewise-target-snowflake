@@ -6,12 +6,26 @@ import inflection
 import re
 import itertools
 import time
+import os
 
 from singer import get_logger
 
 from target_snowflake.s3_upload_client import S3UploadClient
 from target_snowflake.snowflake_upload_client import SnowflakeUploadClient
 
+from snowflake.connector.errors import ProgrammingError
+from snowflake.connector.encryption_util import SnowflakeEncryptionUtil
+from snowflake.connector.remote_storage_util import SnowflakeFileEncryptionMaterial
+from snowflake.ingest import SimpleIngestManager, \
+    StagedFile
+from snowflake.ingest.utils.uris import DEFAULT_SCHEME
+from requests import HTTPError
+from cryptography.hazmat.primitives.serialization import load_pem_private_key, \
+    Encoding, \
+    PrivateFormat, \
+    NoEncryption
+from cryptography.hazmat.backends import default_backend
+from distutils.util import strtobool
 
 class TooManyRecordsException(Exception):
     """Exception to raise when query returns more records than max_records"""
@@ -352,7 +366,6 @@ class DbSync:
             self.flatten_schema = flatten_schema(stream_schema_message['schema'],
                                                  max_level=self.data_flattening_max_level)
 
-        # Use external stage
         if connection_config.get('s3_bucket', None):
             self.uploadClient = S3UploadClient(connection_config)
         # Use table stage
@@ -447,9 +460,21 @@ class DbSync:
             ]
         )
 
-    def put_to_stage(self, file, stream, count, temp_dir=None):
+    def _generate_s3_key_prefix(self,stream, use_snowpipe):
+        """ If loading via snowpipe then the table_name is added to the s3 prefix """
+        s3_key_prefix = self.connection_config.get('s3_key_prefix', '').replace('/','')
+        schema_table_name = self.table_name(stream, None, False).lower().replace('"','').replace('.','__')
+        path_arr = ["{}/".format(s3_key_prefix),]
+        if use_snowpipe:
+            path_arr.append("{}/".format(schema_table_name))
+
+        return "".join(path_arr)
+
+    def put_to_stage(self, file, stream, count, temp_dir=None, load_via_snowpipe=False):
         self.logger.info("Uploading {} rows to stage".format(count))
-        return self.uploadClient.upload_file(file, stream, temp_dir)
+        s3_key_prefix = self._generate_s3_key_prefix(stream, load_via_snowpipe)
+
+        return self.uploadClient.upload_file(file, stream, temp_dir, s3_key_prefix)
 
     def delete_from_stage(self, stream, s3_key):
         self.logger.info("Deleting {} from stage".format(s3_key))
@@ -538,6 +563,116 @@ class DbSync:
                 self.logger.info('Loading into {}: {}'.format(
                     self.table_name(stream, False),
                     json.dumps({'inserts': inserts, 'updates': updates, 'size_bytes': size_bytes})))
+
+    @staticmethod
+    def _generate_pipe_name(dbname, schema_table_name):
+        stripped_db_name = dbname.replace('"','')
+        stripped_table_name = schema_table_name.replace('"','')
+        return f"{stripped_db_name}.{stripped_table_name}_s3_pipe"
+
+    def _generate_pipe_args(self, pipe_name, schema_table_name, columns_with_trans):
+        pipe_args = dict(
+            pipe_name= pipe_name,
+            db_name = self.connection_config['dbname'],
+            obj_name = schema_table_name,
+            stage = self.connection_config['stage'],
+            file_format = self.connection_config['file_format'],
+            cols = ', '.join([c['name'] for c in columns_with_trans]),
+            when_matched = ', '.join([f"{c['name']}=s.{c['name']}" for c in columns_with_trans]),
+            when_not_matched = ', '.join([f"s.{c['name']}" for c in columns_with_trans]),
+            merge_condition = self.primary_key_merge_condition(),
+            )
+        return pipe_args
+
+    def _load_private_key(self):
+        key_path = getattr(self.connection_config, "private_key_path", "/rsa_key.p8")
+        password = getattr(self.connection_config, "private_key_password", None)
+        with open(key_path, 'rb') as pem_in:
+            private_key_obj = load_pem_private_key(pem_in.read(),password=password,backend=default_backend())
+
+        private_key_text = private_key_obj.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()).decode('utf-8')
+        return private_key_text
+
+    def load_via_snowpipe(self, s3_key, stream):
+
+        # Get list if columns with types and transformation
+        columns_with_trans = [
+            {
+                "name": safe_column_name(name),
+                "trans": column_trans(schema)
+            }
+            for (name, schema) in self.flatten_schema.items()
+        ]
+        schema_table_name = self.table_name(stream, False)
+
+        pipe_name = DbSync._generate_pipe_name(self.connection_config['dbname'], schema_table_name)
+        pipe_args = self._generate_pipe_args(pipe_name, schema_table_name, columns_with_trans)
+
+        create_pipe_copy_sql = """create pipe {pipe_name} as
+                            copy into {db_name}.{obj_name} ({cols})
+                            from @{db_name}.{stage}
+                            file_format = (format_name = {db_name}.{file_format} );""".format(**pipe_args)
+        drop_pipe_sql = """ drop pipe if exists {pipe_name}; """.format(**pipe_args)
+
+        # Create snowpipe
+        try:
+            self.logger.info("Creating snowpipe %s. ...", pipe_name)
+            # primary key in records found, perform merge
+            if len(self.stream_schema_message['key_properties']) > 0:
+                self.logger.warning("Primary key %s found in the data stream. Snowpipe can not be used to "
+                                    "consolidate records based upon keys. It can just copy data. "
+                                    "Please refer the docs for further details",
+                                    self.stream_schema_message['key_properties'])
+
+            # primary key not present in the records, perform copy
+            else:
+                self.query(create_pipe_copy_sql)
+        except:
+            self.logger.error("An error was encountered while creating the snowpipe")
+
+
+        # If you generated an encrypted private key, implement this method to return
+
+        private_key_text = self._load_private_key()
+        file_list=[s3_key]
+        self.logger.info(file_list)
+
+        ingest_manager = SimpleIngestManager(account=self.connection_config['account'].split('.')[0],
+                                        host=self.connection_config['account']+'.snowflakecomputing.com',
+                                        user=self.connection_config['user'],
+                                        pipe=pipe_name,
+                                        scheme='https',
+                                        port=443,
+                                        private_key=private_key_text)
+
+        # List of files, but wrapped into a class
+        staged_file_list = []
+        for file_name in file_list:
+            staged_file_list.append(StagedFile(file_name, None))
+
+        self.logger.info(staged_file_list)
+
+        try:
+            resp = ingest_manager.ingest_files(staged_file_list)
+            self.logger.info("Snowpipe has recived the files and now start loading: %s",
+                             resp['responseCode'])
+        except HTTPError as e:
+            # HTTP error, may need to retry
+            self.logger.error(e)
+            exit(1)
+
+        # Needs to wait for a while to perform transfer, delete pipe after transfer
+        while True:
+            history_resp = ingest_manager.get_history()
+
+            if len(history_resp['files']) > 0:
+                self.logger.info('Ingest Report:%s', history_resp)
+                self.query(drop_pipe_sql)
+                break
+            else:
+                self.logger.info('waiting for snowpipe to transfer data...')
+                time.sleep(20)
+
 
     def primary_key_merge_condition(self):
         stream_schema_message = self.stream_schema_message
