@@ -1,7 +1,13 @@
 import unittest
-
+import os
+import json
 from target_snowflake import db_sync
-
+try:
+    import tests.integration.utils as test_utils
+except ImportError:
+    os.environ['PYTHONPATH']+=':/app'
+    import tests.integration.utils as test_utils
+    print ("Setting the pythonpath to the parent dir")
 
 class TestDBSync(unittest.TestCase):
     """
@@ -377,3 +383,34 @@ class TestDBSync(unittest.TestCase):
         assert db_sync.create_query_tag('Loading into {schema}.{table}',
                                         schema=None,
                                         table=None) == 'Loading into unknown-schema.unknown-table'
+
+    def test_generate_s3_key_prefix(self):
+
+        with open(f'{os.path.dirname(__file__)}/resources/same-schemas-multiple-times.json', 'r') as f:
+            lines = f.readlines()
+        
+        self.config = test_utils.get_test_config()
+        DbSync_obj = db_sync.DbSync(self.config, json.loads(lines[0]))
+
+        expected_string = f"{self.config['s3_key_prefix'].replace('/','')}/{self.config['default_target_schema']}__test_table_one/"
+        s3_key_with_snowpipe = DbSync_obj._generate_s3_key_prefix('tap_mysql_test-test_table_one', True)        
+        self.assertEqual(s3_key_with_snowpipe, expected_string)
+
+        s3_key_without_snowpipe = DbSync_obj._generate_s3_key_prefix('tap_mysql_test-test_table_one', False)
+        self.assertEqual(s3_key_without_snowpipe, f"{self.config['s3_key_prefix'].replace('/','')}/")
+
+
+    def test_snowpipe_detail_generation(self):
+        with open(f'{os.path.dirname(__file__)}/resources/same-schemas-multiple-times.json', 'r') as f:
+            lines = f.readlines()
+        self.config = test_utils.get_test_config()
+        
+        DbSync_obj = db_sync.DbSync(self.config, json.loads(lines[0]))
+        schema_table_name = DbSync_obj.table_name('tap_mysql_test-test_table_one', False)
+        pipe_name = DbSync_obj._generate_pipe_name(self.config['dbname'], schema_table_name)
+        stripped_db_name = self.config['dbname'].replace('"','')
+        stripped_table_name = schema_table_name.replace('"','')
+        expected_pipe_name = f"{stripped_db_name}.{stripped_table_name}_s3_pipe"
+        breakpoint()
+
+        self.assertEqual(pipe_name, expected_pipe_name)

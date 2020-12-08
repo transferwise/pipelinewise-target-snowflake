@@ -25,6 +25,7 @@ from cryptography.hazmat.primitives.serialization import load_pem_private_key, \
     PrivateFormat, \
     NoEncryption
 from cryptography.hazmat.backends import default_backend
+from distutils.util import strtobool
 
 class TooManyRecordsException(Exception):
     """Exception to raise when query returns more records than max_records"""
@@ -459,17 +460,20 @@ class DbSync:
             ]
         )
 
-    def put_to_stage(self, file, stream, count, temp_dir=None):
-        self.logger.info("Uploading {} rows to stage".format(count))
-        load_via_snowpipe = os.environ.get('TARGET_SNOWFLAKE_LOAD_VIA_SNOWPIPE')
-        s3_key_prefix = None
+    def _generate_s3_key_prefix(self,stream, use_snowpipe):
+        """ If loading via snowpipe then the table_name is added to the s3 prefix """
+        s3_key_prefix = self.connection_config.get('s3_key_prefix', '').replace('/','')
+        schema_table_name = self.table_name(stream, None, False).lower().replace('"','').replace('.','__')
+        path_arr = ["{}/".format(s3_key_prefix),]
+        if use_snowpipe:
+            path_arr.append("{}/".format(schema_table_name))
 
-        if load_via_snowpipe.lower() == 'true':
-            path_arr = [
-                "{}/".format(self.connection_config.get('s3_key_prefix', '')),
-                "{}/".format(self.table_name(stream, None, False).lower().replace('"','').replace('.','__'))
-                ]
-            s3_key_prefix = "".join(path_arr)
+        return "".join(path_arr)
+
+    def put_to_stage(self, file, stream, count, temp_dir=None, load_via_snowpipe=False):
+        self.logger.info("Uploading {} rows to stage".format(count))
+        s3_key_prefix = self._generate_s3_key_prefix(stream, load_via_snowpipe)
+
         return self.uploadClient.upload_file(file, stream, temp_dir, s3_key_prefix)
 
     def delete_from_stage(self, stream, s3_key):
@@ -560,10 +564,38 @@ class DbSync:
                     self.table_name(stream, False),
                     json.dumps({'inserts': inserts, 'updates': updates, 'size_bytes': size_bytes})))
 
+    @staticmethod
+    def _generate_pipe_name(dbname, schema_table_name):
+        stripped_db_name = dbname.replace('"','')
+        stripped_table_name = schema_table_name.replace('"','')
+        return f"{stripped_db_name}.{stripped_table_name}_s3_pipe"
+
+    def _generate_pipe_args(self, pipe_name, schema_table_name, columns_with_trans):
+        pipe_args = dict(
+            pipe_name= pipe_name,
+            db_name = self.connection_config['dbname'],
+            obj_name = schema_table_name,
+            stage = self.connection_config['stage'],
+            file_format = self.connection_config['file_format'],
+            cols = ', '.join([c['name'] for c in columns_with_trans]),
+            when_matched = ', '.join([f"{c['name']}=s.{c['name']}" for c in columns_with_trans]),
+            when_not_matched = ', '.join([f"s.{c['name']}" for c in columns_with_trans]),
+            merge_condition = self.primary_key_merge_condition(),
+            )
+        return pipe_args
+
+    def _load_private_key(self):
+        key_path = getattr(self.connection_config, "private_key_path", "/rsa_key.p8")
+        password = getattr(self.connection_config, "private_key_password", None)
+        with open(key_path, 'rb') as pem_in:
+            private_key_obj = load_pem_private_key(pem_in.read(),password=password,backend=default_backend())
+
+        private_key_text = private_key_obj.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()).decode('utf-8')
+        return private_key_text
 
     def load_via_snowpipe(self, s3_key, stream):
 
-        # Get list if columns with types
+        # Get list if columns with types and transformation
         columns_with_trans = [
             {
                 "name": safe_column_name(name),
@@ -573,48 +605,45 @@ class DbSync:
         ]
         schema_table_name = self.table_name(stream, False)
 
-        pipe_name = "{0}.{1}_s3_pipe".format(self.connection_config['dbname'], schema_table_name.replace('"',''))
+        pipe_name = DbSync._generate_pipe_name(self.connection_config['dbname'], schema_table_name)
+        pipe_args = self._generate_pipe_args(pipe_name, schema_table_name, columns_with_trans)
 
-        pipe_args = dict(
-            pipe_name= pipe_name,
-            db_name = self.connection_config['dbname'],
-            obj_name = schema_table_name,
-            stage = self.connection_config['stage'],
-            file_format = self.connection_config['file_format'],
-            cols = ', '.join([c['name'] for c in columns_with_trans]),
-        )
-
-        create_pipe_sql = """create pipe {pipe_name} as
+        create_pipe_copy_sql = """create pipe {pipe_name} as
                             copy into {db_name}.{obj_name} ({cols})
                             from @{db_name}.{stage}
                             file_format = (format_name = {db_name}.{file_format} );""".format(**pipe_args)
+        # create_pipe_merge_sql = """ create pipe {pipe_name} as
+        #                     merge into {db_name}.{obj_name} t
+        #                     using ( select {cols} 
+        #                     from @{db_name}.{stage}
+        #                     file_format = (format_name = {db_name}.{file_format})) s
+        #                     on {merge_condition}
+        #                     when matched then
+        #                         update set {when_matched}
+        #                     when not matched then
+        #                         insert ({cols})
+        #                         values ({when_not_matched})""".format(**pipe_args)
         drop_pipe_sql = """ drop pipe if exists {pipe_name}; """.format(**pipe_args)
-        pipe_status_sql = "select system$pipe_status('{}');".format(pipe_name)
+        # pipe_status_sql = "select system$pipe_status('{}');".format(pipe_name)
 
-        with self.open_connection() as connection:
-            with connection.cursor() as cur:
-                # Create snowpipe if it does not exist
-                try:
-                    cur.execute(pipe_status_sql)
-                    self.logger.info("""snowpipe "{}" already exists!!""".format(pipe_name))
-                except ProgrammingError as excp:
-                    self.logger.info("""snowpipe "{}" does not exist. Creating...""".format(pipe_name))
-                    cur.execute(create_pipe_sql)
-                finally:
-                    cur.close()
+
+        # Create snowpipe
+        try:
+            self.logger.info("Creating snowpipe %s. ...", pipe_name)
+            # primary key in records found, perform merge
+            if len(self.stream_schema_message['key_properties']) > 0:
+                self.logger.warning("Primary key found in the data stream. Snowpipe can not be used to consolidate records based upon keys. It can just copy data")
+
+            # primary key not present in the records, perform copy
+            else:
+                self.query(create_pipe_copy_sql)
+        except:
+            self.logger.error("An error was encountered while creating the snowpipe")
+
 
         # If you generated an encrypted private key, implement this method to return
-        # the passphrase for decrypting your private key.
-        # def get_private_key_passphrase(): #os.getenv('') #cartridge template grab
-        #     return ''
 
-        key_path = getattr(self.connection_config, "private_key_path", "/rsa_key.p8")
-        password = getattr(self.connection_config, "private_key_password", None)
-        with open(key_path, 'rb') as pem_in:
-            # pemlines = pem_in.read()
-            private_key_obj = load_pem_private_key(pem_in.read(),password=password,backend=default_backend())
-
-        private_key_text = private_key_obj.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()).decode('utf-8')
+        private_key_text = self._load_private_key()
         file_list=[s3_key]
         self.logger.info(file_list)
 
@@ -635,29 +664,23 @@ class DbSync:
 
         try:
             resp = ingest_manager.ingest_files(staged_file_list)
+            self.logger.info("Snowpipe has recived the files and now start loading: %s",
+                             resp['responseCode'])
         except HTTPError as e:
             # HTTP error, may need to retry
             self.logger.error(e)
             exit(1)
-
-        # This means Snowflake has received file and will start loading
-        assert(resp['responseCode'] == 'SUCCESS')
 
         # Needs to wait for a while to perform transfer, delete pipe after transfer
         while True:
             history_resp = ingest_manager.get_history()
 
             if len(history_resp['files']) > 0:
-                self.logger.info('Ingest Report:\n')
-                self.logger.info(history_resp)
-                with self.open_connection() as connection:
-                    with connection.cursor() as cur:
-                        cur.execute(drop_pipe_sql)
-
-                cur.close()
+                self.logger.info('Ingest Report:%s', history_resp)
+                self.query(drop_pipe_sql)
                 break
             else:
-                # wait for 20 seconds
+                self.logger.info('waiting for snowpipe to transfer data...')
                 time.sleep(20)
 
 

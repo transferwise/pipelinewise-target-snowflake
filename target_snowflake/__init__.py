@@ -18,6 +18,7 @@ from dateutil.parser import ParserError
 from joblib import Parallel, delayed, parallel_backend
 from jsonschema import Draft7Validator, FormatChecker
 from singer import get_logger
+from distutils.util import strtobool
 
 from target_snowflake.db_sync import DbSync
 
@@ -27,7 +28,7 @@ LOGGER = get_logger('target_snowflake')
 logging.getLogger('snowflake.connector').setLevel(logging.WARNING)
 
 DEFAULT_BATCH_SIZE_ROWS = 100000
-DEFAULT_PARALLELISM = 0  # 0 The number of threads used to flush tables
+DEFAULT_PARALLELISM = 1  # 0 The number of threads used to flush tables
 DEFAULT_MAX_PARALLELISM = 16  # Don't use more than this number of threads by default when flushing streams in parallel
 
 # max timestamp/datetime supported in SF, used to reset all invalid dates that are beyond this value
@@ -356,6 +357,8 @@ def flush_streams(
     else:
         streams_to_flush = streams.keys()
 
+    can_use_snowpipe = _verify_snowpipe_usage(stream_to_sync, config)
+
     # Single-host, thread-based parallelism
     with parallel_backend('threading', n_jobs=parallelism):
         Parallel()(delayed(load_stream_batch)(
@@ -366,7 +369,7 @@ def flush_streams(
             no_compression=config.get('no_compression'),
             delete_rows=config.get('hard_delete'),
             temp_dir=config.get('temp_dir'),
-            load_via_snowpipe=config.get('load_via_snowpipe')
+            load_via_snowpipe=can_use_snowpipe[stream],
         ) for stream in streams_to_flush)
 
     # reset flushed stream records to empty to avoid flushing same records
@@ -389,6 +392,31 @@ def flush_streams(
 
     # Return with state message with flushed positions
     return flushed_state
+
+
+def _verify_snowpipe_usage(stream_to_sync, config):
+    load_via_snowpipe = strtobool(config.get('load_via_snowpipe', 'False'))
+    result = {}
+
+    if not load_via_snowpipe:
+        result = dict((stream,0) for stream in stream_to_sync)
+    # if snowpipe option selected and data with primary keys found
+    # by default can not use snowpipe with primary keys, but can be overridden
+    else:
+        LOGGER.info("Trying to use snowpipe for every stream. "
+                    "Care, Snowpipe is designed to perform direct transfers(copy) only "
+                    "and not consolidated transfer(merge)")
+        for stream, db_sync in stream_to_sync.items():
+            if len(db_sync.stream_schema_message['key_properties']) > 0:
+                LOGGER.warning("Primary key %s found for the table %s", 
+                               db_sync.stream_schema_message['key_properties'],
+                               stream)
+                user_choice = input(f"To continue unsing snowpipe for table {stream} "
+                                    "(might lead to data discrepency) enter : I Agree \n")
+                result[stream] = 1
+                if 'i agree' not in user_choice.lower():
+                    result[stream] = 0
+    return result
 
 
 def load_stream_batch(stream, records_to_load, row_count, db_sync, no_compression=False, delete_rows=False,
@@ -429,9 +457,9 @@ def flush_records(stream, records_to_load, row_count, db_sync, temp_dir=None, no
 
     size_bytes = os.path.getsize(csv_file)
 
-    s3_key = db_sync.put_to_stage(csv_file, stream, row_count, temp_dir=temp_dir)
+    s3_key = db_sync.put_to_stage(csv_file, stream, row_count, temp_dir=temp_dir, load_via_snowpipe=load_via_snowpipe)
 
-    if load_via_snowpipe.lower() == 'true':
+    if load_via_snowpipe:
         db_sync.load_via_snowpipe(s3_key, stream)
         os.remove(csv_file)
     else:

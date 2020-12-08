@@ -554,7 +554,7 @@ class TestIntegration(unittest.TestCase):
         tap_lines_before_column_name_change = test_utils.get_test_tap_lines('messages-with-three-streams.json')
         tap_lines_after_column_name_change = test_utils.get_test_tap_lines(
             'messages-with-three-streams-modified-column.json')
-
+        breakpoint()
         # Load with default settings
         self.persist_lines_with_cache(tap_lines_before_column_name_change)
         self.persist_lines_with_cache(tap_lines_after_column_name_change)
