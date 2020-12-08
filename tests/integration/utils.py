@@ -48,7 +48,7 @@ def get_db_config():
     config['hard_delete'] = None
     config['flush_all_streams'] = None
     config['validate_records'] = None
-    # breakpoint()
+
     return config
 
 

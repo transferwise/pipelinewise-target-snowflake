@@ -36,15 +36,8 @@ class TestIntegration(unittest.TestCase):
     def setUp(self):
         self.config = test_utils.get_test_config()
         snowflake = DbSync(self.config)
-
-        # Drop target schema
         if self.config['default_target_schema']:
-            #snowflake.query("DROP SCHEMA IF EXISTS {}".format(self.config['default_target_schema']))
-            drop_table_queries = snowflake.query("SELECT 'DROP TABLE EXO_EL_STAGE.' || table_name || ';' FROM  INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME LIKE 'TEST_TABLE%';")
-            queries=[]
-            for query in drop_table_queries:
-                queries.append(list(query.values())[0])
-            snowflake.query(queries)
+            snowflake.query("DROP SCHEMA IF EXISTS {}".format(self.config['default_target_schema']))
 
     def persist_lines(self, lines):
         """Loads singer messages into snowflake without table caching option"""
@@ -554,7 +547,7 @@ class TestIntegration(unittest.TestCase):
         tap_lines_before_column_name_change = test_utils.get_test_tap_lines('messages-with-three-streams.json')
         tap_lines_after_column_name_change = test_utils.get_test_tap_lines(
             'messages-with-three-streams-modified-column.json')
-        breakpoint()
+
         # Load with default settings
         self.persist_lines_with_cache(tap_lines_before_column_name_change)
         self.persist_lines_with_cache(tap_lines_after_column_name_change)

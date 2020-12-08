@@ -28,7 +28,7 @@ LOGGER = get_logger('target_snowflake')
 logging.getLogger('snowflake.connector').setLevel(logging.WARNING)
 
 DEFAULT_BATCH_SIZE_ROWS = 100000
-DEFAULT_PARALLELISM = 1  # 0 The number of threads used to flush tables
+DEFAULT_PARALLELISM = 0  # 0 The number of threads used to flush tables
 DEFAULT_MAX_PARALLELISM = 16  # Don't use more than this number of threads by default when flushing streams in parallel
 
 # max timestamp/datetime supported in SF, used to reset all invalid dates that are beyond this value
@@ -405,17 +405,13 @@ def _verify_snowpipe_usage(stream_to_sync, config):
     else:
         LOGGER.info("Trying to use snowpipe for every stream. "
                     "Care, Snowpipe is designed to perform direct transfers(copy) only "
-                    "and not consolidated transfer(merge)")
+                    "and can not perform consolidated transfer(merge)")
         for stream, db_sync in stream_to_sync.items():
             if len(db_sync.stream_schema_message['key_properties']) > 0:
                 LOGGER.warning("Primary key %s found for the table %s", 
                                db_sync.stream_schema_message['key_properties'],
                                stream)
-                user_choice = input(f"To continue unsing snowpipe for table {stream} "
-                                    "(might lead to data discrepency) enter : I Agree \n")
-                result[stream] = 1
-                if 'i agree' not in user_choice.lower():
-                    result[stream] = 0
+                result[stream] = 0
     return result
 
 

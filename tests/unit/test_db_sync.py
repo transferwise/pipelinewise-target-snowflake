@@ -411,6 +411,5 @@ class TestDBSync(unittest.TestCase):
         stripped_db_name = self.config['dbname'].replace('"','')
         stripped_table_name = schema_table_name.replace('"','')
         expected_pipe_name = f"{stripped_db_name}.{stripped_table_name}_s3_pipe"
-        breakpoint()
 
         self.assertEqual(pipe_name, expected_pipe_name)

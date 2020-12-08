@@ -612,27 +612,17 @@ class DbSync:
                             copy into {db_name}.{obj_name} ({cols})
                             from @{db_name}.{stage}
                             file_format = (format_name = {db_name}.{file_format} );""".format(**pipe_args)
-        # create_pipe_merge_sql = """ create pipe {pipe_name} as
-        #                     merge into {db_name}.{obj_name} t
-        #                     using ( select {cols} 
-        #                     from @{db_name}.{stage}
-        #                     file_format = (format_name = {db_name}.{file_format})) s
-        #                     on {merge_condition}
-        #                     when matched then
-        #                         update set {when_matched}
-        #                     when not matched then
-        #                         insert ({cols})
-        #                         values ({when_not_matched})""".format(**pipe_args)
         drop_pipe_sql = """ drop pipe if exists {pipe_name}; """.format(**pipe_args)
-        # pipe_status_sql = "select system$pipe_status('{}');".format(pipe_name)
-
 
         # Create snowpipe
         try:
             self.logger.info("Creating snowpipe %s. ...", pipe_name)
             # primary key in records found, perform merge
             if len(self.stream_schema_message['key_properties']) > 0:
-                self.logger.warning("Primary key found in the data stream. Snowpipe can not be used to consolidate records based upon keys. It can just copy data")
+                self.logger.warning("Primary key %s found in the data stream. Snowpipe can not be used to "
+                                    "consolidate records based upon keys. It can just copy data. "
+                                    "Please refer the docs for further details",
+                                    self.stream_schema_message['key_properties'])
 
             # primary key not present in the records, perform copy
             else:
