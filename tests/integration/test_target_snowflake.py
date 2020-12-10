@@ -458,6 +458,18 @@ class TestIntegration(unittest.TestCase):
                 {'C_INT': 6, 'C_PK': 6, 'C_VARCHAR': 'Special Characters: [",\'!@£$%^&*()]'}
             ])
 
+    def test_loading_data_via_snowpipe(self):
+        """ Loading tables using snowpipe."""
+        tap_lines_without_key = test_utils.get_test_tap_lines(
+            'messages-with-three-streams-without-key-prop.json')
+
+        # Turning on snowpipe
+        self.config['load_via_snowpipe'] = True
+        self.persist_lines_with_cache(tap_lines_without_key)
+
+        # Check if data loaded correctly
+        self.assert_three_streams_are_into_snowflake(should_hard_deleted_rows=False)
+
     def test_non_db_friendly_columns(self):
         """Loading non-db friendly columns like, camelcase, minus signs, etc."""
         tap_lines = test_utils.get_test_tap_lines('messages-with-non-db-friendly-columns.json')
