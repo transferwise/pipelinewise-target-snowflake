@@ -461,7 +461,7 @@ class TestIntegration(unittest.TestCase):
     def test_loading_data_via_snowpipe(self):
         """ Loading tables using snowpipe."""
         tap_lines_without_key = test_utils.get_test_tap_lines(
-            'messages-with-three-streams-without-key-prop.json')
+            'messages-with-three-streams-no-primary-key.json')
 
         # Turning on snowpipe
         self.config['load_via_snowpipe'] = True
