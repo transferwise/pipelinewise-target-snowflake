@@ -426,7 +426,8 @@ def _set_stream_snowpipe_usage(stream_to_sync, config):
         LOGGER.info("Trying to use snowpipe for every stream."
                     "If primary keys found, Skipping.")
         for stream, db_sync in stream_to_sync.items():
-            if len(db_sync.stream_schema_message['key_properties']) == 0:
+            if len(db_sync.stream_schema_message['key_properties']) == 0 or \
+                config.get('ignore_primary_key', False):
                 LOGGER.debug("Using snowpipe for the table %s", stream)
                 use_snowpipe[stream] = 1
 

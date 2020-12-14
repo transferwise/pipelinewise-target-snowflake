@@ -590,7 +590,7 @@ class DbSync:
 
     def load_via_snowpipe(self, s3_key, stream):
         """ Performs data transfer from the stage to snowflake using snowpipe. """
-
+        self.logger.info("Loading data using Snowpipe.")
         # Get list if columns with types and transformation
         columns_with_trans = [
             {
@@ -605,17 +605,17 @@ class DbSync:
         pipe_name = self._generate_pipe_name(db_name, schema_table_name)
         pipe_args = self._generate_pipe_args(pipe_name, schema_table_name, columns_with_trans)
 
-        create_pipe_copy_sql = """create pipe {pipe_name} as
+        create_pipe_sql = """create pipe {pipe_name} as
                             copy into {db_name}.{obj_name} ({cols})
                             from @{db_name}.{stage}
                             file_format = (format_name = {db_name}.{file_format} );""".format(**pipe_args)
-        drop_pipe_sql = """ drop pipe if exists {pipe_name}; """.format(**pipe_args)
+        drop_pipe_sql = f"drop pipe if exists {pipe_name};"
 
         # Create snowpipe
         try:
             self.logger.debug("Creating snowpipe - %s.", pipe_name)
 
-            # primary key in records found
+            # primary key in records found, raise warning
             if len(self.stream_schema_message['key_properties']) > 0:
                 self.logger.warning("Primary key %s found in the data stream. Snowpipe can not be used to "
                                     "consolidate records based upon keys. It can just copy data. "
@@ -623,8 +623,7 @@ class DbSync:
                                     self.stream_schema_message['key_properties'])
 
             # primary key not present in the records, perform copy
-            else:
-                self.query(create_pipe_copy_sql)
+            self.query(create_pipe_sql)
         except:
             self.logger.error("An error was encountered while creating the snowpipe")
 
