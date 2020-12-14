@@ -163,7 +163,7 @@ def persist_lines(config, lines, table_cache=None) -> None:
     stream_to_sync = {}
     total_row_count = {}
     batch_size_rows = config.get('batch_size_rows', DEFAULT_BATCH_SIZE_ROWS)
-    config =_verify_snowpipe_usage(config)
+    _verify_snowpipe_usage(config)
 
     # Loop over lines from stdin
     for line in lines:
@@ -264,6 +264,7 @@ def persist_lines(config, lines, table_cache=None) -> None:
                     emit_state(flushed_state)
 
                 # key_properties key must be available in the SCHEMA message.
+
                 if 'key_properties' not in o:
                     raise Exception("key_properties field is required")
 
@@ -277,7 +278,10 @@ def persist_lines(config, lines, table_cache=None) -> None:
                 #  2) Use fastsync [postgres-to-snowflake, mysql-to-snowflake, etc.]
                 #  or 
                 #  3) Use snowpipe, set ` 'load_via_snowpipe': true ` in the target-snowflake config.json
-                if config.get('primary_key_required', True) and len(o['key_properties']) == 0:
+                if config.get('primary_key_required', 
+                                True if not config.get('load_via_snowpipe') \
+                                else False) \
+                        and len(o['key_properties']) == 0:
                     LOGGER.critical("Primary key is set to mandatory but not defined in the [{}] stream".format(stream))
                     raise Exception("key_properties field is required")
 
@@ -406,19 +410,24 @@ def _verify_snowpipe_usage(config):
     load_via_snowpipe = config.get('load_via_snowpipe', False)
     if isinstance(load_via_snowpipe, str):
         load_via_snowpipe = strtobool(load_via_snowpipe)
+        config['load_via_snowpipe'] = load_via_snowpipe
 
     if load_via_snowpipe:
         if config.get('primary_key_required', False):
             LOGGER.critical("Use Primary key is set to mandatory, that can not be done with snowpipe")
             raise Exception("Can not have a key based transfer through snowpipe")
-        config['primary_key_required'] = False
-        config['load_via_snowpipe'] = True
 
-    return config
+def _set_stream_snowpipe_usage(stream_to_sync, config) -> dict:
+    """ If streams have primary primary keys, we can not use snowpipe for them.
+        Unless the config ` 'ignore_primary_key': true `
 
-def _set_stream_snowpipe_usage(stream_to_sync, config):
-    """ If streams have primary primary keys, we can not use snowpipe for them."""
+        Args:
+            stream_to_sync: dict of streams
+            config: config dictionary
 
+        Returns:
+            use_snowpipe: dictionary of streams, vals - can/canot use snowpipe [1/0]
+    """
     use_snowpipe = dict((stream,0) for stream in stream_to_sync)
 
     # snowpipe can perform copy and not merge(based on keys).
