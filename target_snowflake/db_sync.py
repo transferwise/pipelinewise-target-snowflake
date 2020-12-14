@@ -588,6 +588,15 @@ class DbSync:
         private_key_text = private_key_obj.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()).decode('utf-8')
         return private_key_text
 
+    @staticmethod
+    def _increment_exponentially():
+            previous = 0
+            current = 1
+            while True:
+                yield 2**(current + previous)
+                current = current + previous
+                previous = current - previous
+
     def load_via_snowpipe(self, s3_key, stream):
         """ Performs data transfer from the stage to snowflake using snowpipe. """
         self.logger.info("Loading data using Snowpipe.")
@@ -642,20 +651,24 @@ class DbSync:
         staged_file_list = [StagedFile(s3_key, None)]
 
         #ingest files using snowpipe
-        try:
-            resp = ingest_manager.ingest_files(staged_file_list)
-            self.logger.info("Snowpipe has recived the files and will now start loading: %s",
-                             resp['responseCode'])
-        except HTTPError as e:
-            # HTTP error, retry and exit if still fails
-            self.logger.error(e)
+        retries = self.connection_config.get('max_retry', 5)
+        wait_time = self._increment_exponentially()
+        while True:
             try:
                 resp = ingest_manager.ingest_files(staged_file_list)
-            except Exception as e:
-                self.logger.exception(e)
-                sys.exit(1)
+                self.logger.info("Snowpipe has recived the files and will now start loading: %s",
+                                resp['responseCode'])
+                break
+            except HTTPError as e:
+                # HTTP error, wait and retry, exit if still fails
+                self.logger.error(e)
+                time.sleep(next(wait_time))
+                retries -= 1
+                if not retries:
+                    sys.exit(1)
 
         # Needs to wait for a while to perform transfer, delete pipe after transfer
+        wait_time = self._increment_exponentially()
         while True:
             history_resp = ingest_manager.get_history()
 
@@ -671,8 +684,7 @@ class DbSync:
                 break
             else:
                 self.logger.info('waiting for snowpipe to transfer data...')
-                time.sleep(30)
-
+                time.sleep(next(wait_time))
 
     def primary_key_merge_condition(self):
         stream_schema_message = self.stream_schema_message
