@@ -562,43 +562,42 @@ class DbSync:
                     self.table_name(stream, False),
                     json.dumps({'inserts': inserts, 'updates': updates, 'size_bytes': size_bytes})))
 
-    @staticmethod
-    def _generate_pipe_name(dbname, schema_table_name):
-        stripped_db_name = dbname.replace('"','')
-        stripped_table_name = schema_table_name.replace('"','')
-        return f"{stripped_db_name}.{stripped_table_name}_s3_pipe"
-
-    def _generate_pipe_args(self, pipe_name, schema_table_name, columns_with_trans):
-        pipe_args = dict(
-            pipe_name= pipe_name,
-            db_name = self.connection_config['dbname'],
-            obj_name = schema_table_name,
-            stage = self.connection_config['stage'],
-            file_format = self.connection_config['file_format'],
-            cols = ', '.join([c['name'] for c in columns_with_trans]),
-            )
-        return pipe_args
-
-    def _load_private_key(self):
-        key_path = getattr(self.connection_config, "private_key_path", "/rsa_key.p8")
-        password = getattr(self.connection_config, "private_key_password", None)
-        with open(key_path, 'rb') as pem_in:
-            private_key_obj = load_pem_private_key(pem_in.read(),password=password,backend=default_backend())
-
-        private_key_text = private_key_obj.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()).decode('utf-8')
-        return private_key_text
-
-    @staticmethod
-    def _increment_exponentially():
-            previous = 0
-            current = 1
-            while True:
-                yield 2**(current + previous)
-                current = current + previous
-                previous = current - previous
-
     def load_via_snowpipe(self, s3_key, stream):
         """ Performs data transfer from the stage to snowflake using snowpipe. """
+
+        def _generate_pipe_name(dbname, schema_table_name):
+            stripped_db_name = dbname.replace('"','')
+            stripped_table_name = schema_table_name.replace('"','')
+            return f"{stripped_db_name}.{stripped_table_name}_s3_pipe"
+
+        def _generate_pipe_args(pipe_name, schema_table_name, columns_with_trans):
+            pipe_args = dict(
+                pipe_name= pipe_name,
+                db_name = self.connection_config['dbname'],
+                obj_name = schema_table_name,
+                stage = self.connection_config['stage'],
+                file_format = self.connection_config['file_format'],
+                cols = ', '.join([c['name'] for c in columns_with_trans]),
+                )
+            return pipe_args
+
+        def _load_private_key():
+            key_path = getattr(self.connection_config, "private_key_path", "/rsa_key.p8")
+            password = getattr(self.connection_config, "private_key_password", None)
+            with open(key_path, 'rb') as pem_in:
+                private_key_obj = load_pem_private_key(pem_in.read(),password=password,backend=default_backend())
+
+            private_key_text = private_key_obj.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()).decode('utf-8')
+            return private_key_text
+
+        def _increment_exponentially():
+                previous = 0
+                current = 1
+                while True:
+                    yield 2**(current + previous)
+                    current = current + previous
+                    previous = current - previous
+
         self.logger.info("Loading data using Snowpipe.")
         # Get list if columns with types and transformation
         columns_with_trans = [
@@ -611,11 +610,11 @@ class DbSync:
         schema_table_name = self.table_name(stream, False)
         db_name = self.connection_config['dbname']
 
-        pipe_name = self._generate_pipe_name(db_name, schema_table_name)
-        pipe_args = self._generate_pipe_args(pipe_name, schema_table_name, columns_with_trans)
+        pipe_name = _generate_pipe_name(db_name, schema_table_name)
+        pipe_args = _generate_pipe_args(pipe_name, schema_table_name, columns_with_trans)
 
         create_pipe_sql = """create pipe {pipe_name} as
-                            copy into {db_name}.{obj_name} ({cols})
+                            copy into123 {db_name}.{obj_name} ({cols})
                             from @{db_name}.{stage}
                             file_format = (format_name = {db_name}.{file_format} );""".format(**pipe_args)
         drop_pipe_sql = f"drop pipe if exists {pipe_name};"
@@ -633,11 +632,11 @@ class DbSync:
 
             # primary key not present in the records, perform copy
             self.query(create_pipe_sql)
-        except:
-            self.logger.error("An error was encountered while creating the snowpipe")
+        except ProgrammingError as error:
+            self.logger.error("An error was encountered while creating the snowpipe, %s", error)
 
         #  Private key encription required to perform snowpipe data transfer
-        private_key_text = self._load_private_key()
+        private_key_text = _load_private_key()
 
         ingest_manager = SimpleIngestManager(account=self.connection_config['account'].split('.')[0],
                                         host=self.connection_config['account']+'.snowflakecomputing.com',
@@ -652,9 +651,10 @@ class DbSync:
 
         #ingest files using snowpipe
         retries = self.connection_config.get('max_retry', 5)
-        wait_time = self._increment_exponentially()
+        wait_time = _increment_exponentially()
         while True:
             try:
+                self.logger.debug("Starting to ingest file via snowpipe, retries left %s", retries)
                 resp = ingest_manager.ingest_files(staged_file_list)
                 self.logger.info("Snowpipe has recived the files and will now start loading: %s",
                                 resp['responseCode'])
@@ -665,10 +665,11 @@ class DbSync:
                 time.sleep(next(wait_time))
                 retries -= 1
                 if not retries:
+                    self.logger.critcal("Max retry limit reached, Failed to load data using snowpipe")
                     sys.exit(1)
 
         # Needs to wait for a while to perform transfer, delete pipe after transfer
-        wait_time = self._increment_exponentially()
+        wait_time = _increment_exponentially()
         while True:
             history_resp = ingest_manager.get_history()
 
@@ -683,7 +684,7 @@ class DbSync:
                 self.query(drop_pipe_sql)
                 break
             else:
-                self.logger.info('waiting for snowpipe to transfer data...')
+                self.logger.debug('waiting for snowpipe to transfer data...')
                 time.sleep(next(wait_time))
 
     def primary_key_merge_condition(self):
