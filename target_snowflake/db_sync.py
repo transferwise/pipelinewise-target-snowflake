@@ -590,11 +590,12 @@ class DbSync:
             private_key_text = private_key_obj.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()).decode('utf-8')
             return private_key_text
 
-        def _increment_exponentially():
+        def _increment_value(exponentially=False):
                 previous = 0
                 current = 1
                 while True:
-                    yield 2**(current + previous)
+                    yield 2**(current + previous) if exponentially  \
+                        else current + previous + 30
                     current = current + previous
                     previous = current - previous
 
@@ -614,7 +615,7 @@ class DbSync:
         pipe_args = _generate_pipe_args(pipe_name, schema_table_name, columns_with_trans)
 
         create_pipe_sql = """create pipe {pipe_name} as
-                            copy into123 {db_name}.{obj_name} ({cols})
+                            copy into {db_name}.{obj_name} ({cols})
                             from @{db_name}.{stage}
                             file_format = (format_name = {db_name}.{file_format} );""".format(**pipe_args)
         drop_pipe_sql = f"drop pipe if exists {pipe_name};"
@@ -651,7 +652,7 @@ class DbSync:
 
         #ingest files using snowpipe
         retries = self.connection_config.get('max_retry', 5)
-        wait_time = _increment_exponentially()
+        wait_time = _increment_value(exponentially=True)
         while True:
             try:
                 self.logger.debug("Starting to ingest file via snowpipe, retries left %s", retries)
@@ -669,12 +670,12 @@ class DbSync:
                     sys.exit(1)
 
         # Needs to wait for a while to perform transfer, delete pipe after transfer
-        wait_time = _increment_exponentially()
+        wait_time = _increment_value()
         while True:
             history_resp = ingest_manager.get_history()
 
             if len(history_resp['files']) > 0:
-                self.logger.info('''Ingest Report for pipe : %s
+                self.logger.info('''Ingest Report for snowpipe : %s
                                     STATUS: %s
                                     rowsInserted(rowsParsed): %s(%s)''',
                                     history_resp['pipe'],

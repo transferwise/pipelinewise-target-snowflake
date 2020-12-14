@@ -423,13 +423,14 @@ def _set_stream_snowpipe_usage(stream_to_sync, config):
 
     # snowpipe can perform copy and not merge(based on keys).
     if config['load_via_snowpipe']:
-        LOGGER.info("Trying to use snowpipe for every stream."
-                    "If primary keys found, Skipping.")
         for stream, db_sync in stream_to_sync.items():
             if len(db_sync.stream_schema_message['key_properties']) == 0 or \
                 config.get('ignore_primary_key', False):
                 LOGGER.debug("Using snowpipe for the table %s", stream)
                 use_snowpipe[stream] = 1
+        LOGGER.info("Trying to use snowpipe for every stream. "
+                    "If primary keys found, Skipping. \n"
+                    "Use Snowpipe for tables: %s", use_snowpipe)
 
     return use_snowpipe
 
