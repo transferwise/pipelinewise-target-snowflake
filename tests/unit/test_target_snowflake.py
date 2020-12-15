@@ -139,7 +139,7 @@ class TestTargetSnowflake(unittest.TestCase):
     @patch('target_snowflake.flush_streams')
     @patch('target_snowflake.DbSync')
     def test_verify_snowpipe_usage(self, dbSync_mock,
-                                   flush_streams_mock, monkeypatch):
+                                   flush_streams_mock):
         with open(f'{os.path.dirname(__file__)}/resources/same-schemas-multiple-times.json', 'r') as f:
             lines = f.readlines()
 
@@ -152,6 +152,5 @@ class TestTargetSnowflake(unittest.TestCase):
         target_snowflake.persist_lines(self.config, lines)
 
         flush_streams_mock.assert_called_once()
-        monkeypatch.setattr('builtins.input', lambda _: "I Agree")
 
         assert target_snowflake._verify_snowpipe_usage() == 'dict with all key values=1'

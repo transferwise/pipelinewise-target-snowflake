@@ -163,6 +163,7 @@ def persist_lines(config, lines, table_cache=None) -> None:
     stream_to_sync = {}
     total_row_count = {}
     batch_size_rows = config.get('batch_size_rows', DEFAULT_BATCH_SIZE_ROWS)
+    _verify_snowpipe_usage(config)
 
     # Loop over lines from stdin
     for line in lines:
@@ -263,6 +264,7 @@ def persist_lines(config, lines, table_cache=None) -> None:
                     emit_state(flushed_state)
 
                 # key_properties key must be available in the SCHEMA message.
+
                 if 'key_properties' not in o:
                     raise Exception("key_properties field is required")
 
@@ -274,7 +276,12 @@ def persist_lines(config, lines, table_cache=None) -> None:
                 #  1) Set ` 'primary_key_required': false ` in the target-snowflake config.json
                 #  or
                 #  2) Use fastsync [postgres-to-snowflake, mysql-to-snowflake, etc.]
-                if config.get('primary_key_required', True) and len(o['key_properties']) == 0:
+                #  or 
+                #  3) Use snowpipe, set ` 'load_via_snowpipe': true ` in the target-snowflake config.json
+                if config.get('primary_key_required', 
+                                True if not config.get('load_via_snowpipe') \
+                                else False) \
+                        and len(o['key_properties']) == 0:
                     LOGGER.critical("Primary key is set to mandatory but not defined in the [{}] stream".format(stream))
                     raise Exception("key_properties field is required")
 
@@ -357,7 +364,7 @@ def flush_streams(
     else:
         streams_to_flush = streams.keys()
 
-    can_use_snowpipe = _verify_snowpipe_usage(stream_to_sync, config)
+    can_use_snowpipe = _set_stream_snowpipe_usage(stream_to_sync, config)
 
     # Single-host, thread-based parallelism
     with parallel_backend('threading', n_jobs=parallelism):
@@ -393,27 +400,48 @@ def flush_streams(
     # Return with state message with flushed positions
     return flushed_state
 
+def _verify_snowpipe_usage(config):
+    """ Verifies if the config satisfies the use snowpipe conditions.
 
-def _verify_snowpipe_usage(stream_to_sync, config):
-    load_via_snowpipe = strtobool(config.get('load_via_snowpipe', 'False'))
-    result = {}
+        Raises:
+            Exception: Can not use snowpipe with ` 'primary_key_required': true `.
+                Snowpipe can just perform copy and not merge based on keys.
+    """
+    load_via_snowpipe = config.get('load_via_snowpipe', False)
+    if isinstance(load_via_snowpipe, str):
+        load_via_snowpipe = strtobool(load_via_snowpipe)
+        config['load_via_snowpipe'] = load_via_snowpipe
 
-    if not load_via_snowpipe:
-        result = dict((stream,0) for stream in stream_to_sync)
-    # if snowpipe option selected and data with primary keys found
-    # by default can not use snowpipe with primary keys, but can be overridden
-    else:
-        LOGGER.info("Trying to use snowpipe for every stream. "
-                    "Care, Snowpipe is designed to perform direct transfers(copy) only "
-                    "and can not perform consolidated transfer(merge)")
+    if load_via_snowpipe:
+        if config.get('primary_key_required', False):
+            LOGGER.critical("Use Primary key is set to mandatory, that can not be done with snowpipe")
+            raise Exception("Can not have a key based transfer through snowpipe")
+
+def _set_stream_snowpipe_usage(stream_to_sync, config) -> dict:
+    """ If streams have primary primary keys, we can not use snowpipe for them.
+        Unless the config ` 'ignore_primary_key': true `
+
+        Args:
+            stream_to_sync: dict of streams
+            config: config dictionary
+
+        Returns:
+            use_snowpipe: dictionary of streams, vals - can/canot use snowpipe [1/0]
+    """
+    use_snowpipe = dict((stream, False) for stream in stream_to_sync)
+
+    # snowpipe can perform copy and not merge(based on keys).
+    if config['load_via_snowpipe']:
         for stream, db_sync in stream_to_sync.items():
-            if len(db_sync.stream_schema_message['key_properties']) > 0:
-                LOGGER.warning("Primary key %s found for the table %s", 
-                               db_sync.stream_schema_message['key_properties'],
-                               stream)
-                result[stream] = 0
-    return result
+            if len(db_sync.stream_schema_message['key_properties']) == 0 or \
+                config.get('ignore_primary_key', False):
+                LOGGER.debug("Using snowpipe for the table %s", stream)
+                use_snowpipe[stream] = True
+        LOGGER.info("Trying to use snowpipe for every stream. "
+                    "If primary keys found, Skipping. \n"
+                    "Use Snowpipe for tables: %s", use_snowpipe)
 
+    return use_snowpipe
 
 def load_stream_batch(stream, records_to_load, row_count, db_sync, no_compression=False, delete_rows=False,
                       temp_dir=None, load_via_snowpipe=False):
