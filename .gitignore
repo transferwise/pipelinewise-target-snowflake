@@ -34,3 +34,8 @@ docs/_templates/
 
 # Environment
 .env
+
+# Pipenv
+Pipfile
+Pipfile.lock
+pyproject.toml

@@ -20,7 +20,6 @@ from jsonschema import Draft7Validator, FormatChecker
 from singer import get_logger
 
 from target_snowflake.db_sync import DbSync
-from target_snowflake.handlers import record as record_handler
 import target_snowflake.utils as utils
 
 LOGGER = get_logger('target_snowflake')
@@ -35,6 +34,8 @@ DEFAULT_MAX_PARALLELISM = 16  # Don't use more than this number of threads by de
 MAX_TIMESTAMP = '9999-12-31 23:59:59.999999'
 # max time supported in SF, used to reset all invalid times that are beyond this value
 MAX_TIME = '23:59:59.999999'
+
+from target_snowflake.handlers import record as record_handler
 
 
 def emit_state(state):
@@ -133,6 +134,10 @@ def persist_lines(config, lines, table_cache=None) -> None:
             # the previously used version of the schema
             if stream not in schemas or schemas[stream] != new_schema:
 
+                # Save old schema and validator in case we need them to flush records
+                old_schema = schemas.get(stream)
+                old_validator = validators.get(stream)
+                # Update schema and validator
                 schemas[stream] = new_schema
                 validators[stream] = Draft7Validator(schemas[stream], format_checker=FormatChecker())
 
@@ -140,7 +145,12 @@ def persist_lines(config, lines, table_cache=None) -> None:
                 # if same stream has been encountered again, it means the schema might have been altered
                 # so previous records need to be flushed
                 if row_count.get(stream, 0) > 0:
-                    flushed_state = flush_streams(records_to_load, row_count, stream_to_sync, config, state, flushed_state)
+                    flushed_state = record_handler.flush_stream_buckets(
+                        config=config, schema=old_schema, validator=old_validator,
+                        buckets=records_to_load, streams_to_flush=[stream],
+                        parallelism=parallelism, row_count=row_count, state=state,
+                        flushed_state=flushed_state
+                    )
 
                     # emit latest encountered state
                     emit_state(flushed_state)
@@ -164,7 +174,10 @@ def persist_lines(config, lines, table_cache=None) -> None:
                 key_properties[stream] = o['key_properties']
 
                 if config.get('add_metadata_columns') or config.get('hard_delete'):
-                    stream_to_sync[stream] = DbSync(config, add_metadata_columns_to_schema(o), table_cache)
+                    stream_to_sync[stream] = DbSync(
+                        config, utils.add_metadata_columns_to_schema(o),
+                        table_cache
+                    )
                 else:
                     stream_to_sync[stream] = DbSync(config, o, table_cache)
 
@@ -174,7 +187,6 @@ def persist_lines(config, lines, table_cache=None) -> None:
                 row_count[stream] = 0
                 total_row_count[stream] = 0
 
-
         elif t == 'RECORD':
 
             utils.check_message_has_stream(line, o)
@@ -183,7 +195,6 @@ def persist_lines(config, lines, table_cache=None) -> None:
             record_message = o
             record = record_message['record']
             stream = record_message['stream']
-            validator = validators[stream]
 
             # Get primary key for this record
             primary_key_string = stream_to_sync[stream].record_primary_key_string(record)
@@ -193,13 +204,14 @@ def persist_lines(config, lines, table_cache=None) -> None:
             # If no bucket for records in this stream exists, create one.
             if stream not in records_to_load:
                 records_to_load[stream] = {}
-            # add record_message to relevant bucket (by PK)
-            records_to_load[stream][primary_key_string] = record_message
 
             # increment row count only when a new PK is encountered in the current batch
             if primary_key_string not in records_to_load[stream]:
                 row_count[stream] += 1
                 total_row_count[stream] += 1
+
+            # add record_message to relevant bucket (by PK)
+            records_to_load[stream][primary_key_string] = record_message
 
             # track full buckets
             if row_count[stream] >= batch_size_rows:
@@ -211,16 +223,17 @@ def persist_lines(config, lines, table_cache=None) -> None:
                 or (len(buckets_to_flush) > 0 and config.get('flush_all_streams'))
             ):
                 if config.get('flush_all_streams'):
-                    streams = records_to_load.values()
+                    streams = records_to_load.keys()
                 else:  # only flush full buckets
-                    streams = [
-                        records_to_load[stream] for stream in buckets_to_flush
-                    ]
+                    streams = buckets_to_flush
 
                 # Flush and return a new state dict with new positions only for the flushed streams
                 flushed_state = record_handler.flush_stream_buckets(
-                    streams, parallelism, row_count, stream_to_sync,
-                    config, state, flushed_state
+                    config=config, schemas=schemas, validators=validators,
+                    buckets=records_to_load, streams_to_flush=streams,
+                    parallelism=parallelism, row_count=row_count,
+                    stream_to_sync=stream_to_sync, state=state,
+                    flushed_state=flushed_state
                 )
                 # emit last encountered state
                 emit_state(copy.deepcopy(flushed_state))
@@ -241,14 +254,14 @@ def persist_lines(config, lines, table_cache=None) -> None:
                 or (len(batches_to_flush) > 0 and config.get('flush_all_streams'))
             ):
                 # flush batches
-                flushed_state = record_handler.flush_batches(
-                    config, validators, schemas, batches_to_flush,
-                    parallelism, stream_to_sync, state, flushed_state
+                batches_to_flush, flushed_state = record_handler.flush_batches(
+                    config=config, schemas=schemas, validators=validators,
+                    batches=batches_to_flush, parallelism=parallelism,
+                    stream_to_sync=stream_to_sync, state=state,
+                    flushed_state=flushed_state
                 )
                 # emit last encountered state
                 emit_state(copy.deepcopy(flushed_state))
-
-
 
         elif t == 'ACTIVATE_VERSION':
             LOGGER.debug('ACTIVATE_VERSION message')
@@ -262,10 +275,27 @@ def persist_lines(config, lines, table_cache=None) -> None:
     # then flush all buckets.
     if sum(row_count.values()) > 0:
         # flush all streams one last time, delete records if needed, reset counts and then emit current state
-        flushed_state = flush_streams(records_to_load, row_count, stream_to_sync, config, state, flushed_state)
+        streams = list(records_to_load.keys())
+        flushed_state = record_handler.flush_stream_buckets(
+            config=config, schemas=schemas, validators=validators,
+            buckets=records_to_load, streams_to_flush=streams,
+            parallelism=parallelism, row_count=row_count,
+            stream_to_sync=stream_to_sync, state=state,
+            flushed_state=flushed_state
+        )
+        # emit latest state
+        emit_state(copy.deepcopy(flushed_state))
 
-    # emit latest state
-    emit_state(copy.deepcopy(flushed_state))
+    # if there are any remaining batches to flush, flush them
+    if len(batches_to_flush) > 0:
+        batches_to_flush, flushed_state = record_handler.flush_batches(
+            config=config, schemas=schemas, validators=validators,
+            batches=batches_to_flush, parallelism=parallelism,
+            stream_to_sync=stream_to_sync, state=state,
+            flushed_state=flushed_state
+        )
+        # emit latest state
+        emit_state(copy.deepcopy(flushed_state))
 
 
 def main():

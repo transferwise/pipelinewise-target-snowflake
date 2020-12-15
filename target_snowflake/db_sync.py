@@ -9,8 +9,8 @@ import time
 
 from singer import get_logger
 
-from target_snowflake.s3_upload_client import S3UploadClient
-from target_snowflake.snowflake_upload_client import SnowflakeUploadClient
+from target_snowflake.clients.s3_upload_client import S3UploadClient
+from target_snowflake.clients.snowflake_upload_client import SnowflakeUploadClient
 
 
 class TooManyRecordsException(Exception):
@@ -181,7 +181,7 @@ def flatten_record(d, flatten_schema=None, parent_key=[], sep='__', level=0, max
     items = []
     for k, v in d.items():
         new_key = flatten_key(k, parent_key, sep)
-        if isinstance(v, collections.MutableMapping) and level < max_level:
+        if isinstance(v, collections.abc.MutableMapping) and level < max_level:
             items.extend(flatten_record(v, flatten_schema, parent_key + [k], sep=sep, level=level + 1,
                                         max_level=max_level).items())
         else:
@@ -437,7 +437,8 @@ class DbSync:
         return ','.join(key_props)
 
     def record_to_csv_line(self, record):
-        flatten = flatten_record(record, self.flatten_schema, max_level=self.data_flattening_max_level)
+        # flatten record payload
+        flatten = flatten_record(record['record'], self.flatten_schema, max_level=self.data_flattening_max_level)
 
         return ','.join(
             [
