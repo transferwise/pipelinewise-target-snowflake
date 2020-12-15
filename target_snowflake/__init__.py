@@ -428,7 +428,7 @@ def _set_stream_snowpipe_usage(stream_to_sync, config) -> dict:
         Returns:
             use_snowpipe: dictionary of streams, vals - can/canot use snowpipe [1/0]
     """
-    use_snowpipe = dict((stream,0) for stream in stream_to_sync)
+    use_snowpipe = dict((stream, False) for stream in stream_to_sync)
 
     # snowpipe can perform copy and not merge(based on keys).
     if config['load_via_snowpipe']:
@@ -436,7 +436,7 @@ def _set_stream_snowpipe_usage(stream_to_sync, config) -> dict:
             if len(db_sync.stream_schema_message['key_properties']) == 0 or \
                 config.get('ignore_primary_key', False):
                 LOGGER.debug("Using snowpipe for the table %s", stream)
-                use_snowpipe[stream] = 1
+                use_snowpipe[stream] = True
         LOGGER.info("Trying to use snowpipe for every stream. "
                     "If primary keys found, Skipping. \n"
                     "Use Snowpipe for tables: %s", use_snowpipe)
