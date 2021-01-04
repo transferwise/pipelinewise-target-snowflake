@@ -1,4 +1,4 @@
-idna==2.7
+idna==3.0
 singer-python==5.1.1
 snowflake-connector-python==2.0.3
 boto3==1.9.33
