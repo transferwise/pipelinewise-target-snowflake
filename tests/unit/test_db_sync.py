@@ -440,9 +440,8 @@ class TestDBSync(unittest.TestCase):
         }
         assert db_sync.DbSync({**minimal_config, **external_stage_with_parallel}).connection_config['parallelism'] == 5
 
+        # Using snowflake table stages should enforce single thread parallelism
         table_stage_with_parallel = {
             'parallelism': 5
         }
-
-        # Using snowflake table stages should enforce single thread parallelism
         assert db_sync.DbSync({**minimal_config, **table_stage_with_parallel}).connection_config['parallelism'] == 1
