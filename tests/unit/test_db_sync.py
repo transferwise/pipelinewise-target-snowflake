@@ -420,3 +420,28 @@ class TestDBSync(unittest.TestCase):
             'schema': 'test_schema',
             'table': 'test_table'
         }
+
+    def test_parallelism(self):
+        minimal_config = {
+            'account': "dummy-value",
+            'dbname': "dummy-value",
+            'user': "dummy-value",
+            'password': "dummy-value",
+            'warehouse': "dummy-value",
+            'default_target_schema': "dummy-value",
+            'file_format': "dummy-value"
+        }
+
+        # Using external stages should allow parallelism
+        external_stage_with_parallel = {
+            's3_bucket': 'dummy-bucket',
+            'stage': 'dummy_schema.dummy_stage',
+            'parallelism': 5
+        }
+        assert db_sync.DbSync({**minimal_config, **external_stage_with_parallel}).connection_config['parallelism'] == 5
+
+        # Using snowflake table stages should enforce single thread parallelism
+        table_stage_with_parallel = {
+            'parallelism': 5
+        }
+        assert db_sync.DbSync({**minimal_config, **table_stage_with_parallel}).connection_config['parallelism'] == 1
