@@ -17,8 +17,7 @@ setup(name="pipelinewise-target-snowflake",
           'Programming Language :: Python :: 3 :: Only'
       ],
       py_modules=["target_snowflake"],
-      install_requires=[
-          'idna==3.1',
+      install_requires=[Remove idna from requirements
           'pipelinewise-singer-python==1.*',
           'snowflake-connector-python==2.3.7',
           'inflection==0.5.1',
