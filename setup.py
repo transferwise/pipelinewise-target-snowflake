@@ -21,7 +21,7 @@ setup(name="pipelinewise-target-snowflake",
           'idna==2.7',
           'pipelinewise-singer-python==1.*',
           'snowflake-connector-python==2.3.7',
-          'inflection==0.3.1',
+          'inflection==0.5.1',
           'joblib==0.16.0',
           'python-dateutil==2.8.1'
       ],
