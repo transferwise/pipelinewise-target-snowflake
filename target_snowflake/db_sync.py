@@ -413,15 +413,14 @@ class DbSync:
 
                 # Run every query in one transaction if query is a list of SQL
                 if type(query) is list:
-                    queries.append("START TRANSACTION")
-                    queries.extend(query)
+                    self.logger.info('Starting Transaction')
+                    cur.execute("START TRANSACTION")
                 else:
                     queries = [query]
 
                 qid = None
 
                 for q in queries:
-
                     if safe_to_log:
                         self.logger.info("Running query: %s", q)
 
