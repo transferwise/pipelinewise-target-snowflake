@@ -1,6 +1,6 @@
 import json
 import sys
-from typing import Tuple, List, Dict, Optional
+from typing import Tuple, List, Dict, Optional, Union
 
 import snowflake.connector
 import collections
@@ -397,8 +397,15 @@ class DbSync:
             }
         )
 
-    def query(self, query, params=None, max_records=0, safe_to_log=False) -> List[Dict]:
+    def query(self, query: Union[str, List[str]], params: Dict = None, max_records=0, safe_to_log=True) -> List[Dict]:
         result = []
+
+        if params is None:
+            params = {}
+        else:
+            if 'LAST_QID' in params:
+                self.logger.warning('LAST_QID is a reserved prepared statement parameter name, it will be used '
+                                    'once but will be overridden with each executed query!')
 
         with self.open_connection() as connection:
             with connection.cursor(snowflake.connector.DictCursor) as cur:
@@ -411,15 +418,16 @@ class DbSync:
                 else:
                     queries = [query]
 
-                qid = None
+                # get the LAST_QID from params in case an initial value exists
+                qid = params.get('LAST_QID')
 
                 for q in queries:
-                    # support for a QID name parameter in case we want to pass the last query id to the current query
-                    q = q.format(QID=qid)
 
                     if safe_to_log:
                         self.logger.info("Running query: %s", q)
 
+                    # update the LAST_QID
+                    params['LAST_QID'] = qid
                     cur.execute(q, params)
                     qid = cur.sfqid
 
@@ -652,13 +660,13 @@ class DbSync:
                 select = """
                     SELECT "schema_name" AS schema_name
                           ,"name"        AS table_name
-                      FROM TABLE(RESULT_SCAN('{QID}'))
+                      FROM TABLE(RESULT_SCAN(%(LAST_QID)s))
                 """
                 queries.extend([show_tables, select])
 
                 # Run everything in one transaction
                 try:
-                    tables = self.query(queries, max_records=9999, safe_to_log=True)
+                    tables = self.query(queries, max_records=9999)
 
                 # Catch exception when schema not exists and SHOW TABLES throws a ProgrammingError
                 # Regexp to extract snowflake error code and message from the exception message
@@ -699,14 +707,14 @@ class DbSync:
                              WHEN 'REAL'  THEN 'FLOAT'
                              ELSE PARSE_JSON("data_type"):type::varchar
                            END data_type
-                      FROM TABLE(RESULT_SCAN('{QID}'))
+                      FROM TABLE(RESULT_SCAN(%(LAST_QID)s))
                 """
 
                 queries.extend([show_columns, select])
 
                 # Run everything in one transaction
                 try:
-                    columns = self.query(queries, max_records=9999, safe_to_log=True)
+                    columns = self.query(queries, max_records=9999)
 
                     if not columns:
                         self.logger.warning('No columns discovered in the schema "%s"',
