@@ -415,6 +415,9 @@ class DbSync:
                 if type(query) is list:
                     self.logger.info('Starting Transaction')
                     cur.execute("START TRANSACTION")
+
+                    queries = query
+
                 else:
                     queries = [query]
 
