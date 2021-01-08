@@ -1055,11 +1055,12 @@ class TestIntegration(unittest.TestCase):
         self.persist_lines_with_cache(tap_lines)
 
         # Get query tags from QUERY_HISTORY
-        result = snowflake.query("SELECT query_tag, count(*) queries "
-                                 f"FROM table(information_schema.query_history_by_user('{self.config['user']}')) "
-                                 f"WHERE query_tag like '%PPW test tap run at {current_time}%'"
-                                 "GROUP BY query_tag "
-                                 "ORDER BY 1")
+        result = snowflake.query(f"""SELECT query_tag, count(*) queries
+                                 FROM table(information_schema.query_history_by_user('{self.config['user']}'))
+                                 WHERE query_tag like '%%PPW test tap run at {current_time}%%'
+                                 GROUP BY query_tag
+                                 ORDER BY 1""")
+
         target_db = self.config['dbname']
         target_schema = self.config['default_target_schema']
         self.assertEqual(result, [{

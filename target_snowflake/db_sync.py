@@ -409,15 +409,12 @@ class DbSync:
 
         with self.open_connection() as connection:
             with connection.cursor(snowflake.connector.DictCursor) as cur:
-                queries = []
 
                 # Run every query in one transaction if query is a list of SQL
                 if type(query) is list:
                     self.logger.info('Starting Transaction')
                     cur.execute("START TRANSACTION")
-
                     queries = query
-
                 else:
                     queries = [query]
 
