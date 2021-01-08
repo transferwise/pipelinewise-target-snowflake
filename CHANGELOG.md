@@ -2,6 +2,8 @@
 -------------------
 - Update caching mechanism to fix issue with badly ordered queryies in a transaction
 - Introduced a reserved named parameter for prepared statements.
+- Do not use parallel file upload with PUT command and table stages.
+- Bumping dependencies
 
 1.10.0 (2020-12-03)
 -------------------
