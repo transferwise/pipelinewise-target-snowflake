@@ -404,8 +404,8 @@ class DbSync:
             params = {}
         else:
             if 'LAST_QID' in params:
-                self.logger.warning('LAST_QID is a reserved prepared statement parameter name, it will be used '
-                                    'once but will be overridden with each executed query!')
+                self.logger.warning('LAST_QID is a reserved prepared statement parameter name, '
+                                    'it will be overridden with each executed query!')
 
         with self.open_connection() as connection:
             with connection.cursor(snowflake.connector.DictCursor) as cur:
@@ -418,8 +418,7 @@ class DbSync:
                 else:
                     queries = [query]
 
-                # get the LAST_QID from params in case an initial value exists
-                qid = params.get('LAST_QID')
+                qid = None
 
                 for q in queries:
 
