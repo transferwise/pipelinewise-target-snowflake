@@ -1,3 +1,8 @@
+1.10.1 (2021-01-08)
+-------------------
+- Update caching mechanism to fix issue with badly ordered queryies in a transaction
+- Introduced a reserved named parameter for prepared statements.
+
 1.10.0 (2020-12-03)
 -------------------
 
