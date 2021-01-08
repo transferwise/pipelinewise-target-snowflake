@@ -397,7 +397,7 @@ class DbSync:
             }
         )
 
-    def query(self, query: Union[str, List[str]], params: Dict = None, max_records=0, safe_to_log=True) -> List[Dict]:
+    def query(self, query: Union[str, List[str]], params: Dict = None, max_records=0) -> List[Dict]:
         result = []
 
         if params is None:
@@ -421,11 +421,12 @@ class DbSync:
                 qid = None
 
                 for q in queries:
-                    if safe_to_log:
-                        self.logger.info("Running query: %s", q)
 
                     # update the LAST_QID
                     params['LAST_QID'] = qid
+
+                    self.logger.info("Running query: '%s' with Params %s", q, params)
+
                     cur.execute(q, params)
                     qid = cur.sfqid
 
