@@ -42,6 +42,11 @@ class RecordValidationException(Exception):
     pass
 
 
+class UnexpectedValueTypeException(Exception):
+    """Exception to raise when record value type doesn't match the expected schema type"""
+    pass
+
+
 class InvalidValidationOperationException(Exception):
     """Exception to raise when internal JSON schema validation process failed"""
     pass
@@ -74,7 +79,7 @@ def add_metadata_columns_to_schema(schema_message):
     return extended_schema_message
 
 
-def add_metadata_values_to_record(record_message, stream_to_sync):
+def add_metadata_values_to_record(record_message):
     """Populate metadata _sdc columns from incoming record message
     The location of the required attributes are fixed in the stream
     """
@@ -131,12 +136,19 @@ def adjust_timestamps_in_record(record: Dict, schema: Dict) -> None:
     """
 
     # creating this internal function to avoid duplicating code and too many nested blocks.
-    def reset_new_value(record: Dict, key: str, format: str):
+    def reset_new_value(record: Dict, key: str, _format: str):
+        if not isinstance(record[key], str):
+            raise UnexpectedValueTypeException(
+                f'Value {record[key]} of key "{key}" is not a string.')
+
         try:
             parser.parse(record[key])
         except ParserError:
-            record[key] = MAX_TIMESTAMP if format != 'time' else MAX_TIME
+            LOGGER.warning(f'Parsing the {_format} "{record[key]}" in key "{key}" has failed, thus defaulting to max '
+                           f'acceptable value of {_format} in Snowflake')
+            record[key] = MAX_TIMESTAMP if _format != 'time' else MAX_TIME
 
+    # traverse the schema looking for properties of some date type
     for key, value in record.items():
         if value is not None and key in schema['properties']:
             if 'anyOf' in schema['properties'][key]:
@@ -172,16 +184,16 @@ def persist_lines(config, lines, table_cache=None) -> None:
             raise
 
         if 'type' not in o:
-            raise Exception("Line is missing required key 'type': {}".format(line))
+            raise Exception(f"Line is missing required key 'type': {line}")
 
         t = o['type']
 
         if t == 'RECORD':
             if 'stream' not in o:
-                raise Exception("Line is missing required key 'stream': {}".format(line))
+                raise Exception(f"Line is missing required key 'stream': {line}")
             if o['stream'] not in schemas:
                 raise Exception(
-                    "A record for stream {} was encountered before a corresponding schema".format(o['stream']))
+                    f"A record for stream {o['stream']} was encountered before a corresponding schema")
 
             # Get schema for this record's stream
             stream = o['stream']
@@ -214,7 +226,7 @@ def persist_lines(config, lines, table_cache=None) -> None:
 
             # append record
             if config.get('add_metadata_columns') or config.get('hard_delete'):
-                records_to_load[stream][primary_key_string] = add_metadata_values_to_record(o, stream_to_sync[stream])
+                records_to_load[stream][primary_key_string] = add_metadata_values_to_record(o)
             else:
                 records_to_load[stream][primary_key_string] = o['record']
 
@@ -240,7 +252,7 @@ def persist_lines(config, lines, table_cache=None) -> None:
 
         elif t == 'SCHEMA':
             if 'stream' not in o:
-                raise Exception("Line is missing required key 'stream': {}".format(line))
+                raise Exception(f"Line is missing required key 'stream': {line}")
 
             stream = o['stream']
             new_schema = float_to_decimal(o['schema'])
@@ -302,8 +314,7 @@ def persist_lines(config, lines, table_cache=None) -> None:
                 flushed_state = copy.deepcopy(state)
 
         else:
-            raise Exception("Unknown message type {} in message {}"
-                            .format(o['type'], o))
+            raise Exception(f"Unknown message type {o['type']} in message {o}")
 
     # if some bucket has records that need to be flushed but haven't reached batch size
     # then flush all buckets.
