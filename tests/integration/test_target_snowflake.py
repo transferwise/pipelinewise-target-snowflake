@@ -1103,3 +1103,10 @@ class TestIntegration(unittest.TestCase):
         # 250001 (08001): Role 'INVALID-ROLE' specified in the connect string does not exist or not authorized.
         with assert_raises(DatabaseError):
             self.persist_lines_with_cache(tap_lines)
+
+    def test_parsing_date_failure(self):
+        """Test if custom role can be used"""
+        tap_lines = test_utils.get_test_tap_lines('messages-with-unexpected-types.json')
+
+        with assert_raises(target_snowflake.UnexpectedValueTypeException):
+            self.persist_lines_with_cache(tap_lines)
