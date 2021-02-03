@@ -736,10 +736,6 @@ class DbSync:
             grant_method(schema, grantees)
 
     def delete_rows(self, stream):
-        self.logger.warning(("DANGER! In an act of hackery and desperation, "
-                             "delete_rows has been disabled at the source. "
-                             "see DATA-1467 for details."))
-        return 
         table = self.table_name(stream, False)
         query = "DELETE FROM {} WHERE _sdc_deleted_at IS NOT NULL".format(table)
         self.logger.info("Deleting rows from '{}' table... {}".format(table, query))
