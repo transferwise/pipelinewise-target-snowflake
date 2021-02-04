@@ -1,3 +1,8 @@
+1.10.2 (2021-02-04)
+-------------------
+- Add check and few logs in the date parsing routine
+- Bumping dependencies
+
 1.10.1 (2021-01-08)
 -------------------
 - Update caching mechanism to fix issue with badly ordered queryies in a transaction
