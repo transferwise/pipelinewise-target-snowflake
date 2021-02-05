@@ -1,4 +1,4 @@
-1.10.2 (2021-02-04)
+1.10.2 (2021-02-05)
 -------------------
 - Add check and few logs in the date parsing routine
 - Bumping dependencies
