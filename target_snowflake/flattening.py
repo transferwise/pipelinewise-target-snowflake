@@ -27,8 +27,8 @@ def flatten_key(k, parent_key, sep):
     return sep.join(inflected_key)
 
 
-# pylint: disable=invalid-name,dangerous-default-value
-def flatten_schema(d, parent_key=[], sep='__', level=0, max_level=0):
+# pylint: disable=invalid-name
+def flatten_schema(d, parent_key=None, sep='__', level=0, max_level=0):
     """
 
     Params:
@@ -38,8 +38,10 @@ def flatten_schema(d, parent_key=[], sep='__', level=0, max_level=0):
 
     Returns:
     """
-    items = []
+    if parent_key is None:
+        parent_key = []
 
+    items = []
     if 'properties' not in d:
         return {}
 
@@ -91,8 +93,8 @@ def _should_json_dump_value(key, value, schema=None):
     return False
 
 
-# pylint: disable-msg=invalid-name,dangerous-default-value
-def flatten_record(d, schema=None, parent_key=[], sep='__', level=0, max_level=0):
+# pylint: disable-msg=invalid-name
+def flatten_record(d, schema=None, parent_key=None, sep='__', level=0, max_level=0):
     """
 
     Params:
@@ -102,8 +104,10 @@ def flatten_record(d, schema=None, parent_key=[], sep='__', level=0, max_level=0
 
     Returns:
     """
+    if parent_key is None:
+        parent_key = []
+
     items = []
-    print(d)
     for k, v in d.items():
         new_key = flatten_key(k, parent_key, sep)
         if isinstance(v, collections.MutableMapping) and level < max_level:
