@@ -1,13 +1,10 @@
 import unittest
 import os
-import gzip
-import tempfile
 
 from unittest.mock import patch
 from nose.tools import assert_raises
 
 import target_snowflake
-import target_snowflake.file_formats.csv as csv
 
 
 def _mock_record_to_csv_line(record):

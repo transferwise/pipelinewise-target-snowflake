@@ -16,7 +16,7 @@ from snowflake.connector.errors import ProgrammingError
 from snowflake.connector.errors import DatabaseError
 
 try:
-    import tests.utils as test_utils
+    import tests.integration.utils as test_utils
 except ImportError:
     import utils as test_utils
 
