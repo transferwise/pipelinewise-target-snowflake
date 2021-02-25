@@ -10,7 +10,7 @@ from nose.tools import assert_raises
 import target_snowflake
 from target_snowflake import RecordValidationException
 from target_snowflake.db_sync import DbSync
-from target_snowflake.s3_upload_client import S3UploadClient
+from target_snowflake.upload_clients.s3_upload_client import S3UploadClient
 
 from snowflake.connector.errors import ProgrammingError
 from snowflake.connector.errors import DatabaseError
@@ -935,7 +935,7 @@ class TestIntegration(unittest.TestCase):
 
             # Create a new S3 client using env vars
             s3Client = S3UploadClient(self.config)
-            s3Client.create_s3_client()
+            s3Client._create_s3_client()
 
         # Restore the original state to not confuse other tests
         finally:
@@ -957,7 +957,7 @@ class TestIntegration(unittest.TestCase):
             # Create a new S3 client using profile based authentication
             with assert_raises(botocore.exceptions.ProfileNotFound):
                 s3UploaddClient = S3UploadClient(self.config)
-                s3UploaddClient.create_s3_client()
+                s3UploaddClient._create_s3_client()
 
         # Restore the original state to not confuse other tests
         finally:
@@ -977,7 +977,7 @@ class TestIntegration(unittest.TestCase):
             # Create a new S3 client using profile based authentication
             with assert_raises(botocore.exceptions.ProfileNotFound):
                 s3UploaddClient = S3UploadClient(self.config)
-                s3UploaddClient.create_s3_client()
+                s3UploaddClient._create_s3_client()
 
         # Restore the original state to not confuse other tests
         finally:
@@ -996,7 +996,7 @@ class TestIntegration(unittest.TestCase):
             # Botocore should raise ValurError in case of fake S3 endpoint url
             with assert_raises(ValueError):
                 s3UploaddClient = S3UploadClient(self.config)
-                s3UploaddClient.create_s3_client()
+                s3UploaddClient._create_s3_client()
 
         # Restore the original state to not confuse other tests
         finally:

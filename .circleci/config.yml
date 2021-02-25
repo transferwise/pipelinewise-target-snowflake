@@ -18,7 +18,7 @@ jobs:
           name: 'Pylinting'
           command: |
             . venv/bin/activate
-            pylint target_snowflake -d C,W,unexpected-keyword-arg,duplicate-code
+            pylint target_snowflake
 
       - run:
           name: 'Unit Tests'

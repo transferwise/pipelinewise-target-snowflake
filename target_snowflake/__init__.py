@@ -3,7 +3,6 @@
 import argparse
 import io
 import json
-import gzip
 import logging
 import os
 import sys
@@ -11,15 +10,21 @@ import copy
 
 from datetime import datetime
 from decimal import Decimal
-from tempfile import mkstemp
-from typing import Dict
+from typing import Dict, List
 from dateutil import parser
 from dateutil.parser import ParserError
 from joblib import Parallel, delayed, parallel_backend
 from jsonschema import Draft7Validator, FormatChecker
 from singer import get_logger
 
+import target_snowflake.file_formats.csv as csv
+
 from target_snowflake.db_sync import DbSync
+from target_snowflake.exceptions import (
+    RecordValidationException,
+    UnexpectedValueTypeException,
+    InvalidValidationOperationException
+)
 
 LOGGER = get_logger('target_snowflake')
 
@@ -35,21 +40,6 @@ MAX_TIMESTAMP = '9999-12-31 23:59:59.999999'
 
 # max time supported in SF, used to reset all invalid times that are beyond this value
 MAX_TIME = '23:59:59.999999'
-
-
-class RecordValidationException(Exception):
-    """Exception to raise when record validation failed"""
-    pass
-
-
-class UnexpectedValueTypeException(Exception):
-    """Exception to raise when record value type doesn't match the expected schema type"""
-    pass
-
-
-class InvalidValidationOperationException(Exception):
-    """Exception to raise when internal JSON schema validation process failed"""
-    pass
 
 
 def float_to_decimal(value):
@@ -92,14 +82,16 @@ def add_metadata_values_to_record(record_message):
 
 
 def emit_state(state):
+    """Print state to stdout"""
     if state is not None:
         line = json.dumps(state)
-        LOGGER.info('Emitting state {}'.format(line))
+        LOGGER.info('Emitting state %s', line)
         sys.stdout.write("{}\n".format(line))
         sys.stdout.flush()
 
 
 def get_schema_names_from_config(config):
+    """Get list of target schema name from config"""
     default_target_schema = config.get('default_target_schema')
     schema_mapping = config.get('schema_mapping', {})
     schema_names = []
@@ -108,18 +100,19 @@ def get_schema_names_from_config(config):
         schema_names.append(default_target_schema)
 
     if schema_mapping:
-        for source_schema, target in schema_mapping.items():
+        for target in schema_mapping.values():
             schema_names.append(target.get('target_schema'))
 
     return schema_names
 
 
 def load_table_cache(config):
+    """Load table cache from snowflake metadata"""
     table_cache = []
     if not ('disable_table_cache' in config and config['disable_table_cache']):
-        LOGGER.info("Getting catalog objects from table cache...")
+        LOGGER.info('Getting catalog objects from table cache...')
 
-        db = DbSync(config)
+        db = DbSync(config) # pylint: disable=invalid-name
         table_cache = db.get_table_columns(
             table_schemas=get_schema_names_from_config(config))
 
@@ -144,8 +137,8 @@ def adjust_timestamps_in_record(record: Dict, schema: Dict) -> None:
         try:
             parser.parse(record[key])
         except ParserError:
-            LOGGER.warning(f'Parsing the {_format} "{record[key]}" in key "{key}" has failed, thus defaulting to max '
-                           f'acceptable value of {_format} in Snowflake')
+            LOGGER.warning('Parsing the %s "%s" in key "%s" has failed, thus defaulting to max '
+                           'acceptable value of %s in Snowflake', _format, record[key], key, _format)
             record[key] = MAX_TIMESTAMP if _format != 'time' else MAX_TIME
 
     # traverse the schema looking for properties of some date type
@@ -162,8 +155,9 @@ def adjust_timestamps_in_record(record: Dict, schema: Dict) -> None:
                     reset_new_value(record, key, schema['properties'][key]['format'])
 
 
-# pylint: disable=too-many-locals,too-many-branches,too-many-statements
+# pylint: disable=too-many-locals,too-many-branches,too-many-statements,invalid-name
 def persist_lines(config, lines, table_cache=None) -> None:
+    """Main loop to read and consume singer messages from stdin"""
     state = None
     flushed_state = None
     schemas = {}
@@ -180,7 +174,7 @@ def persist_lines(config, lines, table_cache=None) -> None:
         try:
             o = json.loads(line)
         except json.decoder.JSONDecodeError:
-            LOGGER.error("Unable to parse:\n{}".format(line))
+            LOGGER.error('Unable to parse:\n%s', line)
             raise
 
         if 'type' not in o:
@@ -209,8 +203,9 @@ def persist_lines(config, lines, table_cache=None) -> None:
                         raise InvalidValidationOperationException(
                             f"Data validation failed and cannot load to destination. RECORD: {o['record']}\n"
                             "multipleOf validations that allows long precisions are not supported (i.e. with 15 digits"
-                            "or more) Try removing 'multipleOf' methods from JSON schema.")
-                    raise RecordValidationException(f"Record does not pass schema validation. RECORD: {o['record']}")
+                            "or more) Try removing 'multipleOf' methods from JSON schema.") from ex
+                    raise RecordValidationException(f"Record does not pass schema validation. RECORD: {o['record']}") \
+                        from ex
 
             primary_key_string = stream_to_sync[stream].record_primary_key_string(o['record'])
             if not primary_key_string:
@@ -268,7 +263,12 @@ def persist_lines(config, lines, table_cache=None) -> None:
                 # if same stream has been encountered again, it means the schema might have been altered
                 # so previous records need to be flushed
                 if row_count.get(stream, 0) > 0:
-                    flushed_state = flush_streams(records_to_load, row_count, stream_to_sync, config, state, flushed_state)
+                    flushed_state = flush_streams(records_to_load,
+                                                  row_count,
+                                                  stream_to_sync,
+                                                  config,
+                                                  state,
+                                                  flushed_state)
 
                     # emit latest encountered state
                     emit_state(flushed_state)
@@ -286,7 +286,7 @@ def persist_lines(config, lines, table_cache=None) -> None:
                 #  or
                 #  2) Use fastsync [postgres-to-snowflake, mysql-to-snowflake, etc.]
                 if config.get('primary_key_required', True) and len(o['key_properties']) == 0:
-                    LOGGER.critical("Primary key is set to mandatory but not defined in the [{}] stream".format(stream))
+                    LOGGER.critical('Primary key is set to mandatory but not defined in the [%s] stream', stream)
                     raise Exception("key_properties field is required")
 
                 key_properties[stream] = o['key_properties']
@@ -306,7 +306,7 @@ def persist_lines(config, lines, table_cache=None) -> None:
             LOGGER.debug('ACTIVATE_VERSION message')
 
         elif t == 'STATE':
-            LOGGER.debug('Setting state to {}'.format(o['value']))
+            LOGGER.debug('Setting state to %s', o['value'])
             state = o['value']
 
             # Initially set flushed state
@@ -371,7 +371,7 @@ def flush_streams(
     with parallel_backend('threading', n_jobs=parallelism):
         Parallel()(delayed(load_stream_batch)(
             stream=stream,
-            records_to_load=streams[stream],
+            records=streams[stream],
             row_count=row_count,
             db_sync=stream_to_sync[stream],
             no_compression=config.get('no_compression'),
@@ -401,11 +401,12 @@ def flush_streams(
     return flushed_state
 
 
-def load_stream_batch(stream, records_to_load, row_count, db_sync, no_compression=False, delete_rows=False,
+def load_stream_batch(stream, records, row_count, db_sync, no_compression=False, delete_rows=False,
                       temp_dir=None):
+    """Load one batch of the stream into target table"""
     # Load into snowflake
     if row_count[stream] > 0:
-        flush_records(stream, records_to_load, row_count[stream], db_sync, temp_dir, no_compression)
+        flush_records(stream, records, db_sync, temp_dir, no_compression)
 
         # Delete soft-deleted, flagged rows - where _sdc_deleted at is not null
         if delete_rows:
@@ -415,27 +416,33 @@ def load_stream_batch(stream, records_to_load, row_count, db_sync, no_compressio
         row_count[stream] = 0
 
 
-def write_record_to_file(outfile, records_to_load, record_to_csv_line_transformer):
-    for record in records_to_load.values():
-        csv_line = record_to_csv_line_transformer(record)
-        outfile.write(bytes(csv_line + '\n', 'UTF-8'))
+def flush_records(stream: str,
+                  records: List[Dict],
+                  db_sync: DbSync,
+                  temp_dir: str = None,
+                  no_compression: bool = False) -> None:
+    """
+    Takes a list of record messages and loads it into the snowflake target table
 
+    Args:
+        stream: Name of the stream
+        records: List of dictionary, that represents multiple csv lines. Dict key is the column name, value is the
+                 column value
+        row_count:
+        db_sync: A DbSync object
+        temp_dir: Directory where intermediate temporary files will be created. (Default: OS specificy temp directory)
+        no_compression: Disable to use compressed files. (Default: False)
 
-def flush_records(stream, records_to_load, row_count, db_sync, temp_dir=None, no_compression=False):
-    if temp_dir:
-        os.makedirs(temp_dir, exist_ok=True)
-    csv_fd, csv_file = mkstemp(suffix='.csv', prefix='records_', dir=temp_dir)
-    record_to_csv_line_transformer = db_sync.record_to_csv_line
+    Returns:
+        None
+    """
+    csv_file = csv.records_to_csv_file(records,
+                                       db_sync.flatten_schema,
+                                       compression=not no_compression,
+                                       dest_dir=temp_dir,
+                                       data_flattening_max_level=db_sync.data_flattening_max_level)
 
-    # Using gzip or plain file object
-    if no_compression:
-        with open(csv_fd, 'wb') as outfile:
-            write_record_to_file(outfile, records_to_load, record_to_csv_line_transformer)
-    else:
-        with open(csv_fd, 'wb') as outfile:
-            with gzip.GzipFile(filename=csv_file, mode='wb',fileobj=outfile) as gzipfile:
-                write_record_to_file(gzipfile, records_to_load, record_to_csv_line_transformer)
-
+    row_count = len(records)
     size_bytes = os.path.getsize(csv_file)
     s3_key = db_sync.put_to_stage(csv_file, stream, row_count, temp_dir=temp_dir)
     db_sync.load_csv(s3_key, row_count, size_bytes)
@@ -445,6 +452,7 @@ def flush_records(stream, records_to_load, row_count, db_sync, temp_dir=None, no
 
 
 def main():
+    """Main function"""
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument('-c', '--config', help='Config file')
     args = arg_parser.parse_args()

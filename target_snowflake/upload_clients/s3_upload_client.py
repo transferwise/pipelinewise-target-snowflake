@@ -1,19 +1,24 @@
+"""
+S3 Upload Client
+"""
 import os
 import boto3
 import datetime
-from singer import get_logger
+
 from snowflake.connector.encryption_util import SnowflakeEncryptionUtil
 from snowflake.connector.remote_storage_util import SnowflakeFileEncryptionMaterial
 
+from .base_upload_client import BaseUploadClient
 
-class S3UploadClient: 
-     
+
+class S3UploadClient(BaseUploadClient):
+    """S3 Upload Client class"""
+
     def __init__(self, connection_config):
-        self.connection_config = connection_config
-        self.logger = get_logger('target_snowflake')
-        self.s3 = self.create_s3_client()
+        super().__init__(connection_config)
+        self.s3_client = self._create_s3_client()
 
-    def create_s3_client(self, config=None):
+    def _create_s3_client(self, config=None):
         if not config:
             config = self.connection_config
 
@@ -40,13 +45,16 @@ class S3UploadClient:
                                   endpoint_url=config.get('s3_endpoint_url'))
 
     def upload_file(self, file, stream, temp_dir=None):
+        """Upload file to an external snowflake stage on s3"""
         # Generating key in S3 bucket
         bucket = self.connection_config['s3_bucket']
         s3_acl = self.connection_config.get('s3_acl')
         s3_key_prefix = self.connection_config.get('s3_key_prefix', '')
-        s3_key = "{}pipelinewise_{}_{}.csv".format(s3_key_prefix, stream, datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f"))
+        s3_key = "{}pipelinewise_{}_{}.csv".format(s3_key_prefix,
+                                                   stream,
+                                                   datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f"))
 
-        self.logger.info("Target S3 bucket: {}, local file: {}, S3 key: {}".format(bucket, file, s3_key))
+        self.logger.info('Target S3 bucket: %s, local file: %s, S3 key: %s', bucket, file, s3_key)
 
         # Encrypt csv if client side encryption enabled
         master_key = self.connection_config.get('client_side_encryption_master_key', '')
@@ -71,7 +79,7 @@ class S3UploadClient:
                 'x-amz-key': encryption_metadata.key,
                 'x-amz-iv': encryption_metadata.iv
             }
-            self.s3.upload_file(encrypted_file, bucket, s3_key, ExtraArgs=extra_args)
+            self.s3_client.upload_file(encrypted_file, bucket, s3_key, ExtraArgs=extra_args)
 
             # Remove the uploaded encrypted file
             os.remove(encrypted_file)
@@ -79,12 +87,12 @@ class S3UploadClient:
         # Upload to S3 without encrypting
         else:
             extra_args = {'ACL': s3_acl} if s3_acl else None
-            self.s3.upload_file(file, bucket, s3_key, ExtraArgs=extra_args)
+            self.s3_client.upload_file(file, bucket, s3_key, ExtraArgs=extra_args)
 
         return s3_key
 
-    def delete_object(self, stream, s3_key):
-        self.logger.info("Deleting {} from external snowflake stage on S3".format(s3_key))
+    def delete_object(self, stream: str, key: str) -> None:
+        """Delete object from an external snowflake stage on S3"""
+        self.logger.info('Deleting %s from external snowflake stage on S3', key)
         bucket = self.connection_config['s3_bucket']
-        self.s3.delete_object(Bucket=bucket, Key=s3_key)
-
+        self.s3_client.delete_object(Bucket=bucket, Key=key)

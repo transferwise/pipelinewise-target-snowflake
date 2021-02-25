@@ -7,6 +7,7 @@ from unittest.mock import patch
 from nose.tools import assert_raises
 
 import target_snowflake
+import target_snowflake.file_formats.csv as csv
 
 
 def _mock_record_to_csv_line(record):
@@ -121,31 +122,3 @@ class TestTargetSnowflake(unittest.TestCase):
 
         with assert_raises(target_snowflake.UnexpectedValueTypeException):
             target_snowflake.adjust_timestamps_in_record(record, schema)
-
-    def test_write_record_to_uncompressed_file(self):
-        records = {'pk_1': 'data1,data2,data3,data4'}
-
-        # Write uncompressed CSV file
-        csv_file = tempfile.NamedTemporaryFile(delete=False)
-        with open(csv_file.name, 'wb') as f:
-            target_snowflake.write_record_to_file(f, records, _mock_record_to_csv_line)
-
-        # Read and validate uncompressed CSV file
-        with open(csv_file.name, 'rt') as f:
-            self.assertEqual(f.readlines(), ['data1,data2,data3,data4\n'])
-
-        os.remove(csv_file.name)
-
-    def test_write_record_to_compressed_file(self):
-        records = {'pk_1': 'data1,data2,data3,data4'}
-
-        # Write gzip compressed CSV file
-        csv_file = tempfile.NamedTemporaryFile(delete=False)
-        with gzip.open(csv_file.name, 'wb') as f:
-            target_snowflake.write_record_to_file(f, records, _mock_record_to_csv_line)
-
-        # Read and validate gzip compressed CSV file
-        with gzip.open(csv_file.name, 'rt') as f:
-            self.assertEqual(f.readlines(), ['data1,data2,data3,data4\n'])
-
-        os.remove(csv_file.name)
