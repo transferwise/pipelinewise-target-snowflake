@@ -188,7 +188,7 @@ Full list of options in `config.json`:
   export CLIENT_SIDE_ENCRYPTION_STAGE_OBJECT=<client_side_encryption_stage_object>
 ```
 
-2. Install python test dependencies in a virtual env and run nose unit and integration tests
+2. Install python test dependencies in a virtual env and run unit and integration tests
 ```
   python3 -m venv venv
   . venv/bin/activate
@@ -198,12 +198,12 @@ Full list of options in `config.json`:
 
 3. To run unit tests:
 ```
-  nosetests --where=tests/unit
+  pytest tests/unit
 ```
 
 4. To run integration tests:
 ```
-  nosetests --where=tests/integration
+  pytest tests/integration
 ```
 
 ### To run pylint:

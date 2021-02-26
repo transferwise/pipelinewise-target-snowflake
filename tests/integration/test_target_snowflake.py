@@ -4,8 +4,7 @@ import unittest
 import mock
 import os
 import botocore
-
-from nose.tools import assert_raises
+import pytest
 
 import target_snowflake
 from target_snowflake import RecordValidationException
@@ -275,13 +274,13 @@ class TestIntegration(unittest.TestCase):
     def test_invalid_json(self):
         """Receiving invalid JSONs should raise an exception"""
         tap_lines = test_utils.get_test_tap_lines('invalid-json.json')
-        with assert_raises(json.decoder.JSONDecodeError):
+        with pytest.raises(json.decoder.JSONDecodeError):
             self.persist_lines_with_cache(tap_lines)
 
     def test_message_order(self):
         """RECORD message without a previously received SCHEMA message should raise an exception"""
         tap_lines = test_utils.get_test_tap_lines('invalid-message-order.json')
-        with assert_raises(Exception):
+        with pytest.raises(Exception):
             self.persist_lines_with_cache(tap_lines)
 
     def test_run_query(self):
@@ -342,7 +341,7 @@ class TestIntegration(unittest.TestCase):
 
         # Turning on client-side encryption and load but using a well formatted but wrong master key
         self.config['client_side_encryption_master_key'] = "Wr0n6m45t3rKeY0123456789a0123456789a0123456="
-        with assert_raises(ProgrammingError):
+        with pytest.raises(ProgrammingError):
             self.persist_lines_with_cache(tap_lines)
 
     def test_loading_tables_with_metadata_columns(self):
@@ -881,12 +880,12 @@ class TestIntegration(unittest.TestCase):
 
         # Loading invalid records when record validation enabled should fail at ...
         self.config['validate_records'] = True
-        with assert_raises(RecordValidationException):
+        with pytest.raises(RecordValidationException):
             self.persist_lines_with_cache(tap_lines)
 
         # Loading invalid records when record validation disabled should fail at load time
         self.config['validate_records'] = False
-        with assert_raises(ProgrammingError):
+        with pytest.raises(ProgrammingError):
             self.persist_lines_with_cache(tap_lines)
 
     def test_pg_records_validation(self):
@@ -895,7 +894,7 @@ class TestIntegration(unittest.TestCase):
 
         # Loading invalid records when record validation enabled should fail at ...
         self.config['validate_records'] = True
-        with assert_raises(RecordValidationException):
+        with pytest.raises(RecordValidationException):
             self.persist_lines_with_cache(tap_lines_invalid_records)
 
         # Loading invalid records when record validation disabled, should pass without any exceptions
@@ -955,7 +954,7 @@ class TestIntegration(unittest.TestCase):
             self.config['aws_profile'] = 'fake-profile'
 
             # Create a new S3 client using profile based authentication
-            with assert_raises(botocore.exceptions.ProfileNotFound):
+            with pytest.raises(botocore.exceptions.ProfileNotFound):
                 s3UploaddClient = S3UploadClient(self.config)
                 s3UploaddClient._create_s3_client()
 
@@ -975,7 +974,7 @@ class TestIntegration(unittest.TestCase):
             os.environ['AWS_PROFILE'] = 'fake_profile'
 
             # Create a new S3 client using profile based authentication
-            with assert_raises(botocore.exceptions.ProfileNotFound):
+            with pytest.raises(botocore.exceptions.ProfileNotFound):
                 s3UploaddClient = S3UploadClient(self.config)
                 s3UploaddClient._create_s3_client()
 
@@ -994,7 +993,7 @@ class TestIntegration(unittest.TestCase):
             self.config['s3_endpoint_url'] = 'fake-endpoint-url'
 
             # Botocore should raise ValurError in case of fake S3 endpoint url
-            with assert_raises(ValueError):
+            with pytest.raises(ValueError):
                 s3UploaddClient = S3UploadClient(self.config)
                 s3UploaddClient._create_s3_client()
 
@@ -1011,7 +1010,7 @@ class TestIntegration(unittest.TestCase):
         self.assertEqual(len(sample_rows), 50000)
 
         # Should raise exception when max_records exceeded
-        with assert_raises(target_snowflake.db_sync.TooManyRecordsException):
+        with pytest.raises(target_snowflake.db_sync.TooManyRecordsException):
             snowflake.query("SELECT seq4() FROM TABLE(GENERATOR(ROWCOUNT => 50000))", max_records=10000)
 
     def test_loading_tables_with_no_compression(self):
@@ -1101,12 +1100,12 @@ class TestIntegration(unittest.TestCase):
 
         # Using not existing or not authorized role should raise snowflake Database exception:
         # 250001 (08001): Role 'INVALID-ROLE' specified in the connect string does not exist or not authorized.
-        with assert_raises(DatabaseError):
+        with pytest.raises(DatabaseError):
             self.persist_lines_with_cache(tap_lines)
 
     def test_parsing_date_failure(self):
         """Test if custom role can be used"""
         tap_lines = test_utils.get_test_tap_lines('messages-with-unexpected-types.json')
 
-        with assert_raises(target_snowflake.UnexpectedValueTypeException):
+        with pytest.raises(target_snowflake.UnexpectedValueTypeException):
             self.persist_lines_with_cache(tap_lines)

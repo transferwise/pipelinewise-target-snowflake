@@ -1,8 +1,8 @@
 import unittest
 import os
+import pytest
 
 from unittest.mock import patch
-from nose.tools import assert_raises
 
 import target_snowflake
 
@@ -117,5 +117,5 @@ class TestTargetSnowflake(unittest.TestCase):
             }
         }
 
-        with assert_raises(target_snowflake.UnexpectedValueTypeException):
+        with pytest.raises(target_snowflake.UnexpectedValueTypeException):
             target_snowflake.adjust_timestamps_in_record(record, schema)
