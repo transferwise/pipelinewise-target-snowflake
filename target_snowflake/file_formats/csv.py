@@ -7,7 +7,8 @@ from typing import Callable, Dict
 from tempfile import mkstemp
 
 import target_snowflake.flattening as flattening
-from .file_format import FileFormat
+from target_snowflake.enums import FileFormatTypes
+
 
 def record_to_csv_line(record: dict,
                        schema: dict,
@@ -33,6 +34,7 @@ def record_to_csv_line(record: dict,
         ]
     )
 
+
 def write_records_to_file(outfile,
                           records: Dict,
                           schema: Dict,
@@ -56,9 +58,10 @@ def write_records_to_file(outfile,
         csv_line = record_to_csv_line_transformer(record, schema, data_flattening_max_level)
         outfile.write(bytes(csv_line + '\n', 'UTF-8'))
 
+
 def records_to_csv_file(records: Dict,
                         schema: Dict,
-                        suffix: str = FileFormat.CSV.lower(),
+                        suffix: str = FileFormatTypes.CSV,
                         prefix: str = 'records_',
                         compression: bool = False,
                         dest_dir: str = None,
