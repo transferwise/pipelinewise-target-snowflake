@@ -4,7 +4,6 @@ import gzip
 import tempfile
 
 import target_snowflake.file_formats.csv as csv
-import target_snowflake.flattening as flattening
 
 
 def _mock_record_to_csv_line(record, schema, data_flattening_max_level=0):
