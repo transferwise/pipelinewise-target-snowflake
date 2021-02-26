@@ -25,14 +25,14 @@ jobs:
           command: |
             . venv/bin/activate
             export LOGGING_CONF_FILE=$(pwd)/sample_logging.conf
-            nosetests --where=tests/unit
+            pytest tests/unit
 
       - run:
           name: 'Integration Tests'
           command: |
             . venv/bin/activate
             export LOGGING_CONF_FILE=$(pwd)/sample_logging.conf
-            nosetests --where=tests/integration/
+            pytest tests/integration/
 
 workflows:
   version: 2
