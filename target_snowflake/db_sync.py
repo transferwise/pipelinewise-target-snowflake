@@ -73,10 +73,10 @@ def validate_config(config):
 
 
 def column_type(schema_property):
-    property_type = schema_property['type']
+    property_type = schema_property.get('type', [])
     property_format = schema_property['format'] if 'format' in schema_property else None
     column_type = 'text'
-    if 'object' in property_type or 'array' in property_type:
+    if 'object' in property_type or 'array' in property_type or property_type == []:
         column_type = 'variant'
 
     # Every date-time JSON value is currently mapped to TIMESTAMP_NTZ
@@ -102,9 +102,11 @@ def column_type(schema_property):
 
 
 def column_trans(schema_property):
-    property_type = schema_property['type']
+    property_type = schema_property.get('type', [])
     column_trans = ''
-    if 'object' in property_type or 'array' in property_type:
+    if property_type == []:
+        column_trans = 'to_variant'
+    elif 'object' in property_type or 'array' in property_type:
         column_trans = 'parse_json'
     elif schema_property.get('format') == 'binary':
         column_trans = 'to_binary'
@@ -157,6 +159,9 @@ def flatten_schema(d, parent_key=[], sep='__', level=0, max_level=0):
                 elif list(v.values())[0][0]['type'] == 'object':
                     list(v.values())[0][0]['type'] = ['null', 'object']
                     items.append((new_key, list(v.values())[0][0]))
+            else:
+                # In case of empty schema {}
+                items.append((new_key, {}))
 
     key_func = lambda item: item[0]
     sorted_items = sorted(items, key=key_func)
