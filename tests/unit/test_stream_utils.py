@@ -187,11 +187,11 @@ class TestSchemaUtils(unittest.TestCase):
         """Test identifying catalog, schema and table names from fully qualified stream and table names"""
         # Singer stream name format (Default '-' separator)
         assert stream_utils.stream_name_to_dict('my_table') == \
-               {"catalog_name": None, "schema_name": None, "table_name": "my_table"}
+           {"catalog_name": None, "schema_name": None, "table_name": "my_table"}
 
         # Singer stream name format (Default '-' separator)
         assert stream_utils.stream_name_to_dict('my_schema-my_table') == \
-               {"catalog_name": None, "schema_name": "my_schema", "table_name": "my_table"}
+           {"catalog_name": None, "schema_name": "my_schema", "table_name": "my_table"}
 
         # Singer stream name format (Default '-' separator)
         assert stream_utils.stream_name_to_dict('my_catalog-my_schema-my_table') == \
@@ -199,12 +199,12 @@ class TestSchemaUtils(unittest.TestCase):
 
         # Snowflake table format (Custom '.' separator)
         assert stream_utils.stream_name_to_dict('my_table', separator='.') == \
-               {"catalog_name": None, "schema_name": None, "table_name": "my_table"}
+           {"catalog_name": None, "schema_name": None, "table_name": "my_table"}
 
         # Snowflake table format (Custom '.' separator)
         assert stream_utils.stream_name_to_dict('my_schema.my_table', separator='.') == \
-                {"catalog_name": None, "schema_name": "my_schema", "table_name": "my_table"}
+            {"catalog_name": None, "schema_name": "my_schema", "table_name": "my_table"}
 
         # Snowflake table format (Custom '.' separator)
         assert stream_utils.stream_name_to_dict('my_catalog.my_schema.my_table', separator='.') == \
-                {"catalog_name": "my_catalog", "schema_name": "my_schema", "table_name": "my_table"}
+            {"catalog_name": "my_catalog", "schema_name": "my_schema", "table_name": "my_table"}

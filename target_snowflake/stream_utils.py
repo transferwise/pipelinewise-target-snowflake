@@ -77,8 +77,6 @@ def float_to_decimal(value):
     if isinstance(value, list):
         return [float_to_decimal(child) for child in value]
     if isinstance(value, dict):
-        print(value)
-        print(123)
         return {k: float_to_decimal(v) for k, v in value.items()}
     return value
 
