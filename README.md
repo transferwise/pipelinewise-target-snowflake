@@ -215,7 +215,7 @@ Full list of options in `config.json`:
   pip install --upgrade pip
   pip install .
   pip install pylint
-  pylint target_snowflake -d C,W,unexpected-keyword-arg,duplicate-code
+  pylint target_snowflake
 ```
 
 ## License
