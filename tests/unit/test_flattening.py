@@ -11,7 +11,6 @@ class TestFlattening(unittest.TestCase):
     def setUp(self):
         self.config = {}
 
-
     def test_flatten_schema(self):
         """Test flattening of SCHEMA messages"""
         flatten_schema = flattening.flatten_schema

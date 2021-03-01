@@ -132,38 +132,6 @@ class TestDBSync(unittest.TestCase):
         for key, val in self.json_types.items():
             self.assertEqual(trans(val), sf_trans[key])
 
-    def test_stream_name_to_dict(self):
-        """Test identifying catalog, schema and table names from fully qualified stream and table names"""
-        # Singer stream name format (Default '-' separator)
-        self.assertEqual(
-            db_sync.stream_name_to_dict('my_table'),
-            {"catalog_name": None, "schema_name": None, "table_name": "my_table"})
-
-        # Singer stream name format (Default '-' separator)
-        self.assertEqual(
-            db_sync.stream_name_to_dict('my_schema-my_table'),
-            {"catalog_name": None, "schema_name": "my_schema", "table_name": "my_table"})
-
-        # Singer stream name format (Default '-' separator)
-        self.assertEqual(
-            db_sync.stream_name_to_dict('my_catalog-my_schema-my_table'),
-            {"catalog_name": "my_catalog", "schema_name": "my_schema", "table_name": "my_table"})
-
-        # Snowflake table format (Custom '.' separator)
-        self.assertEqual(
-            db_sync.stream_name_to_dict('my_table', separator='.'),
-            {"catalog_name": None, "schema_name": None, "table_name": "my_table"})
-
-        # Snowflake table format (Custom '.' separator)
-        self.assertEqual(
-            db_sync.stream_name_to_dict('my_schema.my_table', separator='.'),
-            {"catalog_name": None, "schema_name": "my_schema", "table_name": "my_table"})
-
-        # Snowflake table format (Custom '.' separator)
-        self.assertEqual(
-            db_sync.stream_name_to_dict('my_catalog.my_schema.my_table', separator='.'),
-            {"catalog_name": "my_catalog", "schema_name": "my_schema", "table_name": "my_table"})
-
     def test_create_query_tag(self):
         assert db_sync.create_query_tag(None) is None
         assert db_sync.create_query_tag('This is a test query tag') == 'This is a test query tag'

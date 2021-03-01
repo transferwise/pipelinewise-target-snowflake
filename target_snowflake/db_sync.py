@@ -8,6 +8,7 @@ import time
 
 from singer import get_logger
 import target_snowflake.flattening as flattening
+import target_snowflake.stream_utils as stream_utils
 
 from target_snowflake.exceptions import TooManyRecordsException
 from target_snowflake.upload_clients.s3_upload_client import S3UploadClient
@@ -118,29 +119,6 @@ def primary_column_names(stream_schema_message):
     return [safe_column_name(p) for p in stream_schema_message['key_properties']]
 
 
-def stream_name_to_dict(stream_name, separator='-'):
-    """Transform stream name string to dictionary"""
-    catalog_name = None
-    schema_name = None
-    table_name = stream_name
-
-    # Schema and table name can be derived from stream if it's in <schema_nama>-<table_name> format
-    s_parts = stream_name.split(separator)
-    if len(s_parts) == 2:
-        schema_name = s_parts[0]
-        table_name = s_parts[1]
-    if len(s_parts) > 2:
-        catalog_name = s_parts[0]
-        schema_name = s_parts[1]
-        table_name = '_'.join(s_parts[2:])
-
-    return {
-        'catalog_name': catalog_name,
-        'schema_name': schema_name,
-        'table_name': table_name
-    }
-
-
 # pylint: disable=invalid-name
 def create_query_tag(query_tag_pattern: str, database: str = None, schema: str = None, table: str = None) -> str:
     """
@@ -215,7 +193,7 @@ class DbSync:
             sys.exit(1)
 
         if self.connection_config.get('stage', None):
-            stage = stream_name_to_dict(self.connection_config['stage'], separator='.')
+            stage = stream_utils.stream_name_to_dict(self.connection_config['stage'], separator='.')
             if not stage['schema_name']:
                 self.logger.error(
                     "The named external stage object in config has to use the <schema>.<stage_name> format.")
@@ -245,7 +223,7 @@ class DbSync:
             config_schema_mapping = self.connection_config.get('schema_mapping', {})
 
             stream_name = stream_schema_message['stream']
-            stream_schema_name = stream_name_to_dict(stream_name)['schema_name']
+            stream_schema_name = stream_utils.stream_name_to_dict(stream_name)['schema_name']
             if config_schema_mapping and stream_schema_name in config_schema_mapping:
                 self.schema_name = config_schema_mapping[stream_schema_name].get('target_schema')
             elif config_default_target_schema:
@@ -373,7 +351,7 @@ class DbSync:
         if not stream_name:
             return None
 
-        stream_dict = stream_name_to_dict(stream_name)
+        stream_dict = stream_utils.stream_name_to_dict(stream_name)
         table_name = stream_dict['table_name']
         sf_table_name = table_name.replace('.', '_').replace('-', '_').lower()
 
