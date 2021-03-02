@@ -1,5 +1,4 @@
 import unittest
-import pytest
 
 from decimal import Decimal
 
@@ -15,15 +14,15 @@ class TestSchemaUtils(unittest.TestCase):
     def test_get_schema_names_from_config(self):
         """Test schema name extractor"""
         # Empty config
-        assert stream_utils.get_schema_names_from_config({}) == []
+        self.assertEqual(stream_utils.get_schema_names_from_config({}), [])
 
         # Default target schema
-        assert stream_utils.get_schema_names_from_config({
+        self.assertEqual(stream_utils.get_schema_names_from_config({
             'default_target_schema': 'test_schema_for_default'
-        }) == ['test_schema_for_default']
+        }), ['test_schema_for_default'])
 
         # Schema mapping should support multiple schemas
-        assert stream_utils.get_schema_names_from_config({
+        self.assertEqual(stream_utils.get_schema_names_from_config({
             'schema_mapping': {
                 'stream_1': {
                     'target_schema': 'test_schema_for_stream_1'
@@ -32,11 +31,11 @@ class TestSchemaUtils(unittest.TestCase):
                     'target_schema': 'test_schema_for_stream_2'
                 }
             }
-        }) == ['test_schema_for_stream_1',
-               'test_schema_for_stream_2']
+        }), ['test_schema_for_stream_1',
+             'test_schema_for_stream_2'])
 
         # Default and schema mapping should be combined
-        assert stream_utils.get_schema_names_from_config({
+        self.assertEqual(stream_utils.get_schema_names_from_config({
             'default_target_schema': 'test_schema_for_default',
             'schema_mapping': {
                 'stream_1': {
@@ -46,9 +45,9 @@ class TestSchemaUtils(unittest.TestCase):
                     'target_schema': 'test_schema_for_stream_2'
                 }
             }
-        }) == ['test_schema_for_default',
-               'test_schema_for_stream_1',
-               'test_schema_for_stream_2']
+        }), ['test_schema_for_default',
+             'test_schema_for_stream_1',
+             'test_schema_for_stream_2'])
 
     def test_adjust_timestamps_in_record(self):
         """Test if timestamps converted to the acceptable valid ranges"""
@@ -92,14 +91,14 @@ class TestSchemaUtils(unittest.TestCase):
 
         stream_utils.adjust_timestamps_in_record(record, schema)
 
-        assert record == {
+        self.assertEqual(record, {
             'key1': '1',
             'key2': '2030-01-22',
             'key3': '9999-12-31 23:59:59.999999',
             'key4': '23:59:59.999999',
             'key5': 'I\'m good',
             'key6': None
-        }
+        })
 
     def test_adjust_timestamps_in_record_unexpected_int_will_raise_exception(self):
         """Test if timestamps converted to the acceptable valid ranges"""
@@ -113,24 +112,24 @@ class TestSchemaUtils(unittest.TestCase):
             }
         }
 
-        with pytest.raises(UnexpectedValueTypeException):
+        with self.assertRaises(UnexpectedValueTypeException):
             stream_utils.adjust_timestamps_in_record(record, schema)
 
     def test_float_to_decimal(self):
         """Test if float values are converted to singer compatible Decimal types"""
         # Simple numeric value
-        assert stream_utils.float_to_decimal(1.123) == Decimal("1.123")
+        self.assertEqual(stream_utils.float_to_decimal(1.123), Decimal("1.123"))
 
         # List of numeric values
-        assert stream_utils.float_to_decimal([1.123, 2.234, 3.345, 'this is not float']) == [
+        self.assertEqual(stream_utils.float_to_decimal([1.123, 2.234, 3.345, 'this is not float']), [
             Decimal("1.123"),
             Decimal("2.234"),
             Decimal("3.345"),
             'this is not float'
-        ]
+        ])
 
         # Nested dictionary
-        assert stream_utils.float_to_decimal({
+        self.assertEqual(stream_utils.float_to_decimal({
             'k1': 1.123,
             'k2': 2.234,
             'k3': [1.123, 2.234, 3.345, 'this is not float'],
@@ -141,7 +140,7 @@ class TestSchemaUtils(unittest.TestCase):
                     'k1': 1.123
                 }
             }
-        }) == {
+        }), {
             'k1': Decimal("1.123"),
             'k2': Decimal("2.234"),
             'k3': [
@@ -162,7 +161,7 @@ class TestSchemaUtils(unittest.TestCase):
                     'k1': Decimal("1.123")
                 }
             }
-        }
+        })
 
     def test_add_metadata_values_to_record(self):
         """Test if _sdc metadata columns can be added to the record message"""
@@ -175,36 +174,36 @@ class TestSchemaUtils(unittest.TestCase):
         }
         record_message_with_metadata = stream_utils.add_metadata_values_to_record(record_message)
 
-        assert record_message_with_metadata == {
+        self.assertEqual(record_message_with_metadata, {
             'field_1': 123,
             'field_2': 123,
             '_sdc_batched_at': record_message_with_metadata['_sdc_batched_at'],
             '_sdc_extracted_at': None,
             '_sdc_deleted_at': None
-        }
+        })
 
     def test_stream_name_to_dict(self):
         """Test identifying catalog, schema and table names from fully qualified stream and table names"""
         # Singer stream name format (Default '-' separator)
-        assert stream_utils.stream_name_to_dict('my_table') == \
-           {"catalog_name": None, "schema_name": None, "table_name": "my_table"}
+        self.assertEqual(stream_utils.stream_name_to_dict('my_table'),
+           {"catalog_name": None, "schema_name": None, "table_name": "my_table"})
 
         # Singer stream name format (Default '-' separator)
-        assert stream_utils.stream_name_to_dict('my_schema-my_table') == \
-           {"catalog_name": None, "schema_name": "my_schema", "table_name": "my_table"}
+        self.assertEqual(stream_utils.stream_name_to_dict('my_schema-my_table'),
+           {"catalog_name": None, "schema_name": "my_schema", "table_name": "my_table"})
 
         # Singer stream name format (Default '-' separator)
-        assert stream_utils.stream_name_to_dict('my_catalog-my_schema-my_table') == \
-            {"catalog_name": "my_catalog", "schema_name": "my_schema", "table_name": "my_table"}
+        self.assertEqual(stream_utils.stream_name_to_dict('my_catalog-my_schema-my_table'),
+            {"catalog_name": "my_catalog", "schema_name": "my_schema", "table_name": "my_table"})
 
         # Snowflake table format (Custom '.' separator)
-        assert stream_utils.stream_name_to_dict('my_table', separator='.') == \
-           {"catalog_name": None, "schema_name": None, "table_name": "my_table"}
+        self.assertEqual(stream_utils.stream_name_to_dict('my_table', separator='.'),
+           {"catalog_name": None, "schema_name": None, "table_name": "my_table"})
 
         # Snowflake table format (Custom '.' separator)
-        assert stream_utils.stream_name_to_dict('my_schema.my_table', separator='.') == \
-            {"catalog_name": None, "schema_name": "my_schema", "table_name": "my_table"}
+        self.assertEqual(stream_utils.stream_name_to_dict('my_schema.my_table', separator='.'),
+            {"catalog_name": None, "schema_name": "my_schema", "table_name": "my_table"})
 
         # Snowflake table format (Custom '.' separator)
-        assert stream_utils.stream_name_to_dict('my_catalog.my_schema.my_table', separator='.') == \
-            {"catalog_name": "my_catalog", "schema_name": "my_schema", "table_name": "my_table"}
+        self.assertEqual(stream_utils.stream_name_to_dict('my_catalog.my_schema.my_table', separator='.'),
+            {"catalog_name": "my_catalog", "schema_name": "my_schema", "table_name": "my_table"})

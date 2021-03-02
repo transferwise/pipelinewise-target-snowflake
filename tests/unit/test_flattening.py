@@ -1,7 +1,4 @@
 import unittest
-import os
-import gzip
-import tempfile
 
 import target_snowflake.flattening as flattening
 

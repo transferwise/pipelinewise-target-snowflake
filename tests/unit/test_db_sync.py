@@ -133,16 +133,16 @@ class TestDBSync(unittest.TestCase):
             self.assertEqual(trans(val), sf_trans[key])
 
     def test_create_query_tag(self):
-        assert db_sync.create_query_tag(None) is None
-        assert db_sync.create_query_tag('This is a test query tag') == 'This is a test query tag'
-        assert db_sync.create_query_tag('Loading into {{database}}.{{schema}}.{{table}}',
+        self.assertIsNone(db_sync.create_query_tag(None))
+        self.assertEqual(db_sync.create_query_tag('This is a test query tag'), 'This is a test query tag')
+        self.assertEqual(db_sync.create_query_tag('Loading into {{database}}.{{schema}}.{{table}}',
                                         database='test_database',
                                         schema='test_schema',
-                                        table='test_table') == 'Loading into test_database.test_schema.test_table'
-        assert db_sync.create_query_tag('Loading into {{database}}.{{schema}}.{{table}}',
+                                        table='test_table'), 'Loading into test_database.test_schema.test_table')
+        self.assertEqual(db_sync.create_query_tag('Loading into {{database}}.{{schema}}.{{table}}',
                                         database=None,
                                         schema=None,
-                                        table=None) == 'Loading into ..'
+                                        table=None), 'Loading into ..')
 
         # JSON formatted query tags with variables
         json_query_tag = db_sync.create_query_tag(
@@ -151,11 +151,11 @@ class TestDBSync(unittest.TestCase):
             schema='test_schema',
             table='test_table')
         # Load the generated JSON formatted query tag to make sure it's a valid JSON
-        assert json.loads(json_query_tag) == {
+        self.assertEqual(json.loads(json_query_tag), {
             'database': 'test_database',
             'schema': 'test_schema',
             'table': 'test_table'
-        }
+        })
 
         # JSON formatted query tags with variables quotes in the middle
         json_query_tag = db_sync.create_query_tag(
@@ -165,11 +165,11 @@ class TestDBSync(unittest.TestCase):
             table='test"table')
 
         # Load the generated JSON formatted query tag to make sure it's a valid JSON
-        assert json.loads(json_query_tag) == {
+        self.assertEqual(json.loads(json_query_tag), {
             'database': 'test"database',
             'schema': 'test"schema',
             'table': 'test"table'
-        }
+        })
 
         # JSON formatted query tags with quoted variables
         json_query_tag = db_sync.create_query_tag(
@@ -178,11 +178,11 @@ class TestDBSync(unittest.TestCase):
             schema='"test_schema"',
             table='"test_table"')
         # Load the generated JSON formatted query tag to make sure it's a valid JSON
-        assert json.loads(json_query_tag) == {
+        self.assertEqual(json.loads(json_query_tag), {
             'database': 'test_database',
             'schema': 'test_schema',
             'table': 'test_table'
-        }
+        })
 
     def test_parallelism(self):
         minimal_config = {
@@ -201,10 +201,12 @@ class TestDBSync(unittest.TestCase):
             'stage': 'dummy_schema.dummy_stage',
             'parallelism': 5
         }
-        assert db_sync.DbSync({**minimal_config, **external_stage_with_parallel}).connection_config['parallelism'] == 5
+        self.assertEqual(db_sync.DbSync({**minimal_config,
+                                         **external_stage_with_parallel}).connection_config['parallelism'], 5)
 
         # Using snowflake table stages should enforce single thread parallelism
         table_stage_with_parallel = {
             'parallelism': 5
         }
-        assert db_sync.DbSync({**minimal_config, **table_stage_with_parallel}).connection_config['parallelism'] == 1
+        self.assertEqual(db_sync.DbSync({**minimal_config,
+                                         **table_stage_with_parallel}).connection_config['parallelism'], 1)

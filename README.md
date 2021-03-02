@@ -213,8 +213,7 @@ Full list of options in `config.json`:
   python3 -m venv venv
   . venv/bin/activate
   pip install --upgrade pip
-  pip install .
-  pip install pylint
+  pip install .[test]
   pylint target_snowflake
 ```
 
