@@ -706,7 +706,7 @@ class DbSync:
             self.add_column(column, stream)
 
         # Refresh table cache if required
-        if self.table_cache and (len(columns_to_add) > 0 or len(columns_to_replace)): # pylint: disable=len-as-condition
+        if self.table_cache and (columns_to_add or columns_to_replace):
             self.table_cache = self.get_table_columns(table_schemas=[self.schema_name])
 
     def drop_column(self, column_name, stream):
