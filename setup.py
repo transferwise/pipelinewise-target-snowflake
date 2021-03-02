@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from setuptools import setup
+from setuptools import find_packages, setup
 
 with open('README.md') as f:
     long_description = f.read()
@@ -26,9 +26,10 @@ setup(name="pipelinewise-target-snowflake",
       ],
       extras_require={
           "test": [
-              "nose==1.3.7",
               "mock==4.0.3",
               "pylint==2.7.0",
+              'pytest==6.2.1',
+              'pytest-cov==2.11.1',
               "python-dotenv==0.15.0"
           ]
       },
@@ -36,5 +37,5 @@ setup(name="pipelinewise-target-snowflake",
           [console_scripts]
           target-snowflake=target_snowflake:main
       """,
-      packages=["target_snowflake"],
+      packages=find_packages(exclude=['tests*']),
       )

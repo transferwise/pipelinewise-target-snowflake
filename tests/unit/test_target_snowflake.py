@@ -1,10 +1,7 @@
 import unittest
 import os
-import gzip
-import tempfile
 
 from unittest.mock import patch
-from nose.tools import assert_raises
 
 import target_snowflake
 
@@ -56,96 +53,3 @@ class TestTargetSnowflake(unittest.TestCase):
         target_snowflake.persist_lines(self.config, lines)
 
         flush_streams_mock.assert_called_once()
-
-    def test_adjust_timestamps_in_record(self):
-        record = {
-            'key1': '1',
-            'key2': '2030-01-22',
-            'key3': '10000-01-22 12:04:22',
-            'key4': '25:01:01',
-            'key5': 'I\'m good',
-            'key6': None,
-        }
-
-        schema = {
-            'properties': {
-                'key1': {
-                    'type': ['null', 'string', 'integer'],
-                },
-                'key2': {
-                    'anyOf': [
-                        {'type': ['null', 'string'], 'format': 'date'},
-                        {'type': ['null', 'string']}
-                    ]
-                },
-                'key3': {
-                    'type': ['null', 'string'], 'format': 'date-time',
-                },
-                'key4': {
-                    'anyOf': [
-                        {'type': ['null', 'string'], 'format': 'time'},
-                        {'type': ['null', 'string']}
-                    ]
-                },
-                'key5': {
-                    'type': ['null', 'string'],
-                },
-                'key6': {
-                    'type': ['null', 'string'], 'format': 'time',
-                },
-            }
-        }
-
-        target_snowflake.adjust_timestamps_in_record(record, schema)
-
-        self.assertDictEqual({
-            'key1': '1',
-            'key2': '2030-01-22',
-            'key3': '9999-12-31 23:59:59.999999',
-            'key4': '23:59:59.999999',
-            'key5': 'I\'m good',
-            'key6': None
-        }, record)
-
-
-    def test_adjust_timestamps_in_record_unexpected_int_will_raise_exception(self):
-        record = {
-            'key': 100,
-        }
-
-        schema = {
-            'properties': {
-                'key': {'type': ['null', 'string'], 'format': 'date'},
-            }
-        }
-
-        with assert_raises(target_snowflake.UnexpectedValueTypeException):
-            target_snowflake.adjust_timestamps_in_record(record, schema)
-
-    def test_write_record_to_uncompressed_file(self):
-        records = {'pk_1': 'data1,data2,data3,data4'}
-
-        # Write uncompressed CSV file
-        csv_file = tempfile.NamedTemporaryFile(delete=False)
-        with open(csv_file.name, 'wb') as f:
-            target_snowflake.write_record_to_file(f, records, _mock_record_to_csv_line)
-
-        # Read and validate uncompressed CSV file
-        with open(csv_file.name, 'rt') as f:
-            self.assertEqual(f.readlines(), ['data1,data2,data3,data4\n'])
-
-        os.remove(csv_file.name)
-
-    def test_write_record_to_compressed_file(self):
-        records = {'pk_1': 'data1,data2,data3,data4'}
-
-        # Write gzip compressed CSV file
-        csv_file = tempfile.NamedTemporaryFile(delete=False)
-        with gzip.open(csv_file.name, 'wb') as f:
-            target_snowflake.write_record_to_file(f, records, _mock_record_to_csv_line)
-
-        # Read and validate gzip compressed CSV file
-        with gzip.open(csv_file.name, 'rt') as f:
-            self.assertEqual(f.readlines(), ['data1,data2,data3,data4\n'])
-
-        os.remove(csv_file.name)

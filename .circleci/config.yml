@@ -18,21 +18,21 @@ jobs:
           name: 'Pylinting'
           command: |
             . venv/bin/activate
-            pylint target_snowflake -d C,W,unexpected-keyword-arg,duplicate-code
+            pylint target_snowflake
 
       - run:
           name: 'Unit Tests'
           command: |
             . venv/bin/activate
             export LOGGING_CONF_FILE=$(pwd)/sample_logging.conf
-            nosetests --where=tests/unit
+            pytest tests/unit -vv --cov target_snowflake --cov-fail-under=51
 
       - run:
           name: 'Integration Tests'
           command: |
             . venv/bin/activate
             export LOGGING_CONF_FILE=$(pwd)/sample_logging.conf
-            nosetests --where=tests/integration/
+            pytest tests/integration/ -vv --cov target_snowflake --cov-fail-under=85
 
 workflows:
   version: 2

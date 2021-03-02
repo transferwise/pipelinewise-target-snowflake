@@ -12,6 +12,7 @@ __pycache__/
 *__pycache__/
 *~
 dist/
+.coverage
 
 # Singer JSON files
 properties.json

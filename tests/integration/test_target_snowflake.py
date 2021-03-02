@@ -5,18 +5,16 @@ import mock
 import os
 import botocore
 
-from nose.tools import assert_raises
-
 import target_snowflake
 from target_snowflake import RecordValidationException
 from target_snowflake.db_sync import DbSync
-from target_snowflake.s3_upload_client import S3UploadClient
+from target_snowflake.upload_clients.s3_upload_client import S3UploadClient
 
 from snowflake.connector.errors import ProgrammingError
 from snowflake.connector.errors import DatabaseError
 
 try:
-    import tests.utils as test_utils
+    import tests.integration.utils as test_utils
 except ImportError:
     import utils as test_utils
 
@@ -275,13 +273,13 @@ class TestIntegration(unittest.TestCase):
     def test_invalid_json(self):
         """Receiving invalid JSONs should raise an exception"""
         tap_lines = test_utils.get_test_tap_lines('invalid-json.json')
-        with assert_raises(json.decoder.JSONDecodeError):
+        with self.assertRaises(json.decoder.JSONDecodeError):
             self.persist_lines_with_cache(tap_lines)
 
     def test_message_order(self):
         """RECORD message without a previously received SCHEMA message should raise an exception"""
         tap_lines = test_utils.get_test_tap_lines('invalid-message-order.json')
-        with assert_raises(Exception):
+        with self.assertRaises(Exception):
             self.persist_lines_with_cache(tap_lines)
 
     def test_run_query(self):
@@ -342,7 +340,7 @@ class TestIntegration(unittest.TestCase):
 
         # Turning on client-side encryption and load but using a well formatted but wrong master key
         self.config['client_side_encryption_master_key'] = "Wr0n6m45t3rKeY0123456789a0123456789a0123456="
-        with assert_raises(ProgrammingError):
+        with self.assertRaises(ProgrammingError):
             self.persist_lines_with_cache(tap_lines)
 
     def test_loading_tables_with_metadata_columns(self):
@@ -579,7 +577,7 @@ class TestIntegration(unittest.TestCase):
             [{'C_INT': 1, 'C_PK': 1, 'C_VARCHAR': '1'}])
 
         # Table two should have a versioned column and a new column
-        self.assertEquals(
+        self.assertEqual(
             table_two,
             [
                 {previous_column_name: datetime.datetime(2019, 2, 1, 15, 12, 45), 'C_INT': 1, 'C_PK': 1,
@@ -640,7 +638,7 @@ class TestIntegration(unittest.TestCase):
             [{'C_INT': 1, 'C_PK': 1, 'C_VARCHAR': '1'}])
 
         # Table two should have a versioned column and a new column
-        self.assertEquals(
+        self.assertEqual(
             table_two,
             [
                 {previous_column_name: datetime.datetime(2019, 2, 1, 15, 12, 45), 'C_INT': 1, 'C_PK': 1,
@@ -710,7 +708,7 @@ class TestIntegration(unittest.TestCase):
         self.persist_lines_with_cache(tap_lines)
 
         # State should be emitted only once with the latest received STATE message
-        self.assertEquals(
+        self.assertEqual(
             mock_emit_state.mock_calls,
             [
                 mock.call({"currently_syncing": None, "bookmarks": {
@@ -738,7 +736,7 @@ class TestIntegration(unittest.TestCase):
         self.persist_lines_with_cache(tap_lines)
 
         # State should be emitted multiple times, updating the positions only in the stream which got flushed
-        self.assertEquals(
+        self.assertEqual(
             mock_emit_state.call_args_list,
             [
                 # Flush #1 - Flushed edgydata until lsn: 108197216
@@ -813,7 +811,7 @@ class TestIntegration(unittest.TestCase):
         self.persist_lines_with_cache(tap_lines)
 
         # State should be emitted 6 times, flushing every stream and updating every stream position
-        self.assertEquals(
+        self.assertEqual(
             mock_emit_state.call_args_list,
             [
                 # Flush #1 - Flush every stream until lsn: 108197216
@@ -881,12 +879,12 @@ class TestIntegration(unittest.TestCase):
 
         # Loading invalid records when record validation enabled should fail at ...
         self.config['validate_records'] = True
-        with assert_raises(RecordValidationException):
+        with self.assertRaises(RecordValidationException):
             self.persist_lines_with_cache(tap_lines)
 
         # Loading invalid records when record validation disabled should fail at load time
         self.config['validate_records'] = False
-        with assert_raises(ProgrammingError):
+        with self.assertRaises(ProgrammingError):
             self.persist_lines_with_cache(tap_lines)
 
     def test_pg_records_validation(self):
@@ -895,7 +893,7 @@ class TestIntegration(unittest.TestCase):
 
         # Loading invalid records when record validation enabled should fail at ...
         self.config['validate_records'] = True
-        with assert_raises(RecordValidationException):
+        with self.assertRaises(RecordValidationException):
             self.persist_lines_with_cache(tap_lines_invalid_records)
 
         # Loading invalid records when record validation disabled, should pass without any exceptions
@@ -935,7 +933,7 @@ class TestIntegration(unittest.TestCase):
 
             # Create a new S3 client using env vars
             s3Client = S3UploadClient(self.config)
-            s3Client.create_s3_client()
+            s3Client._create_s3_client()
 
         # Restore the original state to not confuse other tests
         finally:
@@ -955,9 +953,9 @@ class TestIntegration(unittest.TestCase):
             self.config['aws_profile'] = 'fake-profile'
 
             # Create a new S3 client using profile based authentication
-            with assert_raises(botocore.exceptions.ProfileNotFound):
+            with self.assertRaises(botocore.exceptions.ProfileNotFound):
                 s3UploaddClient = S3UploadClient(self.config)
-                s3UploaddClient.create_s3_client()
+                s3UploaddClient._create_s3_client()
 
         # Restore the original state to not confuse other tests
         finally:
@@ -975,9 +973,9 @@ class TestIntegration(unittest.TestCase):
             os.environ['AWS_PROFILE'] = 'fake_profile'
 
             # Create a new S3 client using profile based authentication
-            with assert_raises(botocore.exceptions.ProfileNotFound):
+            with self.assertRaises(botocore.exceptions.ProfileNotFound):
                 s3UploaddClient = S3UploadClient(self.config)
-                s3UploaddClient.create_s3_client()
+                s3UploaddClient._create_s3_client()
 
         # Restore the original state to not confuse other tests
         finally:
@@ -994,9 +992,9 @@ class TestIntegration(unittest.TestCase):
             self.config['s3_endpoint_url'] = 'fake-endpoint-url'
 
             # Botocore should raise ValurError in case of fake S3 endpoint url
-            with assert_raises(ValueError):
+            with self.assertRaises(ValueError):
                 s3UploaddClient = S3UploadClient(self.config)
-                s3UploaddClient.create_s3_client()
+                s3UploaddClient._create_s3_client()
 
         # Restore the original state to not confuse other tests
         finally:
@@ -1011,7 +1009,7 @@ class TestIntegration(unittest.TestCase):
         self.assertEqual(len(sample_rows), 50000)
 
         # Should raise exception when max_records exceeded
-        with assert_raises(target_snowflake.db_sync.TooManyRecordsException):
+        with self.assertRaises(target_snowflake.db_sync.TooManyRecordsException):
             snowflake.query("SELECT seq4() FROM TABLE(GENERATOR(ROWCOUNT => 50000))", max_records=10000)
 
     def test_loading_tables_with_no_compression(self):
@@ -1101,12 +1099,12 @@ class TestIntegration(unittest.TestCase):
 
         # Using not existing or not authorized role should raise snowflake Database exception:
         # 250001 (08001): Role 'INVALID-ROLE' specified in the connect string does not exist or not authorized.
-        with assert_raises(DatabaseError):
+        with self.assertRaises(DatabaseError):
             self.persist_lines_with_cache(tap_lines)
 
     def test_parsing_date_failure(self):
         """Test if custom role can be used"""
         tap_lines = test_utils.get_test_tap_lines('messages-with-unexpected-types.json')
 
-        with assert_raises(target_snowflake.UnexpectedValueTypeException):
+        with self.assertRaises(target_snowflake.UnexpectedValueTypeException):
             self.persist_lines_with_cache(tap_lines)
