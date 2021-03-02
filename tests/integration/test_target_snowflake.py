@@ -577,7 +577,7 @@ class TestIntegration(unittest.TestCase):
             [{'C_INT': 1, 'C_PK': 1, 'C_VARCHAR': '1'}])
 
         # Table two should have a versioned column and a new column
-        self.assertEquals(
+        self.assertEqual(
             table_two,
             [
                 {previous_column_name: datetime.datetime(2019, 2, 1, 15, 12, 45), 'C_INT': 1, 'C_PK': 1,
@@ -638,7 +638,7 @@ class TestIntegration(unittest.TestCase):
             [{'C_INT': 1, 'C_PK': 1, 'C_VARCHAR': '1'}])
 
         # Table two should have a versioned column and a new column
-        self.assertEquals(
+        self.assertEqual(
             table_two,
             [
                 {previous_column_name: datetime.datetime(2019, 2, 1, 15, 12, 45), 'C_INT': 1, 'C_PK': 1,
@@ -708,7 +708,7 @@ class TestIntegration(unittest.TestCase):
         self.persist_lines_with_cache(tap_lines)
 
         # State should be emitted only once with the latest received STATE message
-        self.assertEquals(
+        self.assertEqual(
             mock_emit_state.mock_calls,
             [
                 mock.call({"currently_syncing": None, "bookmarks": {
@@ -736,7 +736,7 @@ class TestIntegration(unittest.TestCase):
         self.persist_lines_with_cache(tap_lines)
 
         # State should be emitted multiple times, updating the positions only in the stream which got flushed
-        self.assertEquals(
+        self.assertEqual(
             mock_emit_state.call_args_list,
             [
                 # Flush #1 - Flushed edgydata until lsn: 108197216
@@ -811,7 +811,7 @@ class TestIntegration(unittest.TestCase):
         self.persist_lines_with_cache(tap_lines)
 
         # State should be emitted 6 times, flushing every stream and updating every stream position
-        self.assertEquals(
+        self.assertEqual(
             mock_emit_state.call_args_list,
             [
                 # Flush #1 - Flush every stream until lsn: 108197216
