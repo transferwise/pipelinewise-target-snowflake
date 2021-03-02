@@ -636,10 +636,8 @@ class DbSync:
                 # Regexp to extract snowflake error code and message from the exception message
                 # Do nothing if schema not exists
                 except snowflake.connector.errors.ProgrammingError as exc:
-                    # pylint: disable=anomalous-backslash-in-string
-                    if re.match('002003 \(02000\):.*\n.*does not exist or not authorized.*', str(sys.exc_info()[1])):
-                        pass
-                    else:
+                    if not re.match(r'002003 \(02000\):.*\n.*does not exist or not authorized.*',
+                                    str(sys.exc_info()[1])):
                         raise exc
 
         else:
