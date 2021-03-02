@@ -25,14 +25,14 @@ jobs:
           command: |
             . venv/bin/activate
             export LOGGING_CONF_FILE=$(pwd)/sample_logging.conf
-            pytest tests/unit
+            pytest tests/unit -vv --cov target_snowflake --cov-fail-under=51
 
       - run:
           name: 'Integration Tests'
           command: |
             . venv/bin/activate
             export LOGGING_CONF_FILE=$(pwd)/sample_logging.conf
-            pytest tests/integration/
+            pytest tests/integration/ -vv --cov target_snowflake
 
 workflows:
   version: 2
