@@ -87,8 +87,7 @@ def write_records_to_file(outfile,
 
     Args:
         outfile: An open file object
-        records: List of dictionary, that represents multiple csv lines. Dict key is the column name, value is the
-                 column value
+        records: List of dictionaries that represents a batch of singer record messages
         schema: JSONSchema of the records
         record_to_csv_line_transformer: Function that transforms dictionary to a CSV string line
         data_flattening_max_level: Max level of auto flattening if a record message has nested objects. (Default: 0)
@@ -112,8 +111,7 @@ def records_to_file(records: Dict,
     Transforms a list of dictionaries with records messages to a CSV file
 
     Args:
-        records: List of dictionary, that represents multiple csv lines. Dict key is the column name, value is the
-                 column value
+        records: List of dictionaries that represents a batch of singer record messages
         schema: JSONSchema of the records
         suffix: Generated filename suffix
         prefix: Generated filename prefix

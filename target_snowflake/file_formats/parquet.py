@@ -59,8 +59,7 @@ def records_to_dataframe(records: Dict,
     Transforms a list of record messages into pandas dataframe with flattened records
 
     Args:
-        records: List of dictionary, that represents multiple csv lines. Dict key is the column name, value is the
-                 column value
+        records: List of dictionaries that represents a batch of singer record messages
         data_flattening_max_level: Max level of auto flattening if a record message has nested objects. (Default: 0)
 
     Returns:
@@ -86,8 +85,7 @@ def records_to_file(records: Dict,
     Transforms a list of dictionaries with records messages to a parquet file
 
     Args:
-        records: List of dictionary, that represents multiple csv lines. Dict key is the column name, value is the
-                 column value
+        records: List of dictionaries that represents a batch of singer record messages
         schema: JSONSchema of the records
         suffix: Generated filename suffix
         prefix: Generated filename prefix
