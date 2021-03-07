@@ -13,7 +13,7 @@ def create_copy_sql(table_name: str,
                     s3_key: str,
                     file_format_name: str,
                     columns: List):
-    """Generate a CSV compatible snowflake COPY INTO command"""
+    """Generate a Parquet compatible snowflake COPY INTO command"""
     return "COPY INTO {} ({}) " \
            "FROM (SELECT {} FROM '@{}/{}') " \
            "FILE_FORMAT = (format_name='{}')".format(
@@ -31,7 +31,7 @@ def create_merge_sql(table_name: str,
                      file_format_name: str,
                      columns: List,
                      pk_merge_condition: str) -> str:
-    """Generate a CSV compatible snowflake MERGE INTO command"""
+    """Generate a Parquet compatible snowflake MERGE INTO command"""
     return "MERGE INTO {} t USING (" \
            "SELECT {} " \
            "FROM '@{}/{}' " \
