@@ -110,7 +110,7 @@ def flatten_record(d, schema=None, parent_key=None, sep='__', level=0, max_level
     items = []
     for k, v in d.items():
         new_key = flatten_key(k, parent_key, sep)
-        if isinstance(v, collections.MutableMapping) and level < max_level:
+        if isinstance(v, collections.abc.MutableMapping) and level < max_level:
             items.extend(flatten_record(v, schema, parent_key + [k], sep=sep, level=level + 1,
                                         max_level=max_level).items())
         else:

@@ -1,0 +1,66 @@
+"""Enums used by pipelinewise-target-snowflake"""
+from enum import Enum, unique
+from typing import Callable
+
+import target_snowflake.file_formats
+from target_snowflake.exceptions import FileFormatNotFoundException, InvalidFileFormatException
+
+# Supported types for file formats.
+@unique
+class FileFormatTypes(str, Enum):
+    """Enum of supported file format types"""
+
+    CSV = 'csv'
+    PARQUET = 'parquet'
+
+    @staticmethod
+    def list():
+        """List of supported file type values"""
+        return list(map(lambda c: c.value, FileFormatTypes))
+
+
+# pylint: disable=too-few-public-methods
+class FileFormat:
+    """File Format class"""
+
+    def __init__(self, file_format: str, query_fn: Callable):
+        """Find the file format in Snowflake, detect its type and
+        initialise file format specific functions"""
+        # Detect file format type by querying it from Snowflake
+        self.file_format_type = self._detect_file_format_type(file_format, query_fn)
+
+        # Map file format specific functions dynamically
+        file_format_module = getattr(target_snowflake.file_formats, self.file_format_type)
+
+        self.records_to_file = file_format_module.records_to_file
+        self.create_merge_sql = file_format_module.create_merge_sql
+        self.create_copy_sql = file_format_module.create_copy_sql
+
+
+    @classmethod
+    def _detect_file_format_type(cls, file_format: str, query_fn: Callable) -> FileFormatTypes:
+        """Detect the type of an existing snowflake file format object
+
+        Params:
+            file_format: File format name
+            query_fn: A callable function that can run SQL queries in an active Snowflake session
+
+        Returns:
+            FileFormatTypes enum item
+        """
+        file_format_name = file_format.split('.')[-1]
+        file_formats_in_sf = query_fn(f"SHOW FILE FORMATS LIKE '{file_format_name}'")
+
+        if len(file_formats_in_sf) == 1:
+            file_format = file_formats_in_sf[0]
+            try:
+                file_format_type = FileFormatTypes(file_format['type'].lower())
+            except ValueError as ex:
+                raise InvalidFileFormatException(
+                    f"Not supported named file format {file_format_name}. Supported file formats: {FileFormatTypes}") \
+                    from ex
+        else:
+            raise FileFormatNotFoundException(
+                f"Named file format not found: {file_format}")
+
+        return file_format_type

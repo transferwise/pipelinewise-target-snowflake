@@ -1063,7 +1063,19 @@ class TestIntegration(unittest.TestCase):
         target_schema = self.config['default_target_schema']
         self.assertEqual(result, [{
             'QUERY_TAG': f'PPW test tap run at {current_time}. Loading into {target_db}..',
-            'QUERIES': 4
+            'QUERIES': 6
+            },
+            {
+            'QUERY_TAG': f'PPW test tap run at {current_time}. Loading into {target_db}..TEST_TABLE_ONE',
+            'QUERIES': 2
+            },
+            {
+            'QUERY_TAG': f'PPW test tap run at {current_time}. Loading into {target_db}..TEST_TABLE_THREE',
+            'QUERIES': 2
+            },
+            {
+            'QUERY_TAG': f'PPW test tap run at {current_time}. Loading into {target_db}..TEST_TABLE_TWO',
+            'QUERIES': 2
             },
             {
             'QUERY_TAG': f'PPW test tap run at {current_time}. Loading into {target_db}.{target_schema}.TEST_TABLE_ONE',
@@ -1108,3 +1120,14 @@ class TestIntegration(unittest.TestCase):
 
         with self.assertRaises(target_snowflake.UnexpectedValueTypeException):
             self.persist_lines_with_cache(tap_lines)
+
+    def test_parquet(self):
+        """Test if parquet file can be loaded"""
+        tap_lines = test_utils.get_test_tap_lines('messages-with-three-streams.json')
+
+        # Set parquet file format
+        self.config['file_format'] = os.environ.get('TARGET_SNOWFLAKE_FILE_FORMAT_PARQUET')
+        self.persist_lines_with_cache(tap_lines)
+
+        # Check if data loaded correctly and metadata columns exist
+        self.assert_three_streams_are_into_snowflake()

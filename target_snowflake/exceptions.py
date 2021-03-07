@@ -15,3 +15,11 @@ class InvalidValidationOperationException(Exception):
 
 class TooManyRecordsException(Exception):
     """Exception to raise when query returns more records than max_records"""
+
+
+class FileFormatNotFoundException(Exception):
+    """Exception to raise when name file format not found"""
+
+
+class InvalidFileFormatException(Exception):
+    """Exception to raise when name file format is not compatible"""

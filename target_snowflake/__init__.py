@@ -14,9 +14,11 @@ from jsonschema import Draft7Validator, FormatChecker
 from singer import get_logger
 
 import target_snowflake.file_formats.csv as csv
+import target_snowflake.file_formats.parquet as parquet
 import target_snowflake.stream_utils as stream_utils
 
 from target_snowflake.db_sync import DbSync
+from target_snowflake.file_format import FileFormatTypes
 from target_snowflake.exceptions import (
     RecordValidationException,
     UnexpectedValueTypeException,
@@ -352,18 +354,23 @@ def flush_records(stream: str,
     Returns:
         None
     """
-    csv_file = csv.records_to_csv_file(records,
-                                       db_sync.flatten_schema,
-                                       compression=not no_compression,
-                                       dest_dir=temp_dir,
-                                       data_flattening_max_level=db_sync.data_flattening_max_level)
+    # Generate file on disk in the required format
+    filepath = db_sync.file_format.records_to_file(records,
+                                                   db_sync.flatten_schema,
+                                                   compression=not no_compression,
+                                                   dest_dir=temp_dir,
+                                                   data_flattening_max_level=db_sync.data_flattening_max_level)
 
+    # Get file stats
     row_count = len(records)
-    size_bytes = os.path.getsize(csv_file)
-    s3_key = db_sync.put_to_stage(csv_file, stream, row_count, temp_dir=temp_dir)
-    db_sync.load_csv(s3_key, row_count, size_bytes)
+    size_bytes = os.path.getsize(filepath)
 
-    os.remove(csv_file)
+    # Upload to s3 and load into Snowflake
+    s3_key = db_sync.put_to_stage(filepath, stream, row_count, temp_dir=temp_dir)
+    db_sync.load_file(s3_key, row_count, size_bytes)
+
+    # Delete file from local disk and from s3
+    os.remove(filepath)
     db_sync.delete_from_stage(stream, s3_key)
 
 

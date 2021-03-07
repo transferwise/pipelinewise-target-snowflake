@@ -13,6 +13,7 @@ def _mock_record_to_csv_line(record, schema, data_flattening_max_level=0):
 class TestCsv(unittest.TestCase):
 
     def setUp(self):
+        self.maxDiff = None
         self.config = {}
 
     def test_write_record_to_uncompressed_file(self):
@@ -92,3 +93,37 @@ class TestCsv(unittest.TestCase):
 
         self.assertEqual(csv.record_to_csv_line(record, schema),
                          '"1","2030-01-22","10000-01-22 12:04:22","25:01:01","I\'m good",')
+
+    def test_create_copy_sql(self):
+        self.assertEqual(csv.create_copy_sql(table_name='foo_table',
+                                             stage_name='foo_stage',
+                                             s3_key='foo_s3_key.csv',
+                                             file_format_name='foo_file_format',
+                                             columns=[{'name': 'COL_1'},
+                                                      {'name': 'COL_2'},
+                                                      {'name': 'COL_3',
+                                                       'trans': 'parse_json'}]),
+
+                         "COPY INTO foo_table (COL_1, COL_2, COL_3) FROM "
+                         "'@foo_stage/foo_s3_key.csv' "
+                         "FILE_FORMAT = (format_name='foo_file_format')")
+
+    def test_create_merge_sql(self):
+        self.assertEqual(csv.create_merge_sql(table_name='foo_table',
+                                             stage_name='foo_stage',
+                                             s3_key='foo_s3_key.csv',
+                                             file_format_name='foo_file_format',
+                                             columns=[{'name': 'COL_1', 'trans': ''},
+                                                      {'name': 'COL_2', 'trans': ''},
+                                                      {'name': 'COL_3', 'trans': 'parse_json'}],
+                                             pk_merge_condition='s.COL_1 = t.COL_1'),
+
+                         "MERGE INTO foo_table t USING ("
+                         "SELECT ($1) COL_1, ($2) COL_2, parse_json($3) COL_3 "
+                         "FROM '@foo_stage/foo_s3_key.csv' "
+                         "(FILE_FORMAT => 'foo_file_format')) s "
+                         "ON s.COL_1 = t.COL_1 "
+                         "WHEN MATCHED THEN UPDATE SET COL_1=s.COL_1, COL_2=s.COL_2, COL_3=s.COL_3 "
+                         "WHEN NOT MATCHED THEN "
+                         "INSERT (COL_1, COL_2, COL_3) "
+                         "VALUES (s.COL_1, s.COL_2, s.COL_3)")

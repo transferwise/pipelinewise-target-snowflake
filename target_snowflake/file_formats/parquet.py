@@ -1,9 +1,8 @@
-"""CSV file format functions"""
-import gzip
-import json
+"""Parquet file format functions"""
 import os
+import pandas
 
-from typing import Callable, Dict, List
+from typing import Dict, List
 from tempfile import mkstemp
 
 import target_snowflake.flattening as flattening
@@ -16,10 +15,11 @@ def create_copy_sql(table_name: str,
                     columns: List):
     """Generate a CSV compatible snowflake COPY INTO command"""
     return "COPY INTO {} ({}) " \
-           "FROM '@{}/{}' " \
+           "FROM (SELECT {} FROM '@{}/{}') " \
            "FILE_FORMAT = (format_name='{}')".format(
         table_name,
         ', '.join([c['name'] for c in columns]),
+        ', '.join(["{}($1:{}) {}".format(c['trans'], c['name'].lower(), c['name']) for i, c in enumerate(columns)]),
         stage_name,
         s3_key,
         file_format_name)
@@ -42,7 +42,7 @@ def create_merge_sql(table_name: str,
            "INSERT ({}) " \
            "VALUES ({})".format(
         table_name,
-        ', '.join(["{}(${}) {}".format(c['trans'], i + 1, c['name']) for i, c in enumerate(columns)]),
+        ', '.join(["{}($1:{}) {}".format(c['trans'], c['name'].lower(), c['name']) for i, c in enumerate(columns)]),
         stage_name,
         s3_key,
         file_format_name,
@@ -52,64 +52,38 @@ def create_merge_sql(table_name: str,
         ', '.join(['s.{}'.format(c['name']) for c in columns]))
 
 
-def record_to_csv_line(record: dict,
-                       schema: dict,
-                       data_flattening_max_level: int = 0) -> str:
+def records_to_dataframe(records: Dict,
+                         schema: Dict,
+                         data_flattening_max_level: int = 0) -> pandas.DataFrame:
     """
-    Transforms a record message to a CSV line
+    Transforms a list of record messages into pandas dataframe with flattened records
 
     Args:
-        record: Dictionary that represents a csv line. Dict key is column name, value is the column value
-        schema: JSONSchema of the record
-        data_flattening_max_level: Max level of auto flattening if a record message has nested objects. (Default: 0)
-
-    Returns:
-        string of csv line
-    """
-    flatten_record = flattening.flatten_record(record, schema, max_level=data_flattening_max_level)
-
-    return ','.join(
-        [
-            json.dumps(flatten_record[column], ensure_ascii=False) if column in flatten_record and (
-                    flatten_record[column] == 0 or flatten_record[column]) else ''
-            for column in schema
-        ]
-    )
-
-
-def write_records_to_file(outfile,
-                          records: Dict,
-                          schema: Dict,
-                          record_to_csv_line_transformer: Callable,
-                          data_flattening_max_level: int = 0) -> None:
-    """
-    Writes a record message to a given file
-
-    Args:
-        outfile: An open file object
         records: List of dictionary, that represents multiple csv lines. Dict key is the column name, value is the
                  column value
-        schema: JSONSchema of the records
-        record_to_csv_line_transformer: Function that transforms dictionary to a CSV string line
         data_flattening_max_level: Max level of auto flattening if a record message has nested objects. (Default: 0)
 
     Returns:
-        None
+        Pandas dataframe
     """
+    flattened_records = []
+
     for record in records.values():
-        csv_line = record_to_csv_line_transformer(record, schema, data_flattening_max_level)
-        outfile.write(bytes(csv_line + '\n', 'UTF-8'))
+        flatten_record = flattening.flatten_record(record, schema, max_level=data_flattening_max_level)
+        flattened_records.append(flatten_record)
+
+    return pandas.DataFrame(data=flattened_records)
 
 
 def records_to_file(records: Dict,
                     schema: Dict,
-                    suffix: str = 'csv',
+                    suffix: str = 'parquet',
                     prefix: str = 'records_',
                     compression: bool = False,
                     dest_dir: str = None,
                     data_flattening_max_level: int = 0):
     """
-    Transforms a list of dictionaries with records messages to a CSV file
+    Transforms a list of dictionaries with records messages to a parquet file
 
     Args:
         records: List of dictionary, that represents multiple csv lines. Dict key is the column name, value is the
@@ -118,29 +92,25 @@ def records_to_file(records: Dict,
         suffix: Generated filename suffix
         prefix: Generated filename prefix
         compression: Gzip compression enabled or not (Default: False)
-        dest_dir: Directory where the CSV file will be generated. (Default: OS specificy temp directory)
+        dest_dir: Directory where the parquet file will be generated. (Default: OS specificy temp directory)
         data_flattening_max_level: Max level of auto flattening if a record message has nested objects. (Default: 0)
 
     Returns:
-        Absolute path of the generated CSV file
+        Absolute path of the generated parquet file
     """
     if dest_dir:
         os.makedirs(dest_dir, exist_ok=True)
 
     if compression:
         file_suffix = f'.{suffix}.gz'
+        parquet_compression='gzip'
     else:
         file_suffix = f'.{suffix}'
+        parquet_compression = None
 
-    filedesc, filename = mkstemp(suffix=file_suffix, prefix=prefix, dir=dest_dir)
+    filename = mkstemp(suffix=file_suffix, prefix=prefix, dir=dest_dir)[1]
 
-    # Using gzip or plain file object
-    if compression:
-        with open(filedesc, 'wb') as outfile:
-            with gzip.GzipFile(filename=filename, mode='wb',fileobj=outfile) as gzipfile:
-                write_records_to_file(gzipfile, records, schema, record_to_csv_line, data_flattening_max_level)
-    else:
-        with open(filedesc, 'wb') as outfile:
-            write_records_to_file(outfile, records, schema, record_to_csv_line, data_flattening_max_level)
+    dataframe = records_to_dataframe(records, schema, data_flattening_max_level)
+    dataframe.to_parquet(filename, compression=parquet_compression)
 
     return filename

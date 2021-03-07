@@ -1,7 +1,11 @@
 import unittest
 import json
 
+from unittest.mock import patch
+
 from target_snowflake import db_sync
+from target_snowflake.file_format import FileFormatTypes
+from target_snowflake.exceptions import InvalidFileFormatException, FileFormatNotFoundException
 
 
 class TestDBSync(unittest.TestCase):
@@ -184,7 +188,10 @@ class TestDBSync(unittest.TestCase):
             'table': 'test_table'
         })
 
-    def test_parallelism(self):
+    @patch('target_snowflake.db_sync.DbSync.query')
+    def test_parallelism(self, query_patch):
+        query_patch.return_value = [{ 'type': 'CSV' }]
+
         minimal_config = {
             'account': "dummy-value",
             'dbname': "dummy-value",
@@ -201,6 +208,7 @@ class TestDBSync(unittest.TestCase):
             'stage': 'dummy_schema.dummy_stage',
             'parallelism': 5
         }
+
         self.assertEqual(db_sync.DbSync({**minimal_config,
                                          **external_stage_with_parallel}).connection_config['parallelism'], 5)
 
