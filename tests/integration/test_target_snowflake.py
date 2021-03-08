@@ -10,6 +10,7 @@ from target_snowflake import RecordValidationException
 from target_snowflake.db_sync import DbSync
 from target_snowflake.upload_clients.s3_upload_client import S3UploadClient
 
+from pyarrow.lib import ArrowTypeError
 from snowflake.connector.errors import ProgrammingError
 from snowflake.connector.errors import DatabaseError
 
@@ -884,8 +885,13 @@ class TestIntegration(unittest.TestCase):
 
         # Loading invalid records when record validation disabled should fail at load time
         self.config['validate_records'] = False
-        with self.assertRaises(ProgrammingError):
-            self.persist_lines_with_cache(tap_lines)
+        if self.config['file_format'] == os.environ.get('TARGET_SNOWFLAKE_FILE_FORMAT_CSV'):
+            with self.assertRaises(ProgrammingError):
+                self.persist_lines_with_cache(tap_lines)
+
+        if self.config['file_format'] == os.environ.get('TARGET_SNOWFLAKE_FILE_FORMAT_PARQUET'):
+            with self.assertRaises(ArrowTypeError):
+                self.persist_lines_with_cache(tap_lines)
 
     def test_pg_records_validation(self):
         """Test validating records from postgres tap"""
@@ -1098,9 +1104,17 @@ class TestIntegration(unittest.TestCase):
         # Set s3_bucket and stage to None to use table stages
         self.config['s3_bucket'] = None
         self.config['stage'] = None
+
+        # Table stages should work with CSV files
+        self.config['file_format'] = os.environ.get('TARGET_SNOWFLAKE_FILE_FORMAT_CSV')
         self.persist_lines_with_cache(tap_lines)
 
         self.assert_three_streams_are_into_snowflake()
+
+        # Table stages should not work with Parquet files
+        self.config['file_format'] = os.environ.get('TARGET_SNOWFLAKE_FILE_FORMAT_PARQUET')
+        with self.assertRaises(SystemExit):
+            self.persist_lines_with_cache(tap_lines)
 
     def test_custom_role(self):
         """Test if custom role can be used"""

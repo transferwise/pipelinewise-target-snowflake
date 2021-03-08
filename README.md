@@ -68,6 +68,8 @@ To use Parquet files (experimental):
 CREATE FILE FORMAT {database}.{schema}.{file_format_name} TYPE = 'PARQUET';
 ```
 
+**Important:** Parquet files are not supported with [table stages](https://docs.snowflake.com/en/user-guide/data-load-local-file-system-create-stage.html#table-stages). If you want to use Parquet files then you need to have an external stage in snowflake. Please read further for more details in point 4).
+
 2. Create a Role with all the required permissions:
 
 ```

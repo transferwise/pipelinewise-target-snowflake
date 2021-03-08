@@ -55,12 +55,13 @@ class TestParquet(unittest.TestCase):
                                                  stage_name='foo_stage',
                                                  s3_key='foo_s3_key.parquet',
                                                  file_format_name='foo_file_format',
-                                                 columns=[{'name': 'COL_1', 'trans': ''},
-                                                          {'name': 'COL_2', 'trans': ''},
-                                                          {'name': 'COL_3', 'trans': 'parse_json'}]),
+                                                 columns=[{'name': 'COL_1', 'json_element_name': 'col_1', 'trans': ''},
+                                                          {'name': 'COL_2', 'json_element_name': 'colTwo', 'trans': ''},
+                                                          {'name': 'COL_3', 'json_element_name': 'col_3',
+                                                           'trans': 'parse_json'}]),
 
                          "COPY INTO foo_table (COL_1, COL_2, COL_3) FROM ("
-                         "SELECT ($1:col_1) COL_1, ($1:col_2) COL_2, parse_json($1:col_3) COL_3 "
+                         "SELECT ($1:col_1) COL_1, ($1:colTwo) COL_2, parse_json($1:col_3) COL_3 "
                          "FROM '@foo_stage/foo_s3_key.parquet'"
                          ") "
                          "FILE_FORMAT = (format_name='foo_file_format')")
@@ -70,13 +71,16 @@ class TestParquet(unittest.TestCase):
                                                   stage_name='foo_stage',
                                                   s3_key='foo_s3_key.parquet',
                                                   file_format_name='foo_file_format',
-                                                  columns=[{'name': 'COL_1', 'trans': ''},
-                                                           {'name': 'COL_2', 'trans': ''},
-                                                           {'name': 'COL_3', 'trans': 'parse_json'}],
+                                                  columns=[
+                                                      {'name': 'COL_1', 'json_element_name': 'col_1', 'trans': ''},
+                                                      {'name': 'COL_2', 'json_element_name': 'colTwo', 'trans': ''},
+                                                      {'name': 'COL_3', 'json_element_name': 'col_3',
+                                                       'trans': 'parse_json'}
+                                                  ],
                                                   pk_merge_condition='s.COL_1 = t.COL_1'),
 
                          "MERGE INTO foo_table t USING ("
-                         "SELECT ($1:col_1) COL_1, ($1:col_2) COL_2, parse_json($1:col_3) COL_3 "
+                         "SELECT ($1:col_1) COL_1, ($1:colTwo) COL_2, parse_json($1:col_3) COL_3 "
                          "FROM '@foo_stage/foo_s3_key.parquet' "
                          "(FILE_FORMAT => 'foo_file_format')) s "
                          "ON s.COL_1 = t.COL_1 "

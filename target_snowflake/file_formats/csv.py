@@ -47,7 +47,9 @@ def create_merge_sql(table_name: str,
         s3_key,
         file_format_name,
         pk_merge_condition,
-        ', '.join(['{}=s.{}'.format(c['name'], c['name']) for c in columns]),
+        ', '.join(['{}=s.{}'.format(c['name'],
+                                    c['name'])
+                   for c in columns]),
         ', '.join([c['name'] for c in columns]),
         ', '.join(['s.{}'.format(c['name']) for c in columns]))
 
@@ -103,7 +105,7 @@ def write_records_to_file(outfile,
 def records_to_file(records: Dict,
                     schema: Dict,
                     suffix: str = 'csv',
-                    prefix: str = 'records_',
+                    prefix: str = 'batch_',
                     compression: bool = False,
                     dest_dir: str = None,
                     data_flattening_max_level: int = 0):

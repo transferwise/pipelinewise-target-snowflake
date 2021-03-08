@@ -9,7 +9,7 @@ import time
 from singer import get_logger
 import target_snowflake.flattening as flattening
 import target_snowflake.stream_utils as stream_utils
-from target_snowflake.file_format import FileFormat
+from target_snowflake.file_format import FileFormat, FileFormatTypes
 
 from target_snowflake.exceptions import TooManyRecordsException
 from target_snowflake.upload_clients.s3_upload_client import S3UploadClient
@@ -106,9 +106,12 @@ def column_trans(schema_property):
 
 
 def safe_column_name(name):
-    """Generate SQL friencly column name"""
+    """Generate SQL friendly column name"""
     return '"{}"'.format(name).upper()
 
+def json_element_name(name):
+    """Generate SQL friendly semi structured element reference name"""
+    return '"{}"'.format(name)
 
 def column_clause(name, schema_property):
     """Generate DDL column name with column type string"""
@@ -203,6 +206,11 @@ class DbSync:
         self.schema_name = None
         self.grantees = None
         self.file_format = FileFormat(self.connection_config['file_format'], self.query)
+
+        if not self.connection_config.get('stage') and self.file_format.file_format_type == FileFormatTypes.PARQUET:
+            self.logger.error("Table stages with Parquet file format is not suppported. "
+                              "Use named stages with Parquet file format or table stages with CSV files format")
+            sys.exit(1)
 
         # Init stream schema pylint: disable=line-too-long
         if self.stream_schema_message is not None:
@@ -408,6 +416,7 @@ class DbSync:
         columns_with_trans = [
             {
                 "name": safe_column_name(name),
+                "json_element_name": json_element_name(name),
                 "trans": column_trans(schema)
             }
             for (name, schema) in self.flatten_schema.items()

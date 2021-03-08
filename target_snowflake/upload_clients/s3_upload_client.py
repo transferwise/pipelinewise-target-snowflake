@@ -50,9 +50,10 @@ class S3UploadClient(BaseUploadClient):
         bucket = self.connection_config['s3_bucket']
         s3_acl = self.connection_config.get('s3_acl')
         s3_key_prefix = self.connection_config.get('s3_key_prefix', '')
-        s3_key = "{}pipelinewise_{}_{}.csv".format(s3_key_prefix,
-                                                   stream,
-                                                   datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f"))
+        s3_key = "{}pipelinewise_{}_{}_{}".format(s3_key_prefix,
+                                                  stream,
+                                                  datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f"),
+                                                  os.path.basename(file))
 
         self.logger.info('Target S3 bucket: %s, local file: %s, S3 key: %s', bucket, file, s3_key)
 

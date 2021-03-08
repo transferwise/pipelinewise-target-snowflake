@@ -218,3 +218,15 @@ class TestDBSync(unittest.TestCase):
         }
         self.assertEqual(db_sync.DbSync({**minimal_config,
                                          **table_stage_with_parallel}).connection_config['parallelism'], 1)
+
+    def test_safe_column_name(self):
+        self.assertEqual(db_sync.safe_column_name("columnname"), '"COLUMNNAME"')
+        self.assertEqual(db_sync.safe_column_name("columnName"), '"COLUMNNAME"')
+        self.assertEqual(db_sync.safe_column_name("column-name"), '"COLUMN-NAME"')
+        self.assertEqual(db_sync.safe_column_name("column name"), '"COLUMN NAME"')
+
+    def json_element_name(self):
+        self.assertEqual(db_sync.safe_column_name("columnname"), 'columnname"')
+        self.assertEqual(db_sync.safe_column_name("columnName"), 'columnName"')
+        self.assertEqual(db_sync.safe_column_name("column-name"), 'column-name')
+        self.assertEqual(db_sync.safe_column_name('"column name"'), '"column name"')

@@ -19,7 +19,10 @@ def create_copy_sql(table_name: str,
            "FILE_FORMAT = (format_name='{}')".format(
         table_name,
         ', '.join([c['name'] for c in columns]),
-        ', '.join(["{}($1:{}) {}".format(c['trans'], c['name'].lower(), c['name']) for i, c in enumerate(columns)]),
+        ', '.join(["{}($1:{}) {}".format(c['trans'],
+                                         c['json_element_name'],
+                                         c['name'])
+                   for i, c in enumerate(columns)]),
         stage_name,
         s3_key,
         file_format_name)
@@ -42,12 +45,17 @@ def create_merge_sql(table_name: str,
            "INSERT ({}) " \
            "VALUES ({})".format(
         table_name,
-        ', '.join(["{}($1:{}) {}".format(c['trans'], c['name'].lower(), c['name']) for i, c in enumerate(columns)]),
+        ', '.join(["{}($1:{}) {}".format(c['trans'],
+                                         c['json_element_name'],
+                                         c['name'])
+                   for i, c in enumerate(columns)]),
         stage_name,
         s3_key,
         file_format_name,
         pk_merge_condition,
-        ', '.join(['{}=s.{}'.format(c['name'], c['name']) for c in columns]),
+        ', '.join(['{}=s.{}'.format(c['name'],
+                                    c['name'])
+                   for c in columns]),
         ', '.join([c['name'] for c in columns]),
         ', '.join(['s.{}'.format(c['name']) for c in columns]))
 
@@ -77,7 +85,7 @@ def records_to_dataframe(records: Dict,
 def records_to_file(records: Dict,
                     schema: Dict,
                     suffix: str = 'parquet',
-                    prefix: str = 'records_',
+                    prefix: str = 'batch_',
                     compression: bool = False,
                     dest_dir: str = None,
                     data_flattening_max_level: int = 0):
