@@ -29,8 +29,6 @@ class FileFormat:
         initialise file format specific functions"""
         # Detect file format type by querying it from Snowflake
         self.file_format_type = self._detect_file_format_type(file_format, query_fn)
-
-        # Map file format specific functions dynamically
         self.formatter = self._get_formatter(self.file_format_type)
 
     @classmethod
