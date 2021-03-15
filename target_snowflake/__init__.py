@@ -355,11 +355,12 @@ def flush_records(stream: str,
         None
     """
     # Generate file on disk in the required format
-    filepath = db_sync.file_format.records_to_file(records,
-                                                   db_sync.flatten_schema,
-                                                   compression=not no_compression,
-                                                   dest_dir=temp_dir,
-                                                   data_flattening_max_level=db_sync.data_flattening_max_level)
+    filepath = db_sync.file_format.formatter.records_to_file(records,
+                                                             db_sync.flatten_schema,
+                                                             compression=not no_compression,
+                                                             dest_dir=temp_dir,
+                                                             data_flattening_max_level=
+                                                                db_sync.data_flattening_max_level)
 
     # Get file stats
     row_count = len(records)

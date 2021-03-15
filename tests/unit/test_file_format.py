@@ -14,6 +14,13 @@ class TestFileFormat(unittest.TestCase):
     Unit Tests
     """
 
+    def test_get_formatter(self):
+        self.assertEqual(FileFormat._get_formatter(FileFormatTypes.CSV), csv)
+        self.assertEqual(FileFormat._get_formatter(FileFormatTypes.PARQUET), parquet)
+        with self.assertRaises(InvalidFileFormatException):
+            FileFormat._get_formatter('UNKNOWN')
+
+
     @patch('target_snowflake.db_sync.DbSync.query')
     def test_detect_file_format_type(self, query_patch):
         minimal_config = {
@@ -37,9 +44,9 @@ class TestFileFormat(unittest.TestCase):
         self.assertEqual(file_format.file_format_type, FileFormatTypes.CSV)
 
         # File format functions should be mapped to csv module
-        self.assertEqual(file_format.records_to_file.__module__, csv.records_to_file.__module__)
-        self.assertEqual(file_format.create_merge_sql.__module__, csv.create_merge_sql.__module__)
-        self.assertEqual(file_format.create_copy_sql.__module__, csv.create_copy_sql.__module__)
+        self.assertEqual(file_format.formatter.records_to_file.__module__, csv.records_to_file.__module__)
+        self.assertEqual(file_format.formatter.create_merge_sql.__module__, csv.create_merge_sql.__module__)
+        self.assertEqual(file_format.formatter.create_copy_sql.__module__, csv.create_copy_sql.__module__)
 
         # Parquet should be supported
         query_patch.return_value = [{ 'type': 'PARQUET' }]
@@ -47,9 +54,9 @@ class TestFileFormat(unittest.TestCase):
         self.assertEqual(file_format.file_format_type, FileFormatTypes.PARQUET)
 
         # File format functions should be mapped to parquet module
-        self.assertEqual(file_format.records_to_file.__module__, parquet.records_to_file.__module__)
-        self.assertEqual(file_format.create_merge_sql.__module__, parquet.create_merge_sql.__module__)
-        self.assertEqual(file_format.create_copy_sql.__module__, parquet.create_copy_sql.__module__)
+        self.assertEqual(file_format.formatter.records_to_file.__module__, parquet.records_to_file.__module__)
+        self.assertEqual(file_format.formatter.create_merge_sql.__module__, parquet.create_merge_sql.__module__)
+        self.assertEqual(file_format.formatter.create_copy_sql.__module__, parquet.create_copy_sql.__module__)
 
         # Empty result should raise exception
         query_patch.return_value = []

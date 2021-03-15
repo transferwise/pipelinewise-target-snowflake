@@ -1,5 +1,6 @@
 """Enums used by pipelinewise-target-snowflake"""
 from enum import Enum, unique
+from types import ModuleType
 from typing import Callable
 
 import target_snowflake.file_formats
@@ -30,12 +31,29 @@ class FileFormat:
         self.file_format_type = self._detect_file_format_type(file_format, query_fn)
 
         # Map file format specific functions dynamically
-        file_format_module = getattr(target_snowflake.file_formats, self.file_format_type)
+        self.formatter = self._get_formatter(self.file_format_type)
 
-        self.records_to_file = file_format_module.records_to_file
-        self.create_merge_sql = file_format_module.create_merge_sql
-        self.create_copy_sql = file_format_module.create_copy_sql
+    @classmethod
+    def _get_formatter(cls, file_format_type: FileFormatTypes) -> ModuleType:
+        """Get the corresponding file formatter implementation based
+        on the FileFormatType parameter
 
+        Params:
+            file_format_type: FileFormatTypes enum item
+
+        Returns:
+            ModuleType implementation of the file ormatter
+        """
+        formatter = None
+
+        if file_format_type == FileFormatTypes.CSV:
+            formatter = target_snowflake.file_formats.csv
+        elif file_format_type == FileFormatTypes.PARQUET:
+            formatter = target_snowflake.file_formats.parquet
+        else:
+            raise InvalidFileFormatException(f"Not supported file format: '{file_format_type}")
+
+        return formatter
 
     @classmethod
     def _detect_file_format_type(cls, file_format: str, query_fn: Callable) -> FileFormatTypes:
