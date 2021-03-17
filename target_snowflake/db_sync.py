@@ -9,6 +9,7 @@ import time
 from singer import get_logger
 import target_snowflake.flattening as flattening
 import target_snowflake.stream_utils as stream_utils
+from target_snowflake.file_format import FileFormat, FileFormatTypes
 
 from target_snowflake.exceptions import TooManyRecordsException
 from target_snowflake.upload_clients.s3_upload_client import S3UploadClient
@@ -105,9 +106,12 @@ def column_trans(schema_property):
 
 
 def safe_column_name(name):
-    """Generate SQL friencly column name"""
+    """Generate SQL friendly column name"""
     return '"{}"'.format(name).upper()
 
+def json_element_name(name):
+    """Generate SQL friendly semi structured element reference name"""
+    return '"{}"'.format(name)
 
 def column_clause(name, schema_property):
     """Generate DDL column name with column type string"""
@@ -201,6 +205,12 @@ class DbSync:
 
         self.schema_name = None
         self.grantees = None
+        self.file_format = FileFormat(self.connection_config['file_format'], self.query)
+
+        if not self.connection_config.get('stage') and self.file_format.file_format_type == FileFormatTypes.PARQUET:
+            self.logger.error("Table stages with Parquet file format is not suppported. "
+                              "Use named stages with Parquet file format or table stages with CSV files format")
+            sys.exit(1)
 
         # Init stream schema pylint: disable=line-too-long
         if self.stream_schema_message is not None:
@@ -396,8 +406,8 @@ class DbSync:
         table_name = self.table_name(stream, False, without_schema=True)
         return f"{self.schema_name}.%{table_name}"
 
-    def load_csv(self, s3_key, count, size_bytes):
-        """Load CSV file from snowflake stage into target table"""
+    def load_file(self, s3_key, count, size_bytes):
+        """Load a supported file type from snowflake stage into target table"""
         stream_schema_message = self.stream_schema_message
         stream = stream_schema_message['stream']
         self.logger.info("Loading %d rows into '%s'", count, self.table_name(stream, False))
@@ -406,6 +416,7 @@ class DbSync:
         columns_with_trans = [
             {
                 "name": safe_column_name(name),
+                "json_element_name": json_element_name(name),
                 "trans": column_trans(schema)
             }
             for (name, schema) in self.flatten_schema.items()
@@ -418,29 +429,14 @@ class DbSync:
 
                 # Insert or Update with MERGE command if primary key defined
                 if len(self.stream_schema_message['key_properties']) > 0:
-                    merge_sql = """MERGE INTO {} t
-                        USING (
-                            SELECT {}
-                              FROM '@{}/{}'
-                              (FILE_FORMAT => '{}')) s
-                        ON {}
-                        WHEN MATCHED THEN
-                            UPDATE SET {}
-                        WHEN NOT MATCHED THEN
-                            INSERT ({})
-                            VALUES ({})
-                    """.format(
-                        self.table_name(stream, False),
-                        ', '.join(["{}(${}) {}".format(c['trans'], i + 1, c['name']) for i, c in
-                                   enumerate(columns_with_trans)]),
-                        self.get_stage_name(stream),
-                        s3_key,
-                        self.connection_config['file_format'],
-                        self.primary_key_merge_condition(),
-                        ', '.join(['{}=s.{}'.format(c['name'], c['name']) for c in columns_with_trans]),
-                        ', '.join([c['name'] for c in columns_with_trans]),
-                        ', '.join(['s.{}'.format(c['name']) for c in columns_with_trans])
-                    )
+                    merge_sql = self.file_format.formatter.create_merge_sql(table_name=self.table_name(stream, False),
+                                                                            stage_name=self.get_stage_name(stream),
+                                                                            s3_key=s3_key,
+                                                                            file_format_name=
+                                                                                self.connection_config['file_format'],
+                                                                            columns=columns_with_trans,
+                                                                            pk_merge_condition=
+                                                                                self.primary_key_merge_condition())
                     self.logger.debug('Running query: %s', merge_sql)
                     cur.execute(merge_sql)
 
@@ -452,15 +448,12 @@ class DbSync:
 
                 # Insert only with COPY command if no primary key
                 else:
-                    copy_sql = """COPY INTO {} ({}) FROM '@{}/{}'
-                        FILE_FORMAT = (format_name='{}')
-                    """.format(
-                        self.table_name(stream, False),
-                        ', '.join([c['name'] for c in columns_with_trans]),
-                        self.get_stage_name(stream),
-                        s3_key,
-                        self.connection_config['file_format'],
-                    )
+                    copy_sql = self.file_format.formatter.create_copy_sql(table_name=self.table_name(stream, False),
+                                                                          stage_name=self.get_stage_name(stream),
+                                                                          s3_key=s3_key,
+                                                                          file_format_name=
+                                                                            self.connection_config['file_format'],
+                                                                          columns=columns_with_trans)
                     self.logger.debug('Running query: %s', copy_sql)
                     cur.execute(copy_sql)
 

@@ -54,12 +54,21 @@ It's reading incoming messages from STDIN and using the properites in `config.js
 
 You need to create a few objects in snowflake in one schema before start using this target.
 
-1. Create a named file format. This will be used by the MERGE/COPY commands to parse the CSV files correctly from S3:
+1. Create a named file format. This will be used by the MERGE/COPY commands to parse the files correctly from S3. You can use CSV or Parquet file formats.
 
+To use CSV files:
 ```
 CREATE FILE FORMAT {database}.{schema}.{file_format_name}
 TYPE = 'CSV' ESCAPE='\\' FIELD_OPTIONALLY_ENCLOSED_BY='"';
 ```
+
+To use Parquet files (experimental):
+
+```
+CREATE FILE FORMAT {database}.{schema}.{file_format_name} TYPE = 'PARQUET';
+```
+
+**Important:** Parquet files are not supported with [table stages](https://docs.snowflake.com/en/user-guide/data-load-local-file-system-create-stage.html#table-stages). If you want to use Parquet files then you need to have an external stage in snowflake. Please read further for more details in point 4).
 
 2. Create a Role with all the required permissions:
 
@@ -163,8 +172,8 @@ Full list of options in `config.json`:
 | data_flattening_max_level           | Integer |            | (Default: 0) Object type RECORD items from taps can be loaded into VARIANT columns as JSON (default) or we can flatten the schema by creating columns automatically.<br><br>When value is 0 (default) then flattening functionality is turned off. |
 | primary_key_required                | Boolean |            | (Default: True) Log based and Incremental replications on tables with no Primary Key cause duplicates when merging UPDATE events. When set to true, stop loading data if no Primary Key is defined. |
 | validate_records                    | Boolean |            | (Default: False) Validate every single record message to the corresponding JSON schema. This option is disabled by default and invalid RECORD messages will fail only at load time by Snowflake. Enabling this option will detect invalid records earlier but could cause performance degradation. |
-| temp_dir                            | String  |            | (Default: platform-dependent) Directory of temporary CSV files with RECORD messages. |
-| no_compression                      | Boolean |            | (Default: False) Generate uncompressed CSV files when loading to Snowflake. Normally, by default GZIP compressed files are generated. |
+| temp_dir                            | String  |            | (Default: platform-dependent) Directory of temporary files with RECORD messages. |
+| no_compression                      | Boolean |            | (Default: False) Generate uncompressed files when loading to Snowflake. Normally, by default GZIP compressed files are generated. |
 | query_tag                           | String  |            | (Default: None) Optional string to tag executed queries in Snowflake. Replaces tokens `{{database}}`, `{{schema}}` and `{{table}}` with the appropriate values. The tags are displayed in the output of the Snowflake `QUERY_HISTORY`, `QUERY_HISTORY_BY_*` functions. |
 
 ### To run tests:
@@ -183,7 +192,8 @@ Full list of options in `config.json`:
   export TARGET_SNOWFLAKE_S3_BUCKET=<s3-external-bucket>
   export TARGET_SNOWFLAKE_S3_KEY_PREFIX=<bucket-directory>
   export TARGET_SNOWFLAKE_STAGE=<stage-object-with-schema-name>
-  export TARGET_SNOWFLAKE_FILE_FORMAT=<file-format-object-with-schema-name>
+  export TARGET_SNOWFLAKE_FILE_FORMAT_CSV=<file-format-csv-object-with-schema-name>
+  export TARGET_SNOWFLAKE_FILE_FORMAT_PARQUET=<file-format-parquet-object-with-schema-name>
   export CLIENT_SIDE_ENCRYPTION_MASTER_KEY=<client_side_encryption_master_key>
   export CLIENT_SIDE_ENCRYPTION_STAGE_OBJECT=<client_side_encryption_stage_object>
 ```

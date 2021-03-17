@@ -10,6 +10,7 @@ from target_snowflake import RecordValidationException
 from target_snowflake.db_sync import DbSync
 from target_snowflake.upload_clients.s3_upload_client import S3UploadClient
 
+from pyarrow.lib import ArrowTypeError
 from snowflake.connector.errors import ProgrammingError
 from snowflake.connector.errors import DatabaseError
 
@@ -884,8 +885,13 @@ class TestIntegration(unittest.TestCase):
 
         # Loading invalid records when record validation disabled should fail at load time
         self.config['validate_records'] = False
-        with self.assertRaises(ProgrammingError):
-            self.persist_lines_with_cache(tap_lines)
+        if self.config['file_format'] == os.environ.get('TARGET_SNOWFLAKE_FILE_FORMAT_CSV'):
+            with self.assertRaises(ProgrammingError):
+                self.persist_lines_with_cache(tap_lines)
+
+        if self.config['file_format'] == os.environ.get('TARGET_SNOWFLAKE_FILE_FORMAT_PARQUET'):
+            with self.assertRaises(ArrowTypeError):
+                self.persist_lines_with_cache(tap_lines)
 
     def test_pg_records_validation(self):
         """Test validating records from postgres tap"""
@@ -1063,7 +1069,19 @@ class TestIntegration(unittest.TestCase):
         target_schema = self.config['default_target_schema']
         self.assertEqual(result, [{
             'QUERY_TAG': f'PPW test tap run at {current_time}. Loading into {target_db}..',
-            'QUERIES': 4
+            'QUERIES': 6
+            },
+            {
+            'QUERY_TAG': f'PPW test tap run at {current_time}. Loading into {target_db}..TEST_TABLE_ONE',
+            'QUERIES': 2
+            },
+            {
+            'QUERY_TAG': f'PPW test tap run at {current_time}. Loading into {target_db}..TEST_TABLE_THREE',
+            'QUERIES': 2
+            },
+            {
+            'QUERY_TAG': f'PPW test tap run at {current_time}. Loading into {target_db}..TEST_TABLE_TWO',
+            'QUERIES': 2
             },
             {
             'QUERY_TAG': f'PPW test tap run at {current_time}. Loading into {target_db}.{target_schema}.TEST_TABLE_ONE',
@@ -1086,9 +1104,17 @@ class TestIntegration(unittest.TestCase):
         # Set s3_bucket and stage to None to use table stages
         self.config['s3_bucket'] = None
         self.config['stage'] = None
+
+        # Table stages should work with CSV files
+        self.config['file_format'] = os.environ.get('TARGET_SNOWFLAKE_FILE_FORMAT_CSV')
         self.persist_lines_with_cache(tap_lines)
 
         self.assert_three_streams_are_into_snowflake()
+
+        # Table stages should not work with Parquet files
+        self.config['file_format'] = os.environ.get('TARGET_SNOWFLAKE_FILE_FORMAT_PARQUET')
+        with self.assertRaises(SystemExit):
+            self.persist_lines_with_cache(tap_lines)
 
     def test_custom_role(self):
         """Test if custom role can be used"""
@@ -1108,3 +1134,14 @@ class TestIntegration(unittest.TestCase):
 
         with self.assertRaises(target_snowflake.UnexpectedValueTypeException):
             self.persist_lines_with_cache(tap_lines)
+
+    def test_parquet(self):
+        """Test if parquet file can be loaded"""
+        tap_lines = test_utils.get_test_tap_lines('messages-with-three-streams.json')
+
+        # Set parquet file format
+        self.config['file_format'] = os.environ.get('TARGET_SNOWFLAKE_FILE_FORMAT_PARQUET')
+        self.persist_lines_with_cache(tap_lines)
+
+        # Check if data loaded correctly and metadata columns exist
+        self.assert_three_streams_are_into_snowflake()
