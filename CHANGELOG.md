@@ -1,3 +1,9 @@
+1.11.1 (2021-03-23)
+-------------------
+- Fixed an issue when `SHOW FILE FORMATS` ran too many times slowing down the startup time of the target
+- Bump `snowflake-connectory-python` from `2.3.10` to `2.4.1`
+- Bump `numpy` from `<1.20.0` to `<1.21.0`
+
 1.11.0 (2021-03-17)
 -------------------
 - Add parquet support
