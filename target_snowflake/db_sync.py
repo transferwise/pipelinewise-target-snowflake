@@ -162,7 +162,7 @@ def create_query_tag(query_tag_pattern: str, database: str = None, schema: str =
 class DbSync:
     """DbSync class"""
 
-    def __init__(self, connection_config, stream_schema_message=None, table_cache=None):
+    def __init__(self, connection_config, stream_schema_message=None, table_cache=None, file_format_type=None):
         """
             connection_config:      Snowflake connection details
 
@@ -205,7 +205,7 @@ class DbSync:
 
         self.schema_name = None
         self.grantees = None
-        self.file_format = FileFormat(self.connection_config['file_format'], self.query)
+        self.file_format = FileFormat(self.connection_config['file_format'], self.query, file_format_type)
 
         if not self.connection_config.get('stage') and self.file_format.file_format_type == FileFormatTypes.PARQUET:
             self.logger.error("Table stages with Parquet file format is not suppported. "

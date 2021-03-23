@@ -24,11 +24,15 @@ class FileFormatTypes(str, Enum):
 class FileFormat:
     """File Format class"""
 
-    def __init__(self, file_format: str, query_fn: Callable):
+    def __init__(self, file_format: str, query_fn: Callable, file_format_type: FileFormatTypes=None):
         """Find the file format in Snowflake, detect its type and
         initialise file format specific functions"""
-        # Detect file format type by querying it from Snowflake
-        self.file_format_type = self._detect_file_format_type(file_format, query_fn)
+        if file_format_type:
+            self.file_format_type = file_format_type
+        else:
+            # Detect file format type by querying it from Snowflake
+            self.file_format_type = self._detect_file_format_type(file_format, query_fn)
+
         self.formatter = self._get_formatter(self.file_format_type)
 
     @classmethod

@@ -55,8 +55,8 @@ class TestIntegration(unittest.TestCase):
         Selecting from a real table instead of INFORMATION_SCHEMA and keeping it
         in memory while the target-snowflake is running results better load performance.
         """
-        table_cache = target_snowflake.load_table_cache(self.config)
-        target_snowflake.persist_lines(self.config, lines, table_cache)
+        table_cache, file_format_type = target_snowflake.get_snowflake_statics(self.config)
+        target_snowflake.persist_lines(self.config, lines, table_cache, file_format_type)
 
     def remove_metadata_columns_from_rows(self, rows):
         """Removes metadata columns from a list of rows"""
@@ -1082,6 +1082,16 @@ class TestIntegration(unittest.TestCase):
             {
             'QUERY_TAG': f'PPW test tap run at {current_time}. Loading into {target_db}.{target_schema}.TEST_TABLE_TWO',
             'QUERIES': 6
+            }
+        ])
+
+        # Detecting file format type should run only once
+        result = snowflake.query(f"""SELECT count(*) show_file_format_queries
+                                 FROM table(information_schema.query_history_by_user('{self.config['user']}'))
+                                 WHERE query_tag like '%%PPW test tap run at {current_time}%%'
+                                   AND query_text like 'SHOW FILE FORMATS%%'""")
+        self.assertEqual(result, [{
+            'SHOW_FILE_FORMAT_QUERIES': 1
             }
         ])
 
