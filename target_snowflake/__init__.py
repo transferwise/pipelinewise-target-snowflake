@@ -60,8 +60,15 @@ def emit_state(state):
         sys.stdout.flush()
 
 
-def load_table_cache(config):
-    """Load table cache from snowflake metadata"""
+def get_snowflake_statics(config):
+    """Retrieve common Snowflake items will be used multiple times
+
+    Params:
+        config: configuration dictionary
+
+    Returns:
+        tuple of retrieved items: table_cache, file_format_type
+    """
     table_cache = []
     if not ('disable_table_cache' in config and config['disable_table_cache']):
         LOGGER.info('Getting catalog objects from table cache...')
@@ -70,12 +77,29 @@ def load_table_cache(config):
         table_cache = db.get_table_columns(
             table_schemas=stream_utils.get_schema_names_from_config(config))
 
-    return table_cache
+    # The file format is detected at DbSync init time
+    file_format_type = db.file_format.file_format_type
 
+    return table_cache, file_format_type
 
 # pylint: disable=too-many-locals,too-many-branches,too-many-statements,invalid-name
-def persist_lines(config, lines, table_cache=None) -> None:
-    """Main loop to read and consume singer messages from stdin"""
+def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatTypes=None) -> None:
+    """Main loop to read and consume singer messages from stdin
+
+    Params:
+        config: configuration dictionary
+        lines: iterable of singer messages
+        table_cache: Optional dictionary of Snowflake table structures. This is useful to run the less
+                     INFORMATION_SCHEMA and SHOW queries as possible.
+                     If not provided then an SQL query will be generated at runtime to
+                     get all the required information from Snowflake
+        file_format_type: Optional FileFormatTypes value that defines which supported file format to use
+                          to load data into Snowflake.
+                          If not provided then it will be detected automatically
+
+    Returns:
+        tuple of retrieved items: table_cache, file_format_type
+    """
     state = None
     flushed_state = None
     schemas = {}
@@ -210,9 +234,12 @@ def persist_lines(config, lines, table_cache=None) -> None:
                 key_properties[stream] = o['key_properties']
 
                 if config.get('add_metadata_columns') or config.get('hard_delete'):
-                    stream_to_sync[stream] = DbSync(config, add_metadata_columns_to_schema(o), table_cache)
+                    stream_to_sync[stream] = DbSync(config,
+                                                    add_metadata_columns_to_schema(o),
+                                                    table_cache,
+                                                    file_format_type)
                 else:
-                    stream_to_sync[stream] = DbSync(config, o, table_cache)
+                    stream_to_sync[stream] = DbSync(config, o, table_cache, file_format_type)
 
                 stream_to_sync[stream].create_schema_if_not_exists()
                 stream_to_sync[stream].sync_table()
@@ -388,11 +415,11 @@ def main():
         config = {}
 
     # Init columns cache
-    table_cache = load_table_cache(config)
+    table_cache, file_format_type = get_snowflake_statics(config)
 
     # Consume singer messages
     singer_messages = io.TextIOWrapper(sys.stdin.buffer, encoding='utf-8')
-    persist_lines(config, singer_messages, table_cache)
+    persist_lines(config, singer_messages, table_cache, file_format_type)
 
     LOGGER.debug("Exiting normally")
 
