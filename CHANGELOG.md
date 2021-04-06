@@ -1,3 +1,6 @@
+1.11.2 (2021-04-06)
+- Add `flush_interval_seconds` option
+
 1.11.1 (2021-03-23)
 -------------------
 - Fixed an issue when `SHOW FILE FORMATS` ran too many times slowing down the startup time of the target
