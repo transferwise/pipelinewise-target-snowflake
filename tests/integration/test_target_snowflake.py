@@ -4,6 +4,7 @@ import unittest
 import mock
 import os
 import botocore
+import itertools
 
 import target_snowflake
 from target_snowflake import RecordValidationException
@@ -873,6 +874,31 @@ class TestIntegration(unittest.TestCase):
 
         # Every table should be loaded correctly
         self.assert_logical_streams_are_in_snowflake(True)
+
+    @mock.patch('target_snowflake.emit_state')
+    @mock.patch('target_snowflake.datetime')
+    def test_flush_streams_based_on_batch_wait_limit(self, mock_date_time,
+        mock_emit_state):
+        """Tests logical streams from pg with inserts, updates and deletes"""
+        start_time = datetime.datetime(2021, 4, 6, 0, 0, 0)
+        increment = 11
+        counter = itertools.count()
+
+        mock_date_time.utcnow.side_effect = lambda: start_time + datetime.timedelta(seconds=increment * next(counter))
+
+        tap_lines = test_utils.get_test_tap_lines('messages-pg-logical-streams.json')
+
+        mock_emit_state.get.return_value = None
+
+        self.config['hard_delete'] = True
+        self.config['batch_size_rows'] = 1000
+        self.config['batch_wait_limit_seconds'] = 10
+        self.persist_lines_with_cache(tap_lines)
+
+        self.assert_logical_streams_are_in_snowflake(True)
+
+        # 70 is the number of records in json, expecting flush after each one
+        self.assertEqual(mock_emit_state.call_count, 70)
 
     def test_record_validation(self):
         """Test validating records"""

@@ -12,6 +12,7 @@ from typing import Dict, List
 from joblib import Parallel, delayed, parallel_backend
 from jsonschema import Draft7Validator, FormatChecker
 from singer import get_logger
+from datetime import datetime, timedelta
 
 import target_snowflake.file_formats.csv as csv
 import target_snowflake.file_formats.parquet as parquet
@@ -110,6 +111,8 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
     stream_to_sync = {}
     total_row_count = {}
     batch_size_rows = config.get('batch_size_rows', DEFAULT_BATCH_SIZE_ROWS)
+    batch_wait_limit_seconds = config.get('batch_wait_limit_seconds', None)
+    flush_timestamp = datetime.utcnow()
 
     # Loop over lines from stdin
     for line in lines:
@@ -167,7 +170,18 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
             else:
                 records_to_load[stream][primary_key_string] = o['record']
 
+            flush = False
             if row_count[stream] >= batch_size_rows:
+                flush = True
+                LOGGER.info("Flushing %s rows, triggered by batch_size_rows (%s)",
+                            sum(row_count.values()), batch_size_rows)
+            elif (batch_wait_limit_seconds and
+                  datetime.utcnow() >= (flush_timestamp + timedelta(seconds=batch_wait_limit_seconds))):
+                flush = True
+                LOGGER.info("Flushing %s rows, triggered by batch_wait_limit_seconds (%s)",
+                            sum(row_count.values()), batch_wait_limit_seconds)
+
+            if flush:
                 # flush all streams, delete records if needed, reset counts and then emit current state
                 if config.get('flush_all_streams'):
                     filter_streams = None
@@ -183,6 +197,8 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
                     state,
                     flushed_state,
                     filter_streams=filter_streams)
+
+                flush_timestamp = datetime.utcnow()
 
                 # emit last encountered state
                 emit_state(copy.deepcopy(flushed_state))
