@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import datetime
 import io
 import json
 import logging
@@ -110,6 +111,8 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
     stream_to_sync = {}
     total_row_count = {}
     batch_size_rows = config.get('batch_size_rows', DEFAULT_BATCH_SIZE_ROWS)
+    flush_interval_seconds = config.get('flush_interval_seconds', None)
+    flush_timestamp = datetime.datetime.utcnow()
 
     # Loop over lines from stdin
     for line in lines:
@@ -167,7 +170,15 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
             else:
                 records_to_load[stream][primary_key_string] = o['record']
 
+            flush = False
             if row_count[stream] >= batch_size_rows:
+                flush = True
+                LOGGER.info("Flushing %s rows, triggered by batch_size_rows (%s)", sum(row_count.values()), batch_size_rows)
+            elif flush_interval_seconds and datetime.datetime.utcnow() >= (flush_timestamp + datetime.timedelta(seconds=flush_interval_seconds)):
+                flush = True
+                LOGGER.info("Flushing %s rows, triggered by flush_interval_seconds (%s)", sum(row_count.values()), flush_interval_seconds)
+
+            if flush:
                 # flush all streams, delete records if needed, reset counts and then emit current state
                 if config.get('flush_all_streams'):
                     filter_streams = None
@@ -183,6 +194,8 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
                     state,
                     flushed_state,
                     filter_streams=filter_streams)
+
+                flush_timestamp = datetime.datetime.utcnow()
 
                 # emit last encountered state
                 emit_state(copy.deepcopy(flushed_state))

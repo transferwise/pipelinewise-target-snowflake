@@ -697,6 +697,38 @@ class TestIntegration(unittest.TestCase):
 
         self.assert_logical_streams_are_in_snowflake_and_are_empty()
 
+    @mock.patch('datetime.datetime')
+    def test_logical_streams_from_pg_with_flush_triggered_by_interval(self, mock_date_time):
+        """Tests logical streams from pg with inserts, updates and deletes"""
+        mock_date_time.utcnow.side_effect = [
+            datetime.datetime(2021, 4, 6, 0, 0, 0),
+            datetime.datetime(2021, 4, 6, 0, 0, 11)
+        ]
+
+        tap_lines = test_utils.get_test_tap_lines('messages-pg-logical-streams.json')
+
+        self.config['batch_size_rows'] = 10000
+        self.config['flush_interval_seconds'] = 10
+        self.persist_lines_with_cache(tap_lines)
+
+        self.assert_logical_streams_are_in_snowflake(True)
+
+    @mock.patch('datetime.datetime')
+    def test_logical_streams_from_pg_with_flush_not_triggered_by_interval(self, mock_date_time):
+        """Tests logical streams from pg with inserts, updates and deletes"""
+        mock_date_time.utcnow.side_effect = [
+            datetime.datetime(2021, 4, 6, 0, 0, 0),
+            datetime.datetime(2021, 4, 6, 0, 0, 5)
+        ]
+
+        tap_lines = test_utils.get_test_tap_lines('messages-pg-logical-streams.json')
+
+        self.config['batch_size_rows'] = 10000
+        self.config['flush_interval_seconds'] = 10
+        self.persist_lines_with_cache(tap_lines)
+
+        self.assert_logical_streams_are_in_snowflake(False)\
+
     @mock.patch('target_snowflake.emit_state')
     def test_flush_streams_with_no_intermediate_flushes(self, mock_emit_state):
         """Test emitting states when no intermediate flush required"""
