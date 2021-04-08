@@ -179,7 +179,7 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
                   datetime.utcnow() >= (flush_timestamp + timedelta(seconds=batch_wait_limit_seconds))):
                 flush = True
                 LOGGER.info("Flush triggered by batch_wait_limit_seconds (%s)",
-                            sum(row_count.values()), batch_wait_limit_seconds)
+                            batch_wait_limit_seconds)
 
             if flush:
                 # flush all streams, delete records if needed, reset counts and then emit current state
