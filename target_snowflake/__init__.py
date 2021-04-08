@@ -173,12 +173,12 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
             flush = False
             if row_count[stream] >= batch_size_rows:
                 flush = True
-                LOGGER.info("Flushing %s rows, triggered by batch_size_rows (%s)",
-                            sum(row_count.values()), batch_size_rows)
+                LOGGER.info("Flush triggered by batch_size_rows (%s) reached in %s",
+                            batch_size_rows, stream)
             elif (batch_wait_limit_seconds and
                   datetime.utcnow() >= (flush_timestamp + timedelta(seconds=batch_wait_limit_seconds))):
                 flush = True
-                LOGGER.info("Flushing %s rows, triggered by batch_wait_limit_seconds (%s)",
+                LOGGER.info("Flush triggered by batch_wait_limit_seconds (%s)",
                             sum(row_count.values()), batch_wait_limit_seconds)
 
             if flush:
