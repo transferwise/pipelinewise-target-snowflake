@@ -1,5 +1,6 @@
 import os
 import json
+import math
 import sys
 
 import boto3
@@ -69,7 +70,11 @@ def column_type(name, schema_property):
     elif property_format == "time":
         column_type = "time"
     elif "number" in property_type:
-        column_type = "number"
+        if "multipleOf" in schema_property.keys():
+            scale = int(-math.log10(schema_property["multipleOf"]))
+            column_type = f"number(38, {scale})"
+        else:
+            column_type = "number"
     elif "integer" in property_type and "string" in property_type:
         column_type = "text"
     elif "integer" in property_type:
