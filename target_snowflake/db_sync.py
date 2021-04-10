@@ -723,7 +723,7 @@ class DbSync:
             for (name, properties_schema) in self.flatten_schema.items()
             if name.lower() in columns_dict
             and columns_dict[name.lower()]["DATA_TYPE"].lower()
-            != column_type(name, properties_schema).lower()
+            != column_type(name, properties_schema).lower().split("(")[0]
             and
             # Don't alter table if TIMESTAMP_NTZ detected as the new required column type
             #
