@@ -35,7 +35,7 @@ class TestTargetSnowflake(unittest.TestCase):
 
         target_snowflake.persist_lines(self.config, lines)
 
-        flush_streams_mock.assert_called_once()
+        self.assertEqual(1, flush_streams_mock.call_count)
 
     @patch('target_snowflake.flush_streams')
     @patch('target_snowflake.DbSync')
@@ -54,7 +54,7 @@ class TestTargetSnowflake(unittest.TestCase):
 
         target_snowflake.persist_lines(self.config, lines)
 
-        flush_streams_mock.assert_called_once()
+        self.assertEqual(1, flush_streams_mock.call_count)
 
     @patch('target_snowflake.datetime')
     @patch('target_snowflake.flush_streams')

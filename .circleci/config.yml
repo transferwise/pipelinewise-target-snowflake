@@ -11,7 +11,7 @@ jobs:
           command: |
             python3 -m venv venv
             . venv/bin/activate
-            pip install --upgrade pip
+            pip install --upgrade pip setuptools wheel
             pip install .[test]
 
       - run:
@@ -25,14 +25,14 @@ jobs:
           command: |
             . venv/bin/activate
             export LOGGING_CONF_FILE=$(pwd)/sample_logging.conf
-            pytest tests/unit -vv --cov target_snowflake --cov-fail-under=51
+            pytest tests/unit -vv --cov target_snowflake --cov-fail-under=55
 
       - run:
           name: 'Integration Tests'
           command: |
             . venv/bin/activate
             export LOGGING_CONF_FILE=$(pwd)/sample_logging.conf
-            pytest tests/integration/ -vv --cov target_snowflake --cov-fail-under=85
+            pytest tests/integration/ -vv --cov target_snowflake --cov-fail-under=86
 
 workflows:
   version: 2
