@@ -1,3 +1,8 @@
+1.12.0 (2021-04-12)
+-------------------
+- Add optional `batch_wait_limit_seconds` parameter
+- Bumping dependencies
+
 1.11.1 (2021-03-23)
 -------------------
 - Fixed an issue when `SHOW FILE FORMATS` ran too many times slowing down the startup time of the target
