@@ -27,8 +27,6 @@ def validate_config(config):
         "user",
         "password",
         "warehouse",
-        "aws_access_key_id",
-        "aws_secret_access_key",
         "s3_bucket",
         "stage",
         "file_format",
@@ -198,22 +196,22 @@ class DbSync:
         self, connection_config, stream_schema_message=None, information_schema_cache=None
     ):
         """
-            connection_config:      Snowflake connection details
+        connection_config:      Snowflake connection details
 
-            stream_schema_message:  An instance of the DbSync class is typically used to load
-                                    data only from a certain singer tap stream.
+        stream_schema_message:  An instance of the DbSync class is typically used to load
+                                data only from a certain singer tap stream.
 
-                                    The stream_schema_message holds the destination schema
-                                    name and the JSON schema that will be used to
-                                    validate every RECORDS messages that comes from the stream.
-                                    Schema validation happening before creating CSV and before
-                                    uploading data into Snowflake.
+                                The stream_schema_message holds the destination schema
+                                name and the JSON schema that will be used to
+                                validate every RECORDS messages that comes from the stream.
+                                Schema validation happening before creating CSV and before
+                                uploading data into Snowflake.
 
-                                    If stream_schema_message is not defined that we can use
-                                    the DbSync instance as a generic purpose connection to
-                                    Snowflake and can run individual queries. For example
-                                    collecting catalog informations from Snowflake for caching
-                                    purposes.
+                                If stream_schema_message is not defined that we can use
+                                the DbSync instance as a generic purpose connection to
+                                Snowflake and can run individual queries. For example
+                                collecting catalog informations from Snowflake for caching
+                                purposes.
         """
         self.connection_config = connection_config
         self.stream_schema_message = stream_schema_message
@@ -304,11 +302,17 @@ class DbSync:
                 stream_schema_message["schema"], max_level=self.data_flattening_max_level
             )
 
-        self.s3 = boto3.client(
-            "s3",
-            aws_access_key_id=self.connection_config["aws_access_key_id"],
-            aws_secret_access_key=self.connection_config["aws_secret_access_key"],
-        )
+        aws_key = self.connection_config.get("aws_access_key_id", None)
+        aws_secret = self.connection_config.get("aws_secret_access_key", None)
+
+        if aws_key and aws_secret:
+            self.s3 = boto3.client(
+                "s3",
+                aws_access_key_id=aws_key,
+                aws_secret_access_key=aws_secret,
+            )
+        else:
+            self.s3 = boto3.client("s3")
 
     def open_connection(self):
         return snowflake.connector.connect(
