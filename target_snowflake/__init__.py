@@ -113,6 +113,7 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
     batch_size_rows = config.get('batch_size_rows', DEFAULT_BATCH_SIZE_ROWS)
     batch_wait_limit_seconds = config.get('batch_wait_limit_seconds', None)
     flush_timestamp = datetime.utcnow()
+    archive_load_files_data = {}
 
     # Loop over lines from stdin
     for line in lines:
@@ -170,6 +171,31 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
             else:
                 records_to_load[stream][primary_key_string] = o['record']
 
+            if config.get('archive_load_files.enabled'):
+                # keep track of min and max
+                archive_load_files_primary_column =\
+                    config.get('archive_load_files.primary_column') or primary_key_string
+                archive_primary_column_value =\
+                    records_to_load[stream][primary_key_string][archive_load_files_primary_column]
+                values = archive_load_files_data[stream] or {
+                    's3_key': 'tbd',  # TODO: Turn archive_load_files.naming_convention into actual key
+                    'database': 'tbd',  # TODO: Where to get this
+                    'schema': 'tbd',  # TODO: Where to get this
+                    'table': stream,
+                    'column': archive_load_files_primary_column,
+                    'min': None,
+                    'max': None
+                }
+
+                min_value = values['min']
+                max_value = values['max']
+
+                if min_value is None or min_value > archive_primary_column_value:
+                    values['min'] = archive_primary_column_value
+
+                if max_value is None or max_value < archive_primary_column_value:
+                    values['max'] = archive_primary_column_value
+
             flush = False
             if row_count[stream] >= batch_size_rows:
                 flush = True
@@ -196,6 +222,7 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
                     config,
                     state,
                     flushed_state,
+                    archive_load_files_data,
                     filter_streams=filter_streams)
 
                 flush_timestamp = datetime.utcnow()
@@ -226,7 +253,8 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
                                                   stream_to_sync,
                                                   config,
                                                   state,
-                                                  flushed_state)
+                                                  flushed_state,
+                                                  archive_load_files_data)
 
                     # emit latest encountered state
                     emit_state(flushed_state)
@@ -281,7 +309,8 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
     # then flush all buckets.
     if sum(row_count.values()) > 0:
         # flush all streams one last time, delete records if needed, reset counts and then emit current state
-        flushed_state = flush_streams(records_to_load, row_count, stream_to_sync, config, state, flushed_state)
+        flushed_state = flush_streams(records_to_load, row_count, stream_to_sync, config, state, flushed_state,
+                                      archive_load_files_data)
 
     # emit latest state
     emit_state(copy.deepcopy(flushed_state))
@@ -295,6 +324,7 @@ def flush_streams(
         config,
         state,
         flushed_state,
+        archive_load_files_data,
         filter_streams=None):
     """
     Flushes all buckets and resets records count to 0 as well as empties records to load list
@@ -305,6 +335,7 @@ def flush_streams(
     :param state: dictionary containing the original state from tap
     :param flushed_state: dictionary containing updated states only when streams got flushed
     :param filter_streams: Keys of streams to flush from the streams dict. Default is every stream
+    :param archive_load_files_data: dictionary of dictionaries containing archive load files data
     :return: State dict with flushed positions
     """
     parallelism = config.get("parallelism", DEFAULT_PARALLELISM)
@@ -337,7 +368,8 @@ def flush_streams(
             db_sync=stream_to_sync[stream],
             no_compression=config.get('no_compression'),
             delete_rows=config.get('hard_delete'),
-            temp_dir=config.get('temp_dir')
+            temp_dir=config.get('temp_dir'),
+            archive_load_files=archive_load_files_data[stream]
         ) for stream in streams_to_flush)
 
     # reset flushed stream records to empty to avoid flushing same records
@@ -358,16 +390,18 @@ def flush_streams(
         else:
             flushed_state = copy.deepcopy(state)
 
+        # TODO: Reset archive_load_files_primary_column_values?
+
     # Return with state message with flushed positions
     return flushed_state
 
 
 def load_stream_batch(stream, records, row_count, db_sync, no_compression=False, delete_rows=False,
-                      temp_dir=None):
+                      temp_dir=None, archive_load_files: Dict=None):
     """Load one batch of the stream into target table"""
     # Load into snowflake
     if row_count[stream] > 0:
-        flush_records(stream, records, db_sync, temp_dir, no_compression)
+        flush_records(stream, records, db_sync, temp_dir, no_compression, archive_load_files)
 
         # Delete soft-deleted, flagged rows - where _sdc_deleted at is not null
         if delete_rows:
@@ -381,7 +415,8 @@ def flush_records(stream: str,
                   records: List[Dict],
                   db_sync: DbSync,
                   temp_dir: str = None,
-                  no_compression: bool = False) -> None:
+                  no_compression: bool = False,
+                  archive_load_files: Dict = None) -> None:
     """
     Takes a list of record messages and loads it into the snowflake target table
 
@@ -391,8 +426,9 @@ def flush_records(stream: str,
                  column value
         row_count:
         db_sync: A DbSync object
-        temp_dir: Directory where intermediate temporary files will be created. (Default: OS specificy temp directory)
+        temp_dir: Directory where intermediate temporary files will be created. (Default: OS specific temp directory)
         no_compression: Disable to use compressed files. (Default: False)
+        archive_load_files: Data needed for archive load files. (Default: None)
 
     Returns:
         None
@@ -413,8 +449,24 @@ def flush_records(stream: str,
     s3_key = db_sync.put_to_stage(filepath, stream, row_count, temp_dir=temp_dir)
     db_sync.load_file(s3_key, row_count, size_bytes)
 
-    # Delete file from local disk and from s3
+    # Delete file from local disk
     os.remove(filepath)
+
+    if archive_load_files:
+        archive_key = archive_load_files['s3_key']
+
+        # {
+        #     'Database': 'dbname',
+        #     'Schema': 'schemaname',
+        #     'Table': 'tablename',
+        #     'archive-load-files-primary-column': 'columnname',
+        #     'archive-load-files-primary-column-min': 'minval',
+        #     'archive-load-files-primary-column-max': 'maxval'
+        # }
+        archive_metadata = archive_load_files  # TODO: Make the metadata content more explicit
+        db_sync.copy_to_archive(stream, s3_key, archive_key, archive_metadata)
+
+    # Delete file from S3
     db_sync.delete_from_stage(stream, s3_key)
 
 

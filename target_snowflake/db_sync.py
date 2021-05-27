@@ -397,6 +397,11 @@ class DbSync:
         self.logger.info('Deleting %s from stage', format(s3_key))
         self.upload_client.delete_object(stream, s3_key)
 
+    def copy_to_archive(self, stream, s3_source_key, s3_archive_key, s3_archive_metadata):
+        """Copy file from snowflake stage to archive"""
+        self.logger.info('Copying %s to archive location %s', format(s3_source_key, s3_archive_key))
+        self.upload_client.copy_object(s3_source_key, s3_archive_key, s3_archive_metadata)
+
     def get_stage_name(self, stream):
         """Generate snowflake stage name"""
         stage = self.connection_config.get('stage', None)
