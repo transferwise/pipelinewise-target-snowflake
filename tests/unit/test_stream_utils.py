@@ -4,6 +4,7 @@ from decimal import Decimal
 
 import target_snowflake.stream_utils as stream_utils
 from target_snowflake.exceptions import UnexpectedValueTypeException
+from target_snowflake.exceptions import UnexpectedMessageTypeException
 
 
 class TestSchemaUtils(unittest.TestCase):
@@ -207,3 +208,32 @@ class TestSchemaUtils(unittest.TestCase):
         # Snowflake table format (Custom '.' separator)
         self.assertEqual(stream_utils.stream_name_to_dict('my_catalog.my_schema.my_table', separator='.'),
             {"catalog_name": "my_catalog", "schema_name": "my_schema", "table_name": "my_table"})
+
+    def test_get_archive_load_files_primary_column(self):
+        """Test selecting archive load files primary column from schema message"""
+
+        # Bookmark properties contains column which is also in schema properties
+        self.assertEqual(stream_utils.get_archive_load_files_primary_column(
+            {
+                "type": "SCHEMA",
+                "schema": {"properties": {"id": {}, "some_col": {}}},
+                "key_properties": ["id"],
+                "bookmark_properties": ["some_col"]
+            }), "some_col")
+
+        # Bookmark properties contains column which is not in schema properties
+        self.assertEqual(stream_utils.get_archive_load_files_primary_column(
+            {
+                "type": "SCHEMA",
+                "schema": {"properties": {"id": {}, "some_col": {}}},
+                "key_properties": ["id"],
+                "bookmark_properties": ["lsn"]
+            }), None)
+
+        with self.assertRaises(UnexpectedMessageTypeException):
+            stream_utils.get_archive_load_files_primary_column(
+                {
+                    "type": "RECORD",
+                    "stream": "some-stream",
+                    "record": {}
+                })

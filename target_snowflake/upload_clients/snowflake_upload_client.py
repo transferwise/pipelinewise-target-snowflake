@@ -38,3 +38,7 @@ class SnowflakeUploadClient(BaseUploadClient):
 
         with self.dblink.open_connection() as connection:
             connection.cursor().execute(f"REMOVE '@{stage}/{key}'")
+
+    def copy_object(self, source_key: str, target_key: str, target_metadata: dict) -> None:
+        raise NotImplementedError(
+            "Copying objects is not supported with a Snowflake upload client.")

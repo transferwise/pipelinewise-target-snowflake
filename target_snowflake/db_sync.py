@@ -63,6 +63,11 @@ def validate_config(config):
     if not config_default_target_schema and not config_schema_mapping:
         errors.append("Neither 'default_target_schema' (string) nor 'schema_mapping' (object) keys set in config.")
 
+    # Check if archive load files option is using external stages
+    archive_load_files = config.get('archive_load_files', {})
+    if archive_load_files.get('enabled') and not config.get('s3_bucket', None):
+        errors.append('Archive load files option can be used only with external s3 stages. Please define s3_bucket.')
+
     return errors
 
 
@@ -396,6 +401,11 @@ class DbSync:
         """Delete file from snowflake stage"""
         self.logger.info('Deleting %s from stage', format(s3_key))
         self.upload_client.delete_object(stream, s3_key)
+
+    def copy_to_archive(self, s3_source_key, s3_archive_key, s3_archive_metadata):
+        """Copy file from snowflake stage to archive"""
+        self.logger.info('Copying %s to archive location %s', s3_source_key, s3_archive_key)
+        self.upload_client.copy_object(s3_source_key, s3_archive_key, s3_archive_metadata)
 
     def get_stage_name(self, stream):
         """Generate snowflake stage name"""

@@ -24,3 +24,9 @@ class BaseUploadClient(ABC):
         """
         Delete object
         """
+
+    @abstractmethod
+    def copy_object(self, source_key: str, target_key: str, target_metadata: dict) -> None:
+        """
+        Copy object
+        """

@@ -86,6 +86,11 @@ class TestDBSync(unittest.TestCase):
         config_with_external_stage['stage'] = 'dummy-value'
         self.assertGreater(len(validator(config_with_external_stage)), 0)
 
+        # Configuration with archive_load_files but no s3_bucket
+        config_with_archive_load_files = minimal_config.copy()
+        config_with_archive_load_files['archive_load_files'] = {'enabled': True}
+        self.assertGreater(len(validator(config_with_external_stage)), 0)
+
     def test_column_type_mapping(self):
         """Test JSON type to Snowflake column type mappings"""
         mapper = db_sync.column_type
