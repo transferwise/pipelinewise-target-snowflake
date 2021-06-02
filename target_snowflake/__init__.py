@@ -173,8 +173,8 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
             else:
                 records_to_load[stream][primary_key_string] = o['record']
 
-            if archive_load_files_enabled:
-                # keep track of min and max
+            if archive_load_files_enabled and stream in archive_load_files_data:
+                # Keep track of min and max of the designated column
                 values = archive_load_files_data[stream]
                 archive_primary_column_name = values['column']
                 archive_primary_column_value = o['record'][archive_primary_column_name]
@@ -396,7 +396,9 @@ def flush_streams(
         else:
             flushed_state = copy.deepcopy(state)
 
-        # TODO: Reset archive_load_files_primary_column_values?
+        if stream in archive_load_files_data:
+            archive_load_files_data[stream]['min'] = None
+            archive_load_files_data[stream]['max'] = None
 
     # Return with state message with flushed positions
     return flushed_state
