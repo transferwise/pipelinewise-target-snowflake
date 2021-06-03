@@ -280,12 +280,17 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
                     # Determine archive_load_files_primary_column
                     # 1) Use incremental replication key if defined
                     # 2) Otherwise use primary key
-                    if 'bookmark_properties' in o and len(o['bookmark_properties']) > 0:
+                    if False and 'bookmark_properties' in o and len(o['bookmark_properties']) > 0:
+                        LOGGER.info("Using %s from bookmark_properties as archive_load_files_primary_column",
+                                    o['bookmark_properties'][0])
                         archive_load_files_primary_column = o['bookmark_properties'][0]  # TBD Can there be more than 1?
                     else:
+                        LOGGER.info("Using %s from key_properties as archive_load_files_primary_column",
+                                    o['key_properties'][0])
                         archive_load_files_primary_column = o['key_properties'][0]  # Behavior when key multi-col?
 
                     archive_load_files_data[stream] = {
+                        'tap': config.get('id'),
                         'column': archive_load_files_primary_column,
                         'min': None,
                         'max': None
@@ -375,7 +380,7 @@ def flush_streams(
             no_compression=config.get('no_compression'),
             delete_rows=config.get('hard_delete'),
             temp_dir=config.get('temp_dir'),
-            archive_load_files=archive_load_files_data[stream]
+            archive_load_files=copy.copy(archive_load_files_data[stream])
         ) for stream in streams_to_flush)
 
     # reset flushed stream records to empty to avoid flushing same records
@@ -405,7 +410,7 @@ def flush_streams(
 
 
 def load_stream_batch(stream, records, row_count, db_sync, no_compression=False, delete_rows=False,
-                      temp_dir=None, archive_load_files: Dict=None):
+                      temp_dir=None, archive_load_files=None):
     """Load one batch of the stream into target table"""
     # Load into snowflake
     if row_count[stream] > 0:
@@ -461,9 +466,15 @@ def flush_records(stream: str,
     os.remove(filepath)
 
     if archive_load_files:
-        archive_key = 'smth'  # TBD where from
         archive_schema, archive_table = stream.split('-', 1)
+        tap = archive_load_files['tap']
+        suffix = "csv.gz"  # TBD: Can/should we derive this from s3_key?
+        archive_folder = "archive/{}/{}".format(tap, archive_table)  # TBD: unique part?
+        archive_file = "{}-{}.{}".format(archive_table, datetime.utcnow().strftime("%Y%m%d-%H%M%S-%f"), suffix)
+        archive_key = "{}/{}".format(archive_folder, archive_file)
+
         archive_metadata = {
+            'tap': archive_load_files['tap'],
             'schema': archive_schema,
             'table': archive_table,
             'archive-load-files-primary-column': archive_load_files['column'],
