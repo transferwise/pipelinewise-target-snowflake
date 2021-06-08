@@ -382,7 +382,7 @@ def flush_streams(
             no_compression=config.get('no_compression'),
             delete_rows=config.get('hard_delete'),
             temp_dir=config.get('temp_dir'),
-            archive_load_files=copy.copy(archive_load_files_data[stream])
+            archive_load_files=copy.copy(archive_load_files_data.get(stream, None))
         ) for stream in streams_to_flush)
 
     # reset flushed stream records to empty to avoid flushing same records
@@ -468,7 +468,12 @@ def flush_records(stream: str,
     os.remove(filepath)
 
     if archive_load_files:
-        archive_schema, archive_table = stream.split('-', 1)
+        stream_name_parts = stream_utils.stream_name_to_dict(stream)
+        if 'schema_name' not in stream_name_parts or 'table_name' not in stream_name_parts:
+            raise Exception("Failed to extract schema and table names from stream '%s'", stream)
+
+        archive_schema = stream_name_parts['schema_name']
+        archive_table = stream_name_parts['table_name']
         archive_tap = archive_load_files['tap']
 
         archive_metadata = {
