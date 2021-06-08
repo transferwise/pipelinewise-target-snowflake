@@ -90,7 +90,7 @@ class TestTargetSnowflake(unittest.TestCase):
     @patch('target_snowflake.DbSync')
     @patch('target_snowflake.os.remove')
     def test_archive_load_files_incremental_replication(self, os_remove_mock, dbSync_mock):
-        self.config['tap_id'] = 'test-tap-id'
+        self.config['tap_id'] = 'test_tap_id'
         self.config['archive_load_files'] = {'enabled': True}
         self.config['s3_bucket'] = 'dummy_bucket'
 
@@ -106,20 +106,20 @@ class TestTargetSnowflake(unittest.TestCase):
 
         copy_to_archive_args = instance.copy_to_archive.call_args[0]
         assert copy_to_archive_args[0] == 'some-s3-bucket/some-s3-folder/some-name_date_batch_hash.csg.gz'
-        assert copy_to_archive_args[1] == 'archive/test-tap-id/test_simple_table/some-name_date_batch_hash.csg.gz'
+        assert copy_to_archive_args[1] == 'archive/test_tap_id/test_simple_table/some-name_date_batch_hash.csg.gz'
         assert copy_to_archive_args[2] == {
-            'tap': 'test-tap-id',
+            'tap': 'test_tap_id',
             'schema': 'tap_mysql_test',
             'table': 'test_simple_table',
             'archive-load-files-primary-column': 'id',
-            'archive-load-files-primary-column-min': 1,
-            'archive-load-files-primary-column-max': 5
+            'archive-load-files-primary-column-min': '1',
+            'archive-load-files-primary-column-max': '5'
         }
 
     @patch('target_snowflake.DbSync')
     @patch('target_snowflake.os.remove')
     def test_archive_load_files_log_based_replication(self, os_remove_mock, dbSync_mock):
-        self.config['tap_id'] = 'test-tap-id'
+        self.config['tap_id'] = 'test_tap_id'
         self.config['archive_load_files'] = {'enabled': True}
         self.config['s3_bucket'] = 'dummy_bucket'
 
@@ -135,9 +135,9 @@ class TestTargetSnowflake(unittest.TestCase):
 
         copy_to_archive_args = instance.copy_to_archive.call_args[0]
         assert copy_to_archive_args[0] == 'some-s3-bucket/some-s3-folder/some-name_date_batch_hash.csg.gz'
-        assert copy_to_archive_args[1] == 'archive/test-tap-id/logical1_table2/some-name_date_batch_hash.csg.gz'
+        assert copy_to_archive_args[1] == 'archive/test_tap_id/logical1_table2/some-name_date_batch_hash.csg.gz'
         assert copy_to_archive_args[2] == {
-            'tap': 'test-tap-id',
+            'tap': 'test_tap_id',
             'schema': 'logical1',
             'table': 'logical1_table2'
         }

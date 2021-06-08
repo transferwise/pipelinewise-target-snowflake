@@ -106,4 +106,5 @@ class S3UploadClient(BaseUploadClient):
         copy_source = "{}/{}".format(bucket, source_key)
 
         # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/s3.html#S3.Client.copy_object
-        self.s3_client.copy_object(CopySource=copy_source, Bucket=bucket, Key=target_key, Metadata=target_metadata)
+        self.s3_client.copy_object(CopySource=copy_source, Bucket=bucket, Key=target_key, Metadata=target_metadata,
+                                   MetadataDirective="REPLACE")

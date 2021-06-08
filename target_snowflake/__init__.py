@@ -470,7 +470,7 @@ def flush_records(stream: str,
     if archive_load_files:
         stream_name_parts = stream_utils.stream_name_to_dict(stream)
         if 'schema_name' not in stream_name_parts or 'table_name' not in stream_name_parts:
-            raise Exception("Failed to extract schema and table names from stream '%s'", stream)
+            raise Exception("Failed to extract schema and table names from stream '{}'".format(stream))
 
         archive_schema = stream_name_parts['schema_name']
         archive_table = stream_name_parts['table_name']
@@ -485,8 +485,8 @@ def flush_records(stream: str,
         if 'column' in archive_load_files:
             archive_metadata.update({
                 'archive-load-files-primary-column': archive_load_files['column'],
-                'archive-load-files-primary-column-min': archive_load_files['min'],
-                'archive-load-files-primary-column-max': archive_load_files['max']
+                'archive-load-files-primary-column-min': str(archive_load_files['min']),
+                'archive-load-files-primary-column-max': str(archive_load_files['max'])
             })
 
         # Use same file name as in import

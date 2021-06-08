@@ -1,9 +1,12 @@
 import datetime
+import gzip
 import json
+import tempfile
 import unittest
 import mock
 import os
 import botocore
+import boto3
 import itertools
 
 import target_snowflake
@@ -40,6 +43,20 @@ class TestIntegration(unittest.TestCase):
         # Drop target schema
         if self.config['default_target_schema']:
             snowflake.query("DROP SCHEMA IF EXISTS {}".format(self.config['default_target_schema']))
+
+        # Set up S3 client
+        aws_access_key_id = self.config.get('aws_access_key_id')
+        aws_secret_access_key = self.config.get('aws_secret_access_key')
+        aws_session_token = self.config.get('aws_session_token')
+        aws_session = boto3.session.Session(
+            aws_access_key_id=aws_access_key_id,
+            aws_secret_access_key=aws_secret_access_key,
+            aws_session_token=aws_session_token
+        )
+
+        self.s3_client = aws_session.client('s3',
+                                            region_name=self.config.get('s3_region_name'),
+                                            endpoint_url=self.config.get('s3_endpoint_url'))
 
     def persist_lines(self, lines):
         """Loads singer messages into snowflake without table caching option"""
@@ -1159,3 +1176,58 @@ class TestIntegration(unittest.TestCase):
 
         # Check if data loaded correctly and metadata columns exist
         self.assert_three_streams_are_into_snowflake()
+
+    def test_archive_load_files(self):
+        """Test if load file is copied to archive folder"""
+        self.config['archive_load_files'] = {'enabled': True}
+        self.config['tap_id'] = 'test_tap_id'
+        self.config['client_side_encryption_master_key'] = ''
+
+        s3_bucket = self.config['s3_bucket']
+
+        # Delete any dangling files from archive
+        files_in_s3_archive = self.s3_client.list_objects(
+            Bucket=s3_bucket, Prefix="archive/test_tap_id/").get('Contents', [])
+        for file_in_archive in files_in_s3_archive:
+            key = file_in_archive["Key"]
+            self.s3_client.delete_object(Bucket=s3_bucket, Key=key)
+
+        tap_lines = test_utils.get_test_tap_lines('messages-simple-table.json')
+        self.persist_lines_with_cache(tap_lines)
+
+        # Verify expected file metadata in S3
+        files_in_s3_archive = self.s3_client.list_objects(Bucket=s3_bucket, Prefix="archive/test_tap_id/").get(
+            'Contents')
+        self.assertIsNotNone(files_in_s3_archive)
+        self.assertEqual(1, len(files_in_s3_archive))
+
+        archived_file_key = files_in_s3_archive[0]['Key']
+        archive_metadata = self.s3_client.head_object(Bucket=s3_bucket, Key=archived_file_key)['Metadata']
+        self.assertEqual({
+            'tap': 'test_tap_id',
+            'schema': 'tap_mysql_test',
+            'table': 'test_simple_table',
+            'archive-load-files-primary-column': 'id',
+            'archive-load-files-primary-column-min': '1',
+            'archive-load-files-primary-column-max': '5'
+        }, archive_metadata)
+
+        # Verify expected file contents
+        tmpfile = tempfile.NamedTemporaryFile()
+        with open(tmpfile.name, 'wb') as f:
+            self.s3_client.download_fileobj(s3_bucket, archived_file_key, f)
+
+        lines = []
+        with gzip.open(tmpfile, "rt") as gzipfile:
+            for line in gzipfile.readlines():
+                lines.append(line)
+
+        self.assertEqual(''.join(lines), '''1,"xyz1","not-formatted-time-1"
+2,"xyz2","not-formatted-time-2"
+3,"xyz3","not-formatted-time-3"
+4,"xyz4","not-formatted-time-4"
+5,"xyz5","not-formatted-time-5"
+''')
+
+        # Clean up
+        self.s3_client.delete_object(Bucket=s3_bucket, Key=archived_file_key)
