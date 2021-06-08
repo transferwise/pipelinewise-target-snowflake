@@ -114,3 +114,15 @@ def stream_name_to_dict(stream_name, separator='-'):
         'schema_name': schema_name,
         'table_name': table_name
     }
+
+
+def get_archive_load_files_primary_column(o: Dict):
+    if o['type'] != "SCHEMA":
+        raise Exception("Expecting type SCHEMA, got {}".format(o['type']))
+
+    if 'bookmark_properties' in o and len(o['bookmark_properties']) > 0:
+        col = o['bookmark_properties'][0]
+        if col in o['schema']['properties']:
+            return col
+
+    return None

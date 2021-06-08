@@ -88,83 +88,56 @@ class TestTargetSnowflake(unittest.TestCase):
         assert flush_streams_mock.call_count == 41
 
     @patch('target_snowflake.DbSync')
-    @patch('target_snowflake.flush_streams')
-    def test_archive_load_files(self, flush_streams_mock, dbSync_mock):
-        self.config['id'] = 'test-tap-id'
-        self.config['archive_load_files.enabled'] = True
-        self.config['db_conn.s3_bucket'] = 'dummy_bucket'
-
-        with open(f'{os.path.dirname(__file__)}/resources/logical-streams.json', 'r') as f:
-            lines = f.readlines()
-
-        instance = dbSync_mock.return_value
-        instance.create_schema_if_not_exists.return_value = None
-        instance.sync_table.return_value = None
-
-        flush_streams_mock.return_value = '{"currently_syncing": null}'
-
-        target_snowflake.persist_lines(self.config, lines)
-
-        archive_load_tables_data = flush_streams_mock.call_args[0][6]
-        assert archive_load_tables_data == {
-            'logical1-logical1_table2': {
-                'tap': 'test-tap-id',
-                'column': 'cid',
-                'min': 1,
-                'max': 20
-            }
-        }
-
-    @patch('target_snowflake.DbSync')
-    @patch('target_snowflake.load_stream_batch')
-    def test_archive_load_files_2(self, load_stream_batch_mock, dbSync_mock):
-        self.config['id'] = 'test-tap-id'
-        self.config['archive_load_files.enabled'] = True
-        self.config['db_conn.s3_bucket'] = 'dummy_bucket'
-
-        with open(f'{os.path.dirname(__file__)}/resources/logical-streams.json', 'r') as f:
-            lines = f.readlines()
-
-        instance = dbSync_mock.return_value
-        instance.create_schema_if_not_exists.return_value = None
-        instance.sync_table.return_value = None
-
-        target_snowflake.persist_lines(self.config, lines)
-
-        archive_load_tables_data = load_stream_batch_mock.call_args[1]['archive_load_files']
-        assert archive_load_tables_data == {
-            'tap': 'test-tap-id',
-            'column': 'cid',
-            'min': 1,
-            'max': 20
-        }
-
-    @patch('target_snowflake.DbSync')
     @patch('target_snowflake.os.remove')
-    def test_archive_load_files_3(self, os_remove_mock, dbSync_mock):
-        self.config['id'] = 'test-tap-id'
-        self.config['archive_load_files.enabled'] = True
-        self.config['db_conn.s3_bucket'] = 'dummy_bucket'
+    def test_archive_load_files_incremental_replication(self, os_remove_mock, dbSync_mock):
+        self.config['tap_id'] = 'test-tap-id'
+        self.config['archive_load_files'] = {'enabled': True}
+        self.config['s3_bucket'] = 'dummy_bucket'
 
-        with open(f'{os.path.dirname(__file__)}/resources/logical-streams.json', 'r') as f:
+        with open(f'{os.path.dirname(__file__)}/resources/messages-simple-table.json', 'r') as f:
             lines = f.readlines()
 
         instance = dbSync_mock.return_value
         instance.create_schema_if_not_exists.return_value = None
         instance.sync_table.return_value = None
-        instance.put_to_stage.return_value = 'mock-s3-key'
+        instance.put_to_stage.return_value = 'some-s3-bucket/some-s3-folder/some-name_date_batch_hash.csg.gz'
 
         target_snowflake.persist_lines(self.config, lines)
 
         copy_to_archive_args = instance.copy_to_archive.call_args[0]
-        assert copy_to_archive_args[0] == 'logical1-logical1_table2'
-        assert copy_to_archive_args[1] == 'mock-s3-key'
-        # assert copy_to_archive_args[2] == 'archive/test-tap-id/logical1_table2/logical1_table2_\d{8}-\d{6}-\d{6}.csv.gz'
-        assert copy_to_archive_args[3] == {
+        assert copy_to_archive_args[0] == 'some-s3-bucket/some-s3-folder/some-name_date_batch_hash.csg.gz'
+        assert copy_to_archive_args[1] == 'archive/test-tap-id/test_simple_table/some-name_date_batch_hash.csg.gz'
+        assert copy_to_archive_args[2] == {
+            'tap': 'test-tap-id',
+            'schema': 'tap_mysql_test',
+            'table': 'test_simple_table',
+            'archive-load-files-primary-column': 'id',
+            'archive-load-files-primary-column-min': 1,
+            'archive-load-files-primary-column-max': 5
+        }
+
+    @patch('target_snowflake.DbSync')
+    @patch('target_snowflake.os.remove')
+    def test_archive_load_files_log_based_replication(self, os_remove_mock, dbSync_mock):
+        self.config['tap_id'] = 'test-tap-id'
+        self.config['archive_load_files'] = {'enabled': True}
+        self.config['s3_bucket'] = 'dummy_bucket'
+
+        with open(f'{os.path.dirname(__file__)}/resources/logical-streams.json', 'r') as f:
+            lines = f.readlines()
+
+        instance = dbSync_mock.return_value
+        instance.create_schema_if_not_exists.return_value = None
+        instance.sync_table.return_value = None
+        instance.put_to_stage.return_value = 'some-s3-bucket/some-s3-folder/some-name_date_batch_hash.csg.gz'
+
+        target_snowflake.persist_lines(self.config, lines)
+
+        copy_to_archive_args = instance.copy_to_archive.call_args[0]
+        assert copy_to_archive_args[0] == 'some-s3-bucket/some-s3-folder/some-name_date_batch_hash.csg.gz'
+        assert copy_to_archive_args[1] == 'archive/test-tap-id/logical1_table2/some-name_date_batch_hash.csg.gz'
+        assert copy_to_archive_args[2] == {
             'tap': 'test-tap-id',
             'schema': 'logical1',
-            'table': 'logical1_table2',
-            'archive-load-files-primary-column': 'cid',
-            'archive-load-files-primary-column-min': 1,
-            'archive-load-files-primary-column-max': 20
+            'table': 'logical1_table2'
         }

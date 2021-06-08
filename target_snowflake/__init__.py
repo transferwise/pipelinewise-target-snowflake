@@ -113,8 +113,7 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
     batch_size_rows = config.get('batch_size_rows', DEFAULT_BATCH_SIZE_ROWS)
     batch_wait_limit_seconds = config.get('batch_wait_limit_seconds', None)
     flush_timestamp = datetime.utcnow()
-    archive_load_files_enabled =\
-        config.get('db_conn.s3_bucket', None) and config.get('archive_load_files.enabled', None)
+    archive_load_files_enabled = config.get('archive_load_files', {}).get('enabled', None)
     archive_load_files_data = {}
 
     # Loop over lines from stdin
@@ -175,17 +174,18 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
 
             if archive_load_files_enabled and stream in archive_load_files_data:
                 # Keep track of min and max of the designated column
-                values = archive_load_files_data[stream]
-                archive_primary_column_name = values['column']
-                archive_primary_column_value = o['record'][archive_primary_column_name]
-                min_value = values['min']
-                max_value = values['max']
+                stream_archive_load_files_values = archive_load_files_data[stream]
+                if 'column' in stream_archive_load_files_values:
+                    archive_primary_column_name = stream_archive_load_files_values['column']
+                    archive_primary_column_value = o['record'][archive_primary_column_name]
+                    min_value = stream_archive_load_files_values['min']
+                    max_value = stream_archive_load_files_values['max']
 
-                if min_value is None or min_value > archive_primary_column_value:
-                    values['min'] = archive_primary_column_value
+                    if min_value is None or min_value > archive_primary_column_value:
+                        stream_archive_load_files_values['min'] = archive_primary_column_value
 
-                if max_value is None or max_value < archive_primary_column_value:
-                    values['max'] = archive_primary_column_value
+                    if max_value is None or max_value < archive_primary_column_value:
+                        stream_archive_load_files_values['max'] = archive_primary_column_value
 
             flush = False
             if row_count[stream] >= batch_size_rows:
@@ -277,24 +277,25 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
                     stream_to_sync[stream] = DbSync(config, o, table_cache, file_format_type)
 
                 if archive_load_files_enabled:
-                    # Determine archive_load_files_primary_column
-                    # 1) Use incremental replication key if defined
-                    # 2) Otherwise use primary key
-                    if False and 'bookmark_properties' in o and len(o['bookmark_properties']) > 0:
-                        LOGGER.info("Using %s from bookmark_properties as archive_load_files_primary_column",
-                                    o['bookmark_properties'][0])
-                        archive_load_files_primary_column = o['bookmark_properties'][0]  # TBD Can there be more than 1?
-                    else:
-                        LOGGER.info("Using %s from key_properties as archive_load_files_primary_column",
-                                    o['key_properties'][0])
-                        archive_load_files_primary_column = o['key_properties'][0]  # Behavior when key multi-col?
-
                     archive_load_files_data[stream] = {
-                        'tap': config.get('id'),
-                        'column': archive_load_files_primary_column,
-                        'min': None,
-                        'max': None
+                        'tap': config.get('tap_id'),
                     }
+
+                    # In case of incremental replication, track min/max of the replication key.
+                    # Incremental replication is assumed if o['bookmark_properties'][0] is one of the columns.
+                    archive_load_files_primary_column = stream_utils.get_archive_load_files_primary_column(o)
+                    if archive_load_files_primary_column:
+                        LOGGER.info("Using %s as archive_load_files_primary_column", archive_load_files_primary_column)
+                        archive_load_files_data[stream].update(
+                            column=archive_load_files_primary_column,
+                            min=None,
+                            max=None
+                        )
+                    else:
+                        LOGGER.warning(
+                            "archive_load_files is enabled, but no archive_load_files_primary_column was found. " +
+                            "Min/max values will not be added to metadata for stream {}.".format(stream)
+                        )
 
                 stream_to_sync[stream].create_schema_if_not_exists()
                 stream_to_sync[stream].sync_table()
@@ -467,21 +468,27 @@ def flush_records(stream: str,
 
     if archive_load_files:
         archive_schema, archive_table = stream.split('-', 1)
-        tap = archive_load_files['tap']
-        suffix = "csv.gz"  # TBD: Can/should we derive this from s3_key?
-        archive_folder = "archive/{}/{}".format(tap, archive_table)  # TBD: unique part?
-        archive_file = "{}-{}.{}".format(archive_table, datetime.utcnow().strftime("%Y%m%d-%H%M%S-%f"), suffix)
-        archive_key = "{}/{}".format(archive_folder, archive_file)
+        archive_tap = archive_load_files['tap']
 
         archive_metadata = {
-            'tap': archive_load_files['tap'],
+            'tap': archive_tap,
             'schema': archive_schema,
             'table': archive_table,
-            'archive-load-files-primary-column': archive_load_files['column'],
-            'archive-load-files-primary-column-min': archive_load_files['min'],
-            'archive-load-files-primary-column-max': archive_load_files['max'],
         }
-        db_sync.copy_to_archive(stream, s3_key, archive_key, archive_metadata)
+
+        if 'column' in archive_load_files:
+            archive_metadata.update({
+                'archive-load-files-primary-column': archive_load_files['column'],
+                'archive-load-files-primary-column-min': archive_load_files['min'],
+                'archive-load-files-primary-column-max': archive_load_files['max']
+            })
+
+        # Use same file name as in import
+        archive_file = s3_key.split('/')[-1]
+        archive_folder = "archive/{}/{}".format(archive_tap, archive_table)
+        archive_key = "{}/{}".format(archive_folder, archive_file)
+
+        db_sync.copy_to_archive(s3_key, archive_key, archive_metadata)
 
     # Delete file from S3
     db_sync.delete_from_stage(stream, s3_key)
