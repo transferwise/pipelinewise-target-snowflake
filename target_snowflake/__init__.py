@@ -294,7 +294,7 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
                     else:
                         LOGGER.warning(
                             "archive_load_files is enabled, but no archive_load_files_primary_column was found. " +
-                            "Min/max values will not be added to metadata for stream {}.".format(stream)
+                            "Min/max values will not be added to metadata for stream %s.", stream
                         )
 
                 stream_to_sync[stream].create_schema_if_not_exists()

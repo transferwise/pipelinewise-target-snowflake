@@ -116,13 +116,14 @@ def stream_name_to_dict(stream_name, separator='-'):
     }
 
 
-def get_archive_load_files_primary_column(o: Dict):
-    if o['type'] != "SCHEMA":
-        raise Exception("Expecting type SCHEMA, got {}".format(o['type']))
+def get_archive_load_files_primary_column(singer_msg: Dict):
+    """Derive archive load files primary column from a Singer message dictionary"""
+    if singer_msg['type'] != "SCHEMA":
+        raise Exception("Expecting type SCHEMA, got {}".format(singer_msg['type']))
 
-    if 'bookmark_properties' in o and len(o['bookmark_properties']) > 0:
-        col = o['bookmark_properties'][0]
-        if col in o['schema']['properties']:
+    if 'bookmark_properties' in singer_msg and len(singer_msg['bookmark_properties']) > 0:
+        col = singer_msg['bookmark_properties'][0]
+        if col in singer_msg['schema']['properties']:
             return col
 
     return None
