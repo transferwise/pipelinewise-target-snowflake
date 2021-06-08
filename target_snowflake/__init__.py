@@ -74,7 +74,7 @@ def get_snowflake_statics(config):
     if not ('disable_table_cache' in config and config['disable_table_cache']):
         LOGGER.info('Getting catalog objects from table cache...')
 
-        db = DbSync(config) # pylint: disable=invalid-name
+        db = DbSync(config)  # pylint: disable=invalid-name
         table_cache = db.get_table_columns(
             table_schemas=stream_utils.get_schema_names_from_config(config))
 
@@ -83,8 +83,9 @@ def get_snowflake_statics(config):
 
     return table_cache, file_format_type
 
+
 # pylint: disable=too-many-locals,too-many-branches,too-many-statements,invalid-name
-def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatTypes=None) -> None:
+def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatTypes = None) -> None:
     """Main loop to read and consume singer messages from stdin
 
     Params:
@@ -293,7 +294,7 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
                         )
                     else:
                         LOGGER.warning(
-                            "archive_load_files is enabled, but no archive_load_files_primary_column was found. " +
+                            "archive_load_files is enabled, but no archive_load_files_primary_column was found. "
                             "Min/max values will not be added to metadata for stream %s.", stream
                         )
 
@@ -453,7 +454,7 @@ def flush_records(stream: str,
                                                              compression=not no_compression,
                                                              dest_dir=temp_dir,
                                                              data_flattening_max_level=
-                                                                db_sync.data_flattening_max_level)
+                                                             db_sync.data_flattening_max_level)
 
     # Get file stats
     row_count = len(records)
