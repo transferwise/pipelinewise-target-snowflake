@@ -8,6 +8,7 @@ from decimal import Decimal
 from singer import get_logger
 
 from target_snowflake.exceptions import UnexpectedValueTypeException
+from target_snowflake.exceptions import UnexpectedMessageTypeException
 
 LOGGER = get_logger('target_snowflake')
 
@@ -119,7 +120,7 @@ def stream_name_to_dict(stream_name, separator='-'):
 def get_archive_load_files_primary_column(singer_msg: Dict):
     """Derive archive load files primary column from a Singer message dictionary"""
     if singer_msg['type'] != "SCHEMA":
-        raise Exception("Expecting type SCHEMA, got {}".format(singer_msg['type']))
+        raise UnexpectedMessageTypeException("Expecting type SCHEMA, got {}".format(singer_msg['type']))
 
     if 'bookmark_properties' in singer_msg and len(singer_msg['bookmark_properties']) > 0:
         col = singer_msg['bookmark_properties'][0]

@@ -4,6 +4,7 @@ from decimal import Decimal
 
 import target_snowflake.stream_utils as stream_utils
 from target_snowflake.exceptions import UnexpectedValueTypeException
+from target_snowflake.exceptions import UnexpectedMessageTypeException
 
 
 class TestSchemaUtils(unittest.TestCase):
@@ -229,7 +230,7 @@ class TestSchemaUtils(unittest.TestCase):
                 "bookmark_properties": ["lsn"]
             }), None)
 
-        with self.assertRaises(Exception):
+        with self.assertRaises(UnexpectedMessageTypeException):
             stream_utils.get_archive_load_files_primary_column(
                 {
                     "type": "RECORD",
