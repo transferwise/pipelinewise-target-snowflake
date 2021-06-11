@@ -25,7 +25,7 @@ jobs:
           command: |
             . venv/bin/activate
             export LOGGING_CONF_FILE=$(pwd)/sample_logging.conf
-            pytest tests/unit -vv --cov target_snowflake --cov-fail-under=55
+            pytest tests/unit -vv --cov target_snowflake --cov-fail-under=60
 
       - run:
           name: 'Integration Tests'
