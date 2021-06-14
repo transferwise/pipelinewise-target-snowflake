@@ -86,3 +86,60 @@ class TestTargetSnowflake(unittest.TestCase):
 
         # Expecting flush after every records + 1 at the end
         assert flush_streams_mock.call_count == 41
+
+    @patch('target_snowflake.DbSync')
+    @patch('target_snowflake.os.remove')
+    def test_archive_load_files_incremental_replication(self, os_remove_mock, dbSync_mock):
+        self.config['tap_id'] = 'test_tap_id'
+        self.config['archive_load_files'] = True
+        self.config['s3_bucket'] = 'dummy_bucket'
+
+        with open(f'{os.path.dirname(__file__)}/resources/messages-simple-table.json', 'r') as f:
+            lines = f.readlines()
+
+        instance = dbSync_mock.return_value
+        instance.create_schema_if_not_exists.return_value = None
+        instance.sync_table.return_value = None
+        instance.put_to_stage.return_value = 'some-s3-bucket/some-s3-folder/some-name_date_batch_hash.csg.gz'
+
+        target_snowflake.persist_lines(self.config, lines)
+
+        copy_to_archive_args = instance.copy_to_archive.call_args[0]
+        assert copy_to_archive_args[0] == 'some-s3-bucket/some-s3-folder/some-name_date_batch_hash.csg.gz'
+        assert copy_to_archive_args[1] == 'archive/test_tap_id/test_simple_table/some-name_date_batch_hash.csg.gz'
+        assert copy_to_archive_args[2] == {
+            'tap': 'test_tap_id',
+            'schema': 'tap_mysql_test',
+            'table': 'test_simple_table',
+            'archived-by': 'pipelinewise_target_snowflake',
+            'incremental-key': 'id',
+            'incremental-key-min': '1',
+            'incremental-key-max': '5'
+        }
+
+    @patch('target_snowflake.DbSync')
+    @patch('target_snowflake.os.remove')
+    def test_archive_load_files_log_based_replication(self, os_remove_mock, dbSync_mock):
+        self.config['tap_id'] = 'test_tap_id'
+        self.config['archive_load_files'] = True
+        self.config['s3_bucket'] = 'dummy_bucket'
+
+        with open(f'{os.path.dirname(__file__)}/resources/logical-streams.json', 'r') as f:
+            lines = f.readlines()
+
+        instance = dbSync_mock.return_value
+        instance.create_schema_if_not_exists.return_value = None
+        instance.sync_table.return_value = None
+        instance.put_to_stage.return_value = 'some-s3-bucket/some-s3-folder/some-name_date_batch_hash.csg.gz'
+
+        target_snowflake.persist_lines(self.config, lines)
+
+        copy_to_archive_args = instance.copy_to_archive.call_args[0]
+        assert copy_to_archive_args[0] == 'some-s3-bucket/some-s3-folder/some-name_date_batch_hash.csg.gz'
+        assert copy_to_archive_args[1] == 'archive/test_tap_id/logical1_table2/some-name_date_batch_hash.csg.gz'
+        assert copy_to_archive_args[2] == {
+            'tap': 'test_tap_id',
+            'schema': 'logical1',
+            'table': 'logical1_table2',
+            'archived-by': 'pipelinewise_target_snowflake'
+        }

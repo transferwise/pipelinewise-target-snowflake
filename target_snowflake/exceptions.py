@@ -23,3 +23,7 @@ class FileFormatNotFoundException(Exception):
 
 class InvalidFileFormatException(Exception):
     """Exception to raise when name file format is not compatible"""
+
+
+class UnexpectedMessageTypeException(Exception):
+    """Exception to raise when provided message doesn't match the expected type"""
