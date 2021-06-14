@@ -64,8 +64,8 @@ def validate_config(config):
         errors.append("Neither 'default_target_schema' (string) nor 'schema_mapping' (object) keys set in config.")
 
     # Check if archive load files option is using external stages
-    archive_load_files = config.get('archive_load_files', {})
-    if archive_load_files.get('enabled') and not config.get('s3_bucket', None):
+    archive_load_files = config.get('archive_load_files', False)
+    if archive_load_files and not config.get('s3_bucket', None):
         errors.append('Archive load files option can be used only with external s3 stages. Please define s3_bucket.')
 
     return errors

@@ -91,7 +91,7 @@ class TestTargetSnowflake(unittest.TestCase):
     @patch('target_snowflake.os.remove')
     def test_archive_load_files_incremental_replication(self, os_remove_mock, dbSync_mock):
         self.config['tap_id'] = 'test_tap_id'
-        self.config['archive_load_files'] = {'enabled': True}
+        self.config['archive_load_files'] = True
         self.config['s3_bucket'] = 'dummy_bucket'
 
         with open(f'{os.path.dirname(__file__)}/resources/messages-simple-table.json', 'r') as f:
@@ -112,16 +112,16 @@ class TestTargetSnowflake(unittest.TestCase):
             'schema': 'tap_mysql_test',
             'table': 'test_simple_table',
             'archived-by': 'pipelinewise_target_snowflake',
-            'archive-load-files-primary-column': 'id',
-            'archive-load-files-primary-column-min': '1',
-            'archive-load-files-primary-column-max': '5'
+            'incremental-key': 'id',
+            'incremental-key-min': '1',
+            'incremental-key-max': '5'
         }
 
     @patch('target_snowflake.DbSync')
     @patch('target_snowflake.os.remove')
     def test_archive_load_files_log_based_replication(self, os_remove_mock, dbSync_mock):
         self.config['tap_id'] = 'test_tap_id'
-        self.config['archive_load_files'] = {'enabled': True}
+        self.config['archive_load_files'] = True
         self.config['s3_bucket'] = 'dummy_bucket'
 
         with open(f'{os.path.dirname(__file__)}/resources/logical-streams.json', 'r') as f:

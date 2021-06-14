@@ -1179,7 +1179,7 @@ class TestIntegration(unittest.TestCase):
 
     def test_archive_load_files(self):
         """Test if load file is copied to archive folder"""
-        self.config['archive_load_files'] = {'enabled': True}
+        self.config['archive_load_files'] = True
         self.config['tap_id'] = 'test_tap_id'
         self.config['client_side_encryption_master_key'] = ''
 
@@ -1208,9 +1208,9 @@ class TestIntegration(unittest.TestCase):
             'schema': 'tap_mysql_test',
             'table': 'test_simple_table',
             'archived-by': 'pipelinewise_target_snowflake',
-            'archive-load-files-primary-column': 'id',
-            'archive-load-files-primary-column-min': '1',
-            'archive-load-files-primary-column-max': '5'
+            'incremental-key': 'id',
+            'incremental-key-min': '1',
+            'incremental-key-max': '5'
         }, archive_metadata)
 
         # Verify expected file contents

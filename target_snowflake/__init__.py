@@ -114,7 +114,7 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
     batch_size_rows = config.get('batch_size_rows', DEFAULT_BATCH_SIZE_ROWS)
     batch_wait_limit_seconds = config.get('batch_wait_limit_seconds', None)
     flush_timestamp = datetime.utcnow()
-    archive_load_files_enabled = config.get('archive_load_files', {}).get('enabled', None)
+    archive_load_files = config.get('archive_load_files', False)
     archive_load_files_data = {}
 
     # Loop over lines from stdin
@@ -173,20 +173,20 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
             else:
                 records_to_load[stream][primary_key_string] = o['record']
 
-            if archive_load_files_enabled and stream in archive_load_files_data:
+            if archive_load_files and stream in archive_load_files_data:
                 # Keep track of min and max of the designated column
                 stream_archive_load_files_values = archive_load_files_data[stream]
                 if 'column' in stream_archive_load_files_values:
-                    archive_primary_column_name = stream_archive_load_files_values['column']
-                    archive_primary_column_value = o['record'][archive_primary_column_name]
+                    incremental_key_column_name = stream_archive_load_files_values['column']
+                    incremental_key_value = o['record'][incremental_key_column_name]
                     min_value = stream_archive_load_files_values['min']
                     max_value = stream_archive_load_files_values['max']
 
-                    if min_value is None or min_value > archive_primary_column_value:
-                        stream_archive_load_files_values['min'] = archive_primary_column_value
+                    if min_value is None or min_value > incremental_key_value:
+                        stream_archive_load_files_values['min'] = incremental_key_value
 
-                    if max_value is None or max_value < archive_primary_column_value:
-                        stream_archive_load_files_values['max'] = archive_primary_column_value
+                    if max_value is None or max_value < incremental_key_value:
+                        stream_archive_load_files_values['max'] = incremental_key_value
 
             flush = False
             if row_count[stream] >= batch_size_rows:
@@ -277,24 +277,24 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
                 else:
                     stream_to_sync[stream] = DbSync(config, o, table_cache, file_format_type)
 
-                if archive_load_files_enabled:
+                if archive_load_files:
                     archive_load_files_data[stream] = {
                         'tap': config.get('tap_id'),
                     }
 
                     # In case of incremental replication, track min/max of the replication key.
                     # Incremental replication is assumed if o['bookmark_properties'][0] is one of the columns.
-                    archive_load_files_primary_column = stream_utils.get_archive_load_files_primary_column(o)
-                    if archive_load_files_primary_column:
-                        LOGGER.info("Using %s as archive_load_files_primary_column", archive_load_files_primary_column)
+                    incremental_key_column_name = stream_utils.get_incremental_key(o)
+                    if incremental_key_column_name:
+                        LOGGER.info("Using %s as incremental_key_column_name", incremental_key_column_name)
                         archive_load_files_data[stream].update(
-                            column=archive_load_files_primary_column,
+                            column=incremental_key_column_name,
                             min=None,
                             max=None
                         )
                     else:
                         LOGGER.warning(
-                            "archive_load_files is enabled, but no archive_load_files_primary_column was found. "
+                            "archive_load_files is enabled, but no incremental_key_column_name was found. "
                             "Min/max values will not be added to metadata for stream %s.", stream
                         )
 
@@ -485,9 +485,9 @@ def flush_records(stream: str,
 
         if 'column' in archive_load_files:
             archive_metadata.update({
-                'archive-load-files-primary-column': archive_load_files['column'],
-                'archive-load-files-primary-column-min': str(archive_load_files['min']),
-                'archive-load-files-primary-column-max': str(archive_load_files['max'])
+                'incremental-key': archive_load_files['column'],
+                'incremental-key-min': str(archive_load_files['min']),
+                'incremental-key-max': str(archive_load_files['max'])
             })
 
         # Use same file name as in import

@@ -209,11 +209,11 @@ class TestSchemaUtils(unittest.TestCase):
         self.assertEqual(stream_utils.stream_name_to_dict('my_catalog.my_schema.my_table', separator='.'),
             {"catalog_name": "my_catalog", "schema_name": "my_schema", "table_name": "my_table"})
 
-    def test_get_archive_load_files_primary_column(self):
-        """Test selecting archive load files primary column from schema message"""
+    def test_get_incremental_key(self):
+        """Test selecting incremental key column from schema message"""
 
         # Bookmark properties contains column which is also in schema properties
-        self.assertEqual(stream_utils.get_archive_load_files_primary_column(
+        self.assertEqual(stream_utils.get_incremental_key(
             {
                 "type": "SCHEMA",
                 "schema": {"properties": {"id": {}, "some_col": {}}},
@@ -222,7 +222,7 @@ class TestSchemaUtils(unittest.TestCase):
             }), "some_col")
 
         # Bookmark properties contains column which is not in schema properties
-        self.assertEqual(stream_utils.get_archive_load_files_primary_column(
+        self.assertEqual(stream_utils.get_incremental_key(
             {
                 "type": "SCHEMA",
                 "schema": {"properties": {"id": {}, "some_col": {}}},
@@ -231,7 +231,7 @@ class TestSchemaUtils(unittest.TestCase):
             }), None)
 
         with self.assertRaises(UnexpectedMessageTypeException):
-            stream_utils.get_archive_load_files_primary_column(
+            stream_utils.get_incremental_key(
                 {
                     "type": "RECORD",
                     "stream": "some-stream",

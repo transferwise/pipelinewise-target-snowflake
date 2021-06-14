@@ -117,8 +117,8 @@ def stream_name_to_dict(stream_name, separator='-'):
     }
 
 
-def get_archive_load_files_primary_column(singer_msg: Dict):
-    """Derive archive load files primary column from a Singer message dictionary"""
+def get_incremental_key(singer_msg: Dict):
+    """Derive incremental key from a Singer message dictionary"""
     if singer_msg['type'] != "SCHEMA":
         raise UnexpectedMessageTypeException("Expecting type SCHEMA, got {}".format(singer_msg['type']))
 
