@@ -1181,7 +1181,7 @@ class TestIntegration(unittest.TestCase):
         """Test if load file is copied to archive folder"""
         self.config['archive_load_files'] = True
         self.config['tap_id'] = 'test_tap_id'
-        self.config['client_side_encryption_master_key'] = ''
+        # self.config['client_side_encryption_master_key'] = ''
 
         s3_bucket = self.config['s3_bucket']
 
@@ -1231,4 +1231,4 @@ class TestIntegration(unittest.TestCase):
 ''')
 
         # Clean up
-        self.s3_client.delete_object(Bucket=s3_bucket, Key=archived_file_key)
+        #self.s3_client.delete_object(Bucket=s3_bucket, Key=archived_file_key)
