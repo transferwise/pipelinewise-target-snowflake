@@ -491,9 +491,8 @@ def flush_records(stream: str,
             })
 
         # Use same file name as in import
-        archive_file = s3_key.split('/')[-1]
-        archive_folder = "archive/{}/{}".format(archive_tap, archive_table)
-        archive_key = "{}/{}".format(archive_folder, archive_file)
+        archive_file = os.path.basename(s3_key)
+        archive_key = "{}/{}/{}".format(archive_tap, archive_table, archive_file)
 
         db_sync.copy_to_archive(s3_key, archive_key, archive_metadata)
 

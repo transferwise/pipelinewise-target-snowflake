@@ -224,6 +224,43 @@ class TestDBSync(unittest.TestCase):
         self.assertEqual(db_sync.DbSync({**minimal_config,
                                          **table_stage_with_parallel}).connection_config['parallelism'], 1)
 
+    @patch('target_snowflake.upload_clients.s3_upload_client.S3UploadClient.copy_object')
+    @patch('target_snowflake.db_sync.DbSync.query')
+    def test_copy_to_archive(self, query_patch, copy_object_patch):
+        query_patch.return_value = [{'type': 'CSV'}]
+        minimal_config = {
+            'account': "dummy-value",
+            'dbname': "dummy-value",
+            'user': "dummy-value",
+            'password': "dummy-value",
+            'warehouse': "dummy-value",
+            'default_target_schema': "dummy-value",
+            'file_format': "dummy-value",
+            's3_bucket': 'dummy-bucket',
+            'stage': 'dummy_schema.dummy_stage'
+        }
+
+        # Assert default values (same bucket, 'archive' as the archive prefix)
+        s3_config = {}
+        dbsync = db_sync.DbSync({**minimal_config, **s3_config})
+        dbsync.copy_to_archive('source/file', 'tap/schema/file', {'meta': "data"})
+
+        self.assertEqual(copy_object_patch.call_args[0][0], 'dummy-bucket/source/file')
+        self.assertEqual(copy_object_patch.call_args[0][1], 'dummy-bucket')
+        self.assertEqual(copy_object_patch.call_args[0][2], 'archive/tap/schema/file')
+
+        # Assert custom archive bucket and prefix
+        s3_config = {
+            'archive_load_files_s3_bucket': "custom-bucket",
+            'archive_load_files_s3_prefix': "custom-prefix"
+        }
+        dbsync = db_sync.DbSync({**minimal_config, **s3_config})
+        dbsync.copy_to_archive('source/file', 'tap/schema/file', {'meta': "data"})
+
+        self.assertEqual(copy_object_patch.call_args[0][0], 'dummy-bucket/source/file')
+        self.assertEqual(copy_object_patch.call_args[0][1], 'custom-bucket')
+        self.assertEqual(copy_object_patch.call_args[0][2], 'custom-prefix/tap/schema/file')
+
     def test_safe_column_name(self):
         self.assertEqual(db_sync.safe_column_name("columnname"), '"COLUMNNAME"')
         self.assertEqual(db_sync.safe_column_name("columnName"), '"COLUMNNAME"')

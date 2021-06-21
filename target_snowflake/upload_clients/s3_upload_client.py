@@ -98,13 +98,9 @@ class S3UploadClient(BaseUploadClient):
         bucket = self.connection_config['s3_bucket']
         self.s3_client.delete_object(Bucket=bucket, Key=key)
 
-    def copy_object(self, source_key: str, target_key: str, target_metadata: dict) -> None:
+    def copy_object(self, copy_source: str, target_bucket: str, target_key: str, target_metadata: dict) -> None:
         """Copy object to another location on S3"""
-        self.logger.info('Copying %s to %s', source_key, target_key)
-        bucket = self.connection_config['s3_bucket']
-
-        copy_source = "{}/{}".format(bucket, source_key)
-
+        self.logger.info('Copying %s to %s/%s', copy_source, target_bucket, target_key)
         # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/s3.html#S3.Client.copy_object
-        self.s3_client.copy_object(CopySource=copy_source, Bucket=bucket, Key=target_key, Metadata=target_metadata,
-                                   MetadataDirective="REPLACE")
+        self.s3_client.copy_object(CopySource=copy_source, Bucket=target_bucket, Key=target_key,
+                                   Metadata=target_metadata, MetadataDirective="REPLACE")
