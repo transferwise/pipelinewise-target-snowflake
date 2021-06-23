@@ -1,3 +1,8 @@
+1.13.0 (2021-06-23)
+-------------------
+- Add `archive_load_files` parameter to optionally archive load files on S3
+- Bumping dependencies
+
 1.12.0 (2021-04-12)
 -------------------
 - Add optional `batch_wait_limit_seconds` parameter
