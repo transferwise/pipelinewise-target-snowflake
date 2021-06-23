@@ -26,7 +26,7 @@ class BaseUploadClient(ABC):
         """
 
     @abstractmethod
-    def copy_object(self, source_key: str, target_key: str, target_metadata: dict) -> None:
+    def copy_object(self, copy_source: str, target_bucket: str, target_key: str, target_metadata: dict) -> None:
         """
         Copy object
         """

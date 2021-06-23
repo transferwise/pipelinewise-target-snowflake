@@ -403,9 +403,35 @@ class DbSync:
         self.upload_client.delete_object(stream, s3_key)
 
     def copy_to_archive(self, s3_source_key, s3_archive_key, s3_archive_metadata):
-        """Copy file from snowflake stage to archive"""
-        self.logger.info('Copying %s to archive location %s', s3_source_key, s3_archive_key)
-        self.upload_client.copy_object(s3_source_key, s3_archive_key, s3_archive_metadata)
+        """
+        Copy file from snowflake stage to archive.
+
+        s3_source_key: The s3 key to copy, assumed to exist in the bucket configured as 's3_bucket'
+
+        s3_archive_key: The key to use in archive destination. This will be prefixed with the config value
+                        'archive_load_files_s3_prefix'. If none is specified, 'archive' will be used as the prefix.
+
+                        As destination bucket, the config value 'archive_load_files_s3_bucket' will be used. If none is
+                        specified, the bucket configured as 's3_bucket' will be used.
+
+        s3_archive_metadata: This dict will be used as the S3 metadata in the file in archive destination. Metadata in
+                             the source file will be replaced.
+
+        """
+        source_bucket = self.connection_config.get('s3_bucket')
+
+        # Get archive s3_bucket from config, or use same bucket if not specified
+        archive_bucket = self.connection_config.get('archive_load_files_s3_bucket', source_bucket)
+
+        # Determine prefix to use in archive s3 bucket
+        default_archive_prefix = 'archive'
+        archive_prefix = self.connection_config.get('archive_load_files_s3_prefix', default_archive_prefix)
+        prefixed_archive_key = '{}/{}'.format(archive_prefix, s3_archive_key)
+
+        copy_source = '{}/{}'.format(source_bucket, s3_source_key)
+
+        self.logger.info('Copying %s to archive location %s', copy_source, prefixed_archive_key)
+        self.upload_client.copy_object(copy_source, archive_bucket, prefixed_archive_key, s3_archive_metadata)
 
     def get_stage_name(self, stream):
         """Generate snowflake stage name"""

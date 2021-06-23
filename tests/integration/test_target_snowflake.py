@@ -1180,6 +1180,7 @@ class TestIntegration(unittest.TestCase):
     def test_archive_load_files(self):
         """Test if load file is copied to archive folder"""
         self.config['archive_load_files'] = True
+        self.config['archive_load_files_s3_prefix'] = 'archive_folder'
         self.config['tap_id'] = 'test_tap_id'
         self.config['client_side_encryption_master_key'] = ''
 
@@ -1187,7 +1188,7 @@ class TestIntegration(unittest.TestCase):
 
         # Delete any dangling files from archive
         files_in_s3_archive = self.s3_client.list_objects(
-            Bucket=s3_bucket, Prefix="archive/test_tap_id/").get('Contents', [])
+            Bucket=s3_bucket, Prefix="archive_folder/test_tap_id/").get('Contents', [])
         for file_in_archive in files_in_s3_archive:
             key = file_in_archive["Key"]
             self.s3_client.delete_object(Bucket=s3_bucket, Key=key)
@@ -1196,7 +1197,7 @@ class TestIntegration(unittest.TestCase):
         self.persist_lines_with_cache(tap_lines)
 
         # Verify expected file metadata in S3
-        files_in_s3_archive = self.s3_client.list_objects(Bucket=s3_bucket, Prefix="archive/test_tap_id/").get(
+        files_in_s3_archive = self.s3_client.list_objects(Bucket=s3_bucket, Prefix="archive_folder/test_tap_id/").get(
             'Contents')
         self.assertIsNotNone(files_in_s3_archive)
         self.assertEqual(1, len(files_in_s3_archive))
@@ -1229,6 +1230,3 @@ class TestIntegration(unittest.TestCase):
 4,"xyz4","not-formatted-time-4"
 5,"xyz5","not-formatted-time-5"
 ''')
-
-        # Clean up
-        self.s3_client.delete_object(Bucket=s3_bucket, Key=archived_file_key)
