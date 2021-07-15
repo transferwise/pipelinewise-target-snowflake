@@ -418,8 +418,7 @@ class DbSync:
                         As destination bucket, the config value 'archive_load_files_s3_bucket' will be used. If none is
                         specified, the bucket configured as 's3_bucket' will be used.
 
-        s3_archive_metadata: This dict will be used as the S3 metadata in the file in archive destination. Metadata in
-                             the source file will be replaced.
+        s3_archive_metadata: This dict will be merged with any metadata in the source file.
 
         """
         source_bucket = self.connection_config.get('s3_bucket')

@@ -30,9 +30,3 @@ class BaseUploadClient(ABC):
         """
         Copy object
         """
-
-    @abstractmethod
-    def get_metadata(self, bucket: str, key: str) -> None:
-        """
-        Read file metadata
-        """

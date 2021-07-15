@@ -42,7 +42,3 @@ class SnowflakeUploadClient(BaseUploadClient):
     def copy_object(self, copy_source: str, target_bucket: str, target_key: str, target_metadata: dict) -> None:
         raise NotImplementedError(
             "Copying objects is not supported with a Snowflake upload client.")
-
-    def get_metadata(self, bucket: str, key: str) -> None:
-        raise NotImplementedError(
-            "Reading object metadata is not supported with a Snowflake upload client.")
