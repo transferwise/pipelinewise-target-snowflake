@@ -104,3 +104,7 @@ class S3UploadClient(BaseUploadClient):
         # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/s3.html#S3.Client.copy_object
         self.s3_client.copy_object(CopySource=copy_source, Bucket=target_bucket, Key=target_key,
                                    Metadata=target_metadata, MetadataDirective="REPLACE")
+
+    def get_metadata(self, bucket: str, key: str) -> None:
+        """Read object metadata"""
+        return self.s3_client.head_object(Bucket=bucket, Key=key)['Metadata']

@@ -476,12 +476,14 @@ def flush_records(stream: str,
         archive_table = stream_name_parts['table_name']
         archive_tap = archive_load_files['tap']
 
-        archive_metadata = {
+        archive_metadata = db_sync.get_metadata(s3_key) or {}
+
+        archive_metadata.update({
             'tap': archive_tap,
             'schema': archive_schema,
             'table': archive_table,
             'archived-by': 'pipelinewise_target_snowflake'
-        }
+        })
 
         if 'column' in archive_load_files:
             archive_metadata.update({
