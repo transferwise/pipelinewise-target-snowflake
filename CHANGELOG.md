@@ -1,3 +1,7 @@
+1.13.1 (2021-07-15)
+-------------------
+- Fixed an issue with S3 metadata required for decryption not being included in archived load files.
+
 1.13.0 (2021-06-23)
 -------------------
 - Add `archive_load_files` parameter to optionally archive load files on S3
