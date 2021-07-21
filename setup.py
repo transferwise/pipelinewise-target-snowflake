@@ -23,7 +23,7 @@ setup(name="pipelinewise-target-snowflake",
           'inflection==0.5.1',
           'joblib==1.0.1',
           'numpy<1.21.0',
-          'python-dateutil==2.8.1'
+          'python-dateutil==2.8.2'
       ],
       extras_require={
           "test": [
