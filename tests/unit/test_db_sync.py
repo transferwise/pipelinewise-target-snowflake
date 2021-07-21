@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 from target_snowflake import db_sync
 from target_snowflake.file_format import FileFormatTypes
-from target_snowflake.exceptions import InvalidFileFormatException, FileFormatNotFoundException
+from target_snowflake.exceptions import InvalidFileFormatException, FileFormatNotFoundException, PrimaryKeyNotFoundException
 
 
 class TestDBSync(unittest.TestCase):
@@ -305,5 +305,6 @@ class TestDBSync(unittest.TestCase):
         # Missing field as PK
         stream_schema_message['key_properties'] = ['invalid_col']
         dbsync = db_sync.DbSync(minimal_config, stream_schema_message)
-        with self.assertRaises(KeyError):
+        with self.assertRaisesRegex(PrimaryKeyNotFoundException,
+                                    "Cannot find \['invalid_col'\] primary key\(s\) in record\. Available fields: \['id', 'c_str'\]"):
             dbsync.record_primary_key_string({'id': 123, 'c_str': 'xyz'})
