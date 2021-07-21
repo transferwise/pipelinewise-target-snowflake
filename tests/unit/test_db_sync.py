@@ -272,3 +272,38 @@ class TestDBSync(unittest.TestCase):
         self.assertEqual(db_sync.safe_column_name("columnName"), 'columnName"')
         self.assertEqual(db_sync.safe_column_name("column-name"), 'column-name')
         self.assertEqual(db_sync.safe_column_name('"column name"'), '"column name"')
+
+    @patch('target_snowflake.db_sync.DbSync.query')
+    def test_record_primary_key_string(self, query_patch):
+        query_patch.return_value = [{'type': 'CSV'}]
+        minimal_config = {
+            'account': "dummy-value",
+            'dbname': "dummy-value",
+            'user': "dummy-value",
+            'password': "dummy-value",
+            'warehouse': "dummy-value",
+            'default_target_schema': "dummy-value",
+            'file_format': "dummy-value"
+        }
+
+        stream_schema_message = {"stream": "public-table1",
+                                 "schema": {
+                                     "properties": {
+                                         "id": { "type": ["integer"]},
+                                         "c_str": {"type": ["null", "string"]}}},
+                                 "key_properties": ["id"]}
+
+        # Single primary key string
+        dbsync = db_sync.DbSync(minimal_config, stream_schema_message)
+        self.assertEqual(dbsync.record_primary_key_string({'id': 123}), '123')
+
+        # Composite primary key string
+        stream_schema_message['key_properties'] = ['id', 'c_str']
+        dbsync = db_sync.DbSync(minimal_config, stream_schema_message)
+        self.assertEqual(dbsync.record_primary_key_string({'id': 123, 'c_str': 'xyz'}), '123,xyz')
+
+        # Missing field as PK
+        stream_schema_message['key_properties'] = ['invalid_col']
+        dbsync = db_sync.DbSync(minimal_config, stream_schema_message)
+        with self.assertRaises(KeyError):
+            dbsync.record_primary_key_string({'id': 123, 'c_str': 'xyz'})
