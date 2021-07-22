@@ -11,7 +11,7 @@ import target_snowflake.flattening as flattening
 import target_snowflake.stream_utils as stream_utils
 from target_snowflake.file_format import FileFormat, FileFormatTypes
 
-from target_snowflake.exceptions import TooManyRecordsException
+from target_snowflake.exceptions import TooManyRecordsException, PrimaryKeyNotFoundException
 from target_snowflake.upload_clients.s3_upload_client import S3UploadClient
 from target_snowflake.upload_clients.snowflake_upload_client import SnowflakeUploadClient
 
@@ -386,10 +386,9 @@ class DbSync:
         try:
             key_props = [str(flatten[p]) for p in self.stream_schema_message['key_properties']]
         except Exception as exc:
-            self.logger.error(
-                'Cannot find %s primary key(s) in record: %s', self.stream_schema_message['key_properties'],
-                flatten)
-            raise exc
+            raise PrimaryKeyNotFoundException('Cannot find {} primary key(s) in record. Available fields: {}'.format(
+                self.stream_schema_message['key_properties'],
+                list(flatten.keys()))) from exc
         return ','.join(key_props)
 
     def put_to_stage(self, file, stream, count, temp_dir=None):

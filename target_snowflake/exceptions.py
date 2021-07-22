@@ -27,3 +27,7 @@ class InvalidFileFormatException(Exception):
 
 class UnexpectedMessageTypeException(Exception):
     """Exception to raise when provided message doesn't match the expected type"""
+
+
+class PrimaryKeyNotFoundException(Exception):
+    """Exception to raise when primary key not found in the record message"""
