@@ -12,6 +12,7 @@ jobs:
 
       - run:
           name: 'Integration Tests'
+          no_output_timeout: 20m
           command: |
             export LOGGING_CONF_FILE=$(pwd)/sample_logging.conf
             make integration_test
