@@ -1,6 +1,6 @@
 version: 2
 jobs:
-  build:
+  integration_tests:
     docker:
       - image: circleci/python:3.6.2
     steps:
@@ -8,34 +8,16 @@ jobs:
 
       - run:
           name: install dependencies
-          command: |
-            python3 -m venv venv
-            . venv/bin/activate
-            pip install --upgrade pip setuptools wheel
-            pip install .[test]
-
-      - run:
-          name: 'Pylinting'
-          command: |
-            . venv/bin/activate
-            pylint target_snowflake
-
-      - run:
-          name: 'Unit Tests'
-          command: |
-            . venv/bin/activate
-            export LOGGING_CONF_FILE=$(pwd)/sample_logging.conf
-            pytest tests/unit -vv --cov target_snowflake --cov-fail-under=60
+          command: make venv
 
       - run:
           name: 'Integration Tests'
           command: |
-            . venv/bin/activate
             export LOGGING_CONF_FILE=$(pwd)/sample_logging.conf
-            pytest tests/integration/ -vv --cov target_snowflake --cov-fail-under=86
+            make integration_test
 
 workflows:
   version: 2
   build:
     jobs:
-      - build
+      - integration_tests
