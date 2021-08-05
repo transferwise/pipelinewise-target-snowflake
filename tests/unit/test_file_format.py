@@ -1,12 +1,9 @@
-import datetime
 import unittest
-
 from unittest.mock import patch
 
-import target_snowflake.db_sync as db_sync
+from target_snowflake.exceptions import InvalidFileFormatException, FileFormatNotFoundException
 from target_snowflake.file_format import FileFormat, FileFormatTypes
 from target_snowflake.file_formats import csv, parquet
-from target_snowflake.exceptions import InvalidFileFormatException, FileFormatNotFoundException
 
 
 class TestFileFormat(unittest.TestCase):

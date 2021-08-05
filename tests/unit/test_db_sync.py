@@ -1,11 +1,9 @@
-import unittest
 import json
-
+import unittest
 from unittest.mock import patch
 
 from target_snowflake import db_sync
-from target_snowflake.file_format import FileFormatTypes
-from target_snowflake.exceptions import InvalidFileFormatException, FileFormatNotFoundException, PrimaryKeyNotFoundException
+from target_snowflake.exceptions import PrimaryKeyNotFoundException
 
 
 class TestDBSync(unittest.TestCase):
