@@ -3,17 +3,17 @@ import gzip
 import json
 import tempfile
 import unittest
-import mock
 import os
 import botocore
 import boto3
-import itertools
-
 import target_snowflake
+
+
 from target_snowflake import RecordValidationException
 from target_snowflake.db_sync import DbSync
 from target_snowflake.upload_clients.s3_upload_client import S3UploadClient
 
+from unittest import mock
 from pyarrow.lib import ArrowTypeError
 from snowflake.connector.errors import ProgrammingError
 from snowflake.connector.errors import DatabaseError
