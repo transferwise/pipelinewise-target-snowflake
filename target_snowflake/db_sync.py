@@ -1,4 +1,4 @@
-import json
+import ujson
 import sys
 from typing import List, Dict, Union
 
@@ -153,9 +153,9 @@ def create_query_tag(query_tag_pattern: str, database: str = None, schema: str =
 
     # replace tokens, taking care of json formatted value compatibility
     for k, v in {
-        '{{database}}': json.dumps(database.strip('"')).strip('"') if database else None,
-        '{{schema}}': json.dumps(schema.strip('"')).strip('"') if schema else None,
-        '{{table}}': json.dumps(table.strip('"')).strip('"') if table else None
+        '{{database}}': ujson.dumps(database.strip('"')).strip('"') if database else None,
+        '{{schema}}': ujson.dumps(schema.strip('"')).strip('"') if schema else None,
+        '{{table}}': ujson.dumps(table.strip('"')).strip('"') if table else None
     }.items():
         if k in query_tag:
             query_tag = query_tag.replace(k, v or '')
@@ -498,7 +498,7 @@ class DbSync:
 
                 self.logger.info('Loading into %s: %s',
                     self.table_name(stream, False),
-                    json.dumps({'inserts': inserts, 'updates': updates, 'size_bytes': size_bytes}))
+                    ujson.dumps({'inserts': inserts, 'updates': updates, 'size_bytes': size_bytes}))
 
     def primary_key_merge_condition(self):
         """Generate SQL join condition on primary keys for merge SQL statements"""

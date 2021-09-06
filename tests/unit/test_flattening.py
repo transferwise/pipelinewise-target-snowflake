@@ -131,8 +131,8 @@ class TestFlattening(unittest.TestCase):
                               "c_pk": 1,
                               "c_varchar": "1",
                               "c_int": 1,
-                              "c_obj": '{"nested_prop1": "value_1", "nested_prop2": "value_2", "nested_prop3": {'
-                                       '"multi_nested_prop1": "multi_value_1", "multi_nested_prop2": "multi_value_2"}}'
+                              "c_obj": '{"nested_prop1":"value_1","nested_prop2":"value_2","nested_prop3":{'
+                                       '"multi_nested_prop1":"multi_value_1","multi_nested_prop2":"multi_value_2"}}'
                           })
 
         # NO FLATTENING
@@ -142,8 +142,8 @@ class TestFlattening(unittest.TestCase):
                               "c_pk": 1,
                               "c_varchar": "1",
                               "c_int": 1,
-                              "c_obj": '{"nested_prop1": "value_1", "nested_prop2": "value_2", "nested_prop3": {'
-                                       '"multi_nested_prop1": "multi_value_1", "multi_nested_prop2": "multi_value_2"}}'
+                              "c_obj": '{"nested_prop1":"value_1","nested_prop2":"value_2","nested_prop3":{'
+                                       '"multi_nested_prop1":"multi_value_1","multi_nested_prop2":"multi_value_2"}}'
                           })
 
         # SEMI FLATTENING
@@ -155,7 +155,7 @@ class TestFlattening(unittest.TestCase):
                               "c_int": 1,
                               "c_obj__nested_prop1": "value_1",
                               "c_obj__nested_prop2": "value_2",
-                              "c_obj__nested_prop3": '{"multi_nested_prop1": "multi_value_1", "multi_nested_prop2": '
+                              "c_obj__nested_prop3": '{"multi_nested_prop1":"multi_value_1","multi_nested_prop2":'
                                                      '"multi_value_2"}'
                           })
 
