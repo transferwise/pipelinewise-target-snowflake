@@ -121,7 +121,7 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
     for line in lines:
         try:
             o = ujson.loads(line)
-        except ujson.decoder.JSONDecodeError:
+        except ValueError:
             LOGGER.error('Unable to parse:\n%s', line)
             raise
 

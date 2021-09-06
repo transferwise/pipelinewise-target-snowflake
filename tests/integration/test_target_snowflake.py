@@ -292,7 +292,7 @@ class TestIntegration(unittest.TestCase):
     def test_invalid_json(self):
         """Receiving invalid JSONs should raise an exception"""
         tap_lines = test_utils.get_test_tap_lines('invalid-json.json')
-        with self.assertRaises(ujson.decoder.JSONDecodeError):
+        with self.assertRaises(ValueError):
             self.persist_lines_with_cache(tap_lines)
 
     def test_message_order(self):
