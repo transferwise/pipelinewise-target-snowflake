@@ -82,6 +82,8 @@ def column_type(schema_property):
     # Every date-time JSON value is currently mapped to TIMESTAMP_NTZ
     elif property_format == 'date-time':
         col_type = 'timestamp_ntz'
+    elif property_format == "date":
+        column_type = "date"
     elif property_format == 'time':
         col_type = 'time'
     elif property_format == 'binary':
