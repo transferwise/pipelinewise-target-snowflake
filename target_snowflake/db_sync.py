@@ -83,7 +83,7 @@ def column_type(schema_property):
     elif property_format == 'date-time':
         col_type = 'timestamp_ntz'
     elif property_format == 'date':
-        col_type = 'date'        
+        col_type = 'date'
     elif property_format == 'time':
         col_type = 'time'
     elif property_format == 'binary':
