@@ -138,17 +138,17 @@ class TestIntegration(unittest.TestCase):
             self.remove_metadata_columns_from_rows(table_one), expected_table_one)
 
         # ----------------------------------------------------------------------
-        # Check rows in table_tow
+        # Check rows in table_two
         # ----------------------------------------------------------------------
         expected_table_two = []
         if not should_hard_deleted_rows:
             expected_table_two = [
-                {'C_INT': 1, 'C_PK': 1, 'C_VARCHAR': '1', 'C_DATE': datetime.datetime(2019, 2, 1, 15, 12, 45)},
-                {'C_INT': 2, 'C_PK': 2, 'C_VARCHAR': '2', 'C_DATE': datetime.datetime(2019, 2, 10, 2, 0, 0)}
+                {'C_INT': 1, 'C_PK': 1, 'C_VARCHAR': '1', 'C_DATE': datetime.datetime(2019, 2, 1, 15, 12, 45), 'C_ISO_DATE':datetime.date(2019, 2, 1)},
+                {'C_INT': 2, 'C_PK': 2, 'C_VARCHAR': '2', 'C_DATE': datetime.datetime(2019, 2, 10, 2, 0, 0), 'C_ISO_DATE':datetime.date(2019, 2, 10)}
             ]
         else:
             expected_table_two = [
-                {'C_INT': 2, 'C_PK': 2, 'C_VARCHAR': '2', 'C_DATE': datetime.datetime(2019, 2, 10, 2, 0, 0)}
+                {'C_INT': 2, 'C_PK': 2, 'C_VARCHAR': '2', 'C_DATE': datetime.datetime(2019, 2, 10, 2, 0, 0), 'C_ISO_DATE':datetime.date(2019, 2, 10)}
             ]
 
         self.assertEqual(
@@ -205,7 +205,7 @@ class TestIntegration(unittest.TestCase):
         ]
 
         # ----------------------------------------------------------------------
-        # Check rows in table_tow
+        # Check rows in table_two
         # ----------------------------------------------------------------------
         expected_table_two = [
             {'CID': 1, 'CVARCHAR': "updated row"},
@@ -600,11 +600,11 @@ class TestIntegration(unittest.TestCase):
             table_two,
             [
                 {previous_column_name: datetime.datetime(2019, 2, 1, 15, 12, 45), 'C_INT': 1, 'C_PK': 1,
-                 'C_VARCHAR': '1', 'C_DATE': None, 'C_NEW_COLUMN': None},
+                 'C_VARCHAR': '1', 'C_DATE': None, 'C_ISO_DATE': datetime.date(2019, 2, 1), 'C_NEW_COLUMN': None},
                 {previous_column_name: datetime.datetime(2019, 2, 10, 2), 'C_INT': 2, 'C_PK': 2, 'C_VARCHAR': '2',
-                 'C_DATE': '2019-02-12 02:00:00', 'C_NEW_COLUMN': 'data 1'},
+                 'C_DATE': '2019-02-12 02:00:00', 'C_ISO_DATE': datetime.date(2019, 2, 10), 'C_NEW_COLUMN': 'data 1'},
                 {previous_column_name: None, 'C_INT': 3, 'C_PK': 3, 'C_VARCHAR': '2', 'C_DATE': '2019-02-15 02:00:00',
-                 'C_NEW_COLUMN': 'data 2'}
+                 'C_ISO_DATE': datetime.date(2019, 2, 15), 'C_NEW_COLUMN': 'data 2'}
             ]
         )
 
@@ -661,12 +661,12 @@ class TestIntegration(unittest.TestCase):
             table_two,
             [
                 {previous_column_name: datetime.datetime(2019, 2, 1, 15, 12, 45), 'C_INT': 1, 'C_PK': 1,
-                 'C_VARCHAR': '1', 'C_DATE': None, 'C_NEW_COLUMN': None},
+                 'C_VARCHAR': '1', 'C_DATE': None, 'C_ISO_DATE': datetime.date(2019, 2, 1), 'C_NEW_COLUMN': None},
                 {previous_column_name: datetime.datetime(2019, 2, 10, 2), 'C_INT': 2, 'C_PK': 2, 'C_VARCHAR': '2',
-                 'C_DATE': '2019-02-12 02:00:00', 'C_NEW_COLUMN': 'data 1'},
+                 'C_DATE': '2019-02-12 02:00:00', 'C_ISO_DATE': datetime.date(2019, 2, 10), 'C_NEW_COLUMN': 'data 1'},
                 {previous_column_name: None, 'C_INT': 3, 'C_PK': 3, 'C_VARCHAR': '2', 'C_DATE': '2019-02-15 02:00:00',
-                 'C_NEW_COLUMN': 'data 2'}
-            ]
+                 'C_ISO_DATE': datetime.date(2019, 2, 15), 'C_NEW_COLUMN': 'data 2'}
+            ]            
         )
 
         # Table three should have a renamed columns and a new column
