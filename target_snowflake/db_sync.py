@@ -82,6 +82,8 @@ def column_type(schema_property):
     # Every date-time JSON value is currently mapped to TIMESTAMP_NTZ
     elif property_format == 'date-time':
         col_type = 'timestamp_ntz'
+    elif property_format == 'date':
+        col_type = 'date'
     elif property_format == 'time':
         col_type = 'time'
     elif property_format == 'binary':
@@ -604,7 +606,7 @@ class DbSync:
 
                 # Run everything in one transaction
                 try:
-                    tables = self.query(queries, max_records=9999)
+                    tables = self.query(queries, max_records=99999)
 
                 # Catch exception when schema not exists and SHOW TABLES throws a ProgrammingError
                 # Regexp to extract snowflake error code and message from the exception message
