@@ -14,9 +14,9 @@ from jsonschema import Draft7Validator, FormatChecker
 from singer import get_logger
 from datetime import datetime, timedelta
 
-import target_snowflake.file_formats.csv as csv
-import target_snowflake.file_formats.parquet as parquet
-import target_snowflake.stream_utils as stream_utils
+from target_snowflake.file_formats import csv
+from target_snowflake.file_formats import parquet
+from target_snowflake import stream_utils
 
 from target_snowflake.db_sync import DbSync
 from target_snowflake.file_format import FileFormatTypes
@@ -57,7 +57,7 @@ def emit_state(state):
     if state is not None:
         line = json.dumps(state)
         LOGGER.info('Emitting state %s', line)
-        sys.stdout.write("{}\n".format(line))
+        sys.stdout.write(f"{line}\n")
         sys.stdout.flush()
 
 
@@ -157,7 +157,7 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
 
             primary_key_string = stream_to_sync[stream].record_primary_key_string(o['record'])
             if not primary_key_string:
-                primary_key_string = 'RID-{}'.format(total_row_count[stream])
+                primary_key_string = f'RID-{total_row_count[stream]}'
 
             if stream not in records_to_load:
                 records_to_load[stream] = {}
@@ -470,7 +470,7 @@ def flush_records(stream: str,
     if archive_load_files:
         stream_name_parts = stream_utils.stream_name_to_dict(stream)
         if 'schema_name' not in stream_name_parts or 'table_name' not in stream_name_parts:
-            raise Exception("Failed to extract schema and table names from stream '{}'".format(stream))
+            raise Exception(f"Failed to extract schema and table names from stream '{stream}'")
 
         archive_schema = stream_name_parts['schema_name']
         archive_table = stream_name_parts['table_name']
@@ -492,7 +492,7 @@ def flush_records(stream: str,
 
         # Use same file name as in import
         archive_file = os.path.basename(s3_key)
-        archive_key = "{}/{}/{}".format(archive_tap, archive_table, archive_file)
+        archive_key = f"{archive_tap}/{archive_table}/{archive_file}"
 
         db_sync.copy_to_archive(s3_key, archive_key, archive_metadata)
 
@@ -507,7 +507,7 @@ def main():
     args = arg_parser.parse_args()
 
     if args.config:
-        with open(args.config) as config_input:
+        with open(args.config, encoding="utf8") as config_input:
             config = json.load(config_input)
     else:
         config = {}
