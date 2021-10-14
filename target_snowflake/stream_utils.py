@@ -120,7 +120,7 @@ def stream_name_to_dict(stream_name, separator='-'):
 def get_incremental_key(singer_msg: Dict):
     """Derive incremental key from a Singer message dictionary"""
     if singer_msg['type'] != "SCHEMA":
-        raise UnexpectedMessageTypeException("Expecting type SCHEMA, got {}".format(singer_msg['type']))
+        raise UnexpectedMessageTypeException(f"Expecting type SCHEMA, got {singer_msg['type']}")
 
     if 'bookmark_properties' in singer_msg and len(singer_msg['bookmark_properties']) > 0:
         col = singer_msg['bookmark_properties'][0]
