@@ -6,7 +6,7 @@ import boto3
 import datetime
 
 from snowflake.connector.encryption_util import SnowflakeEncryptionUtil
-from snowflake.connector.remote_storage_util import SnowflakeFileEncryptionMaterial
+from snowflake.connector.storage_client import SnowflakeFileEncryptionMaterial
 
 from .base_upload_client import BaseUploadClient
 
