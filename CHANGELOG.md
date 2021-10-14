@@ -1,3 +1,8 @@
+1.14.1 (2021-10-14)
+-------------------
+- Increase `max_records` when selecting columns by an order of magnitude
+- Bumping dependencies
+
 1.14.0 (2021-09-30)
 -------------------
 - Add support for `date` property format
