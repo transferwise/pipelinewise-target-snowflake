@@ -1,3 +1,8 @@
+1.14.0 (2021-09-30)
+-------------------
+- Add support for `date` property format
+- Stop logging record when error happens
+
 1.13.1 (2021-07-15)
 -------------------
 - Fixed an issue with S3 metadata required for decryption not being included in archived load files.

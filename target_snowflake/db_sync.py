@@ -7,8 +7,8 @@ import re
 import time
 
 from singer import get_logger
-import target_snowflake.flattening as flattening
-import target_snowflake.stream_utils as stream_utils
+from target_snowflake import flattening
+from target_snowflake import stream_utils
 from target_snowflake.file_format import FileFormat, FileFormatTypes
 
 from target_snowflake.exceptions import TooManyRecordsException, PrimaryKeyNotFoundException
@@ -55,7 +55,7 @@ def validate_config(config):
     # Check if mandatory keys exist
     for k in required_config_keys:
         if not config.get(k, None):
-            errors.append("Required key is missing from config: [{}]".format(k))
+            errors.append(f"Required key is missing from config: [{k}]")
 
     # Check target schema config
     config_default_target_schema = config.get('default_target_schema', None)
@@ -82,6 +82,8 @@ def column_type(schema_property):
     # Every date-time JSON value is currently mapped to TIMESTAMP_NTZ
     elif property_format == 'date-time':
         col_type = 'timestamp_ntz'
+    elif property_format == 'date':
+        col_type = 'date'
     elif property_format == 'time':
         col_type = 'time'
     elif property_format == 'binary':
@@ -112,15 +114,15 @@ def column_trans(schema_property):
 
 def safe_column_name(name):
     """Generate SQL friendly column name"""
-    return '"{}"'.format(name).upper()
+    return f'"{name}"'.upper()
 
 def json_element_name(name):
     """Generate SQL friendly semi structured element reference name"""
-    return '"{}"'.format(name)
+    return f'"{name}"'
 
 def column_clause(name, schema_property):
     """Generate DDL column name with column type string"""
-    return '{} {}'.format(safe_column_name(name), column_type(schema_property))
+    return f'{safe_column_name(name)} {column_type(schema_property)}'
 
 
 def primary_column_names(stream_schema_message):
@@ -248,7 +250,7 @@ class DbSync:
                 raise Exception(
                     "Target schema name not defined in config. "
                     "Neither 'default_target_schema' (string) nor 'schema_mapping' (object) defines "
-                    "target schema for {} stream.".format(stream_name))
+                    f"target schema for {stream_name} stream.")
 
             #  Define grantees
             #  ---------------
@@ -371,7 +373,7 @@ class DbSync:
         sf_table_name = table_name.replace('.', '_').replace('-', '_').lower()
 
         if is_temporary:
-            sf_table_name = '{}_temp'.format(sf_table_name)
+            sf_table_name = f'{sf_table_name}_temp'
 
         if without_schema:
             return f'"{sf_table_name.upper()}"'
@@ -386,9 +388,10 @@ class DbSync:
         try:
             key_props = [str(flatten[p]) for p in self.stream_schema_message['key_properties']]
         except Exception as exc:
-            raise PrimaryKeyNotFoundException('Cannot find {} primary key(s) in record. Available fields: {}'.format(
-                self.stream_schema_message['key_properties'],
-                list(flatten.keys()))) from exc
+            pks = self.stream_schema_message['key_properties']
+            fields = list(flatten.keys())
+            raise PrimaryKeyNotFoundException(f"Cannot find {pks} primary key(s) in record. "
+                                              f"Available fields: {fields}") from exc
         return ','.join(key_props)
 
     def put_to_stage(self, file, stream, count, temp_dir=None):
@@ -424,9 +427,9 @@ class DbSync:
         # Determine prefix to use in archive s3 bucket
         default_archive_prefix = 'archive'
         archive_prefix = self.connection_config.get('archive_load_files_s3_prefix', default_archive_prefix)
-        prefixed_archive_key = '{}/{}'.format(archive_prefix, s3_archive_key)
+        prefixed_archive_key = f'{archive_prefix}/{s3_archive_key}'
 
-        copy_source = '{}/{}'.format(source_bucket, s3_source_key)
+        copy_source = f'{source_bucket}/{s3_source_key}'
 
         self.logger.info('Copying %s to archive location %s', copy_source, prefixed_archive_key)
         self.upload_client.copy_object(copy_source, archive_bucket, prefixed_archive_key, s3_archive_metadata)
@@ -504,7 +507,7 @@ class DbSync:
         """Generate SQL join condition on primary keys for merge SQL statements"""
         stream_schema_message = self.stream_schema_message
         names = primary_column_names(stream_schema_message)
-        return ' AND '.join(['s.{0} = t.{0}'.format(c) for c in names])
+        return ' AND '.join([f's.{c} = t.{c}' for c in names])
 
     def column_names(self):
         """Get list of columns in the schema"""
@@ -521,26 +524,27 @@ class DbSync:
             for (name, schema) in self.flatten_schema.items()
         ]
 
-        primary_key = ["PRIMARY KEY ({})".format(', '.join(primary_column_names(stream_schema_message)))] \
-            if len(stream_schema_message.get('key_properties', [])) > 0 else []
+        primary_key = []
+        if len(stream_schema_message.get('key_properties', [])) > 0:
+            pk_list = ', '.join(primary_column_names(stream_schema_message))
+            primary_key = [f"PRIMARY KEY({pk_list})"]
 
-        return 'CREATE {}TABLE IF NOT EXISTS {} ({}) {}'.format(
-            'TEMP ' if is_temporary else '',
-            self.table_name(stream_schema_message['stream'], is_temporary),
-            ', '.join(columns + primary_key),
-            'data_retention_time_in_days = 0 ' if is_temporary else 'data_retention_time_in_days = 1 '
-        )
+        p_temp = 'TEMP ' if is_temporary else ''
+        p_table_name = self.table_name(stream_schema_message['stream'], is_temporary)
+        p_columns = ', '.join(columns + primary_key)
+        p_extra = 'data_retention_time_in_days = 0 ' if is_temporary else 'data_retention_time_in_days = 1 '
+        return f'CREATE {p_temp}TABLE IF NOT EXISTS {p_table_name} ({p_columns}) {p_extra}'
 
     def grant_usage_on_schema(self, schema_name, grantee):
         """Grant usage on schema"""
-        query = "GRANT USAGE ON SCHEMA {} TO ROLE {}".format(schema_name, grantee)
+        query = f"GRANT USAGE ON SCHEMA {schema_name} TO ROLE {grantee}"
         self.logger.info("Granting USAGE privilege on '%s' schema to '%s'... %s", schema_name, grantee, query)
         self.query(query)
 
     # pylint: disable=invalid-name
     def grant_select_on_all_tables_in_schema(self, schema_name, grantee):
         """Grant select on all tables in schema"""
-        query = "GRANT SELECT ON ALL TABLES IN SCHEMA {} TO ROLE {}".format(schema_name, grantee)
+        query = f"GRANT SELECT ON ALL TABLES IN SCHEMA {schema_name} TO ROLE {grantee}"
         self.logger.info(
             "Granting SELECT ON ALL TABLES privilege on '%s' schema to '%s'... %s", schema_name, grantee, query)
         self.query(query)
@@ -557,7 +561,7 @@ class DbSync:
     def delete_rows(self, stream):
         """Hard delete rows from target table"""
         table = self.table_name(stream, False)
-        query = "DELETE FROM {} WHERE _sdc_deleted_at IS NOT NULL".format(table)
+        query = f"DELETE FROM {table} WHERE _sdc_deleted_at IS NOT NULL"
         self.logger.info("Deleting rows from '%s' table... %s", table, query)
         self.logger.info('DELETE %d', len(self.query(query)))
 
@@ -574,7 +578,7 @@ class DbSync:
             schema_rows = self.query(f"SHOW SCHEMAS LIKE '{schema_name.upper()}'")
 
         if len(schema_rows) == 0:
-            query = "CREATE SCHEMA IF NOT EXISTS {}".format(schema_name)
+            query = f"CREATE SCHEMA IF NOT EXISTS {schema_name}"
             self.logger.info("Schema '%s' does not exist. Creating... %s", schema_name, query)
             self.query(query)
 
@@ -604,7 +608,7 @@ class DbSync:
 
                 # Run everything in one transaction
                 try:
-                    tables = self.query(queries, max_records=9999)
+                    tables = self.query(queries, max_records=99999)
 
                 # Catch exception when schema not exists and SHOW TABLES throws a ProgrammingError
                 # Regexp to extract snowflake error code and message from the exception message
@@ -736,22 +740,23 @@ class DbSync:
 
     def drop_column(self, column_name, stream):
         """Drops column from an existing table"""
-        drop_column = "ALTER TABLE {} DROP COLUMN {}".format(self.table_name(stream, False), column_name)
+        drop_column = f"ALTER TABLE {self.table_name(stream, False)} DROP COLUMN {column_name}"
         self.logger.info('Dropping column: %s', drop_column)
         self.query(drop_column)
 
     def version_column(self, column_name, stream):
         """Versions a column in an existing table"""
-        version_column = "ALTER TABLE {} RENAME COLUMN {} TO \"{}_{}\"".format(self.table_name(stream, False),
-                                                                               column_name,
-                                                                               column_name.replace("\"", ""),
-                                                                               time.strftime("%Y%m%d_%H%M"))
+        p_table_name = self.table_name(stream, False)
+        p_column_name = column_name.replace("\"", "")
+        p_ver_time = time.strftime("%Y%m%d_%H%M")
+
+        version_column = f"ALTER TABLE {p_table_name} RENAME COLUMN {column_name} TO \"{p_column_name}_{p_ver_time}\""
         self.logger.info('Versioning column: %s', version_column)
         self.query(version_column)
 
     def add_column(self, column, stream):
         """Adds a new column to an existing table"""
-        add_column = "ALTER TABLE {} ADD COLUMN {}".format(self.table_name(stream, False), column)
+        add_column = f"ALTER TABLE {self.table_name(stream, False)} ADD COLUMN {column}"
         self.logger.info('Adding column: %s', add_column)
         self.query(add_column)
 
