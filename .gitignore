@@ -14,6 +14,7 @@ __pycache__/
 *~
 dist/
 .coverage
+.mypy_cache
 
 # Singer JSON files
 properties.json
