@@ -9,7 +9,7 @@ import time
 from singer import get_logger
 from target_snowflake import flattening
 from target_snowflake import stream_utils
-from target_snowflake.file_format import FileFormat, FileFormatTypes
+from target_snowflake.file_format import FileFormat, FileFormatTypes, InlineFileFormat
 
 from target_snowflake.exceptions import TooManyRecordsException, PrimaryKeyNotFoundException
 from target_snowflake.upload_clients.s3_upload_client import S3UploadClient
@@ -210,7 +210,10 @@ class DbSync:
 
         self.schema_name = None
         self.grantees = None
-        self.file_format = FileFormat(self.connection_config['file_format'], self.query, file_format_type)
+        if 'file_format' in self.connection_config:
+            self.file_format = FileFormat(self.connection_config['file_format'], self.query, file_format_type)
+        else:
+            self.file_format = InlineFileFormat(file_format_type or FileFormatTypes.CSV)
 
         if not self.connection_config.get('stage') and self.file_format.file_format_type == FileFormatTypes.PARQUET:
             self.logger.error("Table stages with Parquet file format is not suppported. "
@@ -467,8 +470,7 @@ class DbSync:
                     merge_sql = self.file_format.formatter.create_merge_sql(table_name=self.table_name(stream, False),
                                                                             stage_name=self.get_stage_name(stream),
                                                                             s3_key=s3_key,
-                                                                            file_format_name=
-                                                                                self.connection_config['file_format'],
+                                                                            file_format=self.file_format,
                                                                             columns=columns_with_trans,
                                                                             pk_merge_condition=
                                                                                 self.primary_key_merge_condition())
@@ -486,8 +488,7 @@ class DbSync:
                     copy_sql = self.file_format.formatter.create_copy_sql(table_name=self.table_name(stream, False),
                                                                           stage_name=self.get_stage_name(stream),
                                                                           s3_key=s3_key,
-                                                                          file_format_name=
-                                                                            self.connection_config['file_format'],
+                                                                          file_format=self.file_format,
                                                                           columns=columns_with_trans)
                     self.logger.debug('Running query: %s', copy_sql)
                     cur.execute(copy_sql)
