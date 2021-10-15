@@ -27,7 +27,6 @@ def validate_config(config):
         'warehouse',
         's3_bucket',
         'stage',
-        'file_format'
     ]
 
     snowflake_required_config_keys = [
@@ -36,7 +35,6 @@ def validate_config(config):
         'user',
         'password',
         'warehouse',
-        'file_format'
     ]
 
     required_config_keys = []
