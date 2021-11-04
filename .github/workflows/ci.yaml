@@ -38,7 +38,7 @@ jobs:
     environment: ci_tests
     strategy:
       matrix:
-        python-version: [ 3.8 ]
+        python-version: [ 3.7 ]
     concurrency:
       group: integration_tests-${{ github.head_ref }}
       cancel-in-progress: true
