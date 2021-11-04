@@ -14,4 +14,4 @@ unit_test:
 
 integration_test:
 	. ./venv/bin/activate ;\
-	pytest tests/integration/ -vv --cov target_snowflake --cov-fail-under=86
+	pytest tests/integration/ -vvx --cov target_snowflake --cov-fail-under=86
