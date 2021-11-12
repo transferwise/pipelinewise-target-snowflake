@@ -48,11 +48,13 @@ def flatten_schema(d, parent_key=None, sep='__', level=0, max_level=0):
     for k, v in d['properties'].items():
         new_key = flatten_key(k, parent_key, sep)
         if 'type' in v.keys():
+            # This is probably skipping over values
             if 'object' in v['type'] and 'properties' in v and level < max_level:
                 items.extend(flatten_schema(v, parent_key + [k], sep=sep, level=level + 1, max_level=max_level).items())
             else:
                 items.append((new_key, v))
         else:
+            # handle situations where, e.g., an `anyOf` value is passed
             if len(v.values()) > 0:
                 if list(v.values())[0][0]['type'] == 'string':
                     list(v.values())[0][0]['type'] = ['null', 'string']
@@ -62,6 +64,9 @@ def flatten_schema(d, parent_key=None, sep='__', level=0, max_level=0):
                     items.append((new_key, list(v.values())[0][0]))
                 elif list(v.values())[0][0]['type'] == 'object':
                     list(v.values())[0][0]['type'] = ['null', 'object']
+                    items.append((new_key, list(v.values())[0][0]))
+                else:
+                    list(v.values())[0][0]['type'] = ['null', 'string']
                     items.append((new_key, list(v.values())[0][0]))
 
     key_func = lambda item: item[0]
