@@ -61,6 +61,24 @@ class TestFlattening(unittest.TestCase):
             }
         }
 
+        not_nested_schema_with_anyof_property_type = {
+            "type": "object",
+            "properties": {
+                "object_col": {"anyOf": [{"type": "object"}, {"type": ["null", "string"]}]},
+                "array_col": {"anyOf": [{"type": "array"}, {"type": ["null", "string"]}]},
+                "bool_col": {"anyOf": [{"type": ["boolean", "null"]}, {"type": ["null", "string"]}]}
+            }
+        }
+        flattened_schema_with_anyof_property_type = {
+            "object_col": {"type": ["null", "object"]},
+            "array_col": {"type": ["null", "array"]},
+            "bool_col": {"type": ["null", "string"]}
+        }
+
+        # NO FLATTENING - Schema with anyOf properties should be cast to a single data type
+        self.assertEqual(flatten_schema(not_nested_schema_with_anyof_property_type),
+                         flattened_schema_with_anyof_property_type)
+
         # NO FLATTENING - Schema with object type property but without further properties should be a plain dictionary
         # No flattening (default)
         self.assertEqual(flatten_schema(nested_schema_with_properties), nested_schema_with_properties['properties'])
