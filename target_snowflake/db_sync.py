@@ -370,8 +370,8 @@ class DbSync:
 
         stream_dict = stream_utils.stream_name_to_dict(stream_name)
         table_name = stream_dict['table_name']
-        sf_table_name = table_name.replace('.', '_').replace('-', '_').lower()
-
+        sf_table_name = 'test_' + table_name.replace('.', '_').replace('-', '_').lower()
+        
         if is_temporary:
             sf_table_name = f'{sf_table_name}_temp'
 
