@@ -8,7 +8,7 @@ import os
 import sys
 import copy
 
-from typing import Dict, List
+from typing import Dict, List, Optional
 from joblib import Parallel, delayed, parallel_backend
 from jsonschema import Draft7Validator, FormatChecker
 from singer import get_logger
@@ -52,7 +52,7 @@ def add_metadata_columns_to_schema(schema_message):
     return extended_schema_message
 
 
-def emit_state(state):
+def emit_state(state: Optional[Dict]):
     """Print state to stdout"""
     if state is not None:
         line = json.dumps(state)
@@ -311,8 +311,8 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
             LOGGER.debug('Setting state to %s', o['value'])
             state = o['value']
 
-            # Initially set flushed state
-            if not flushed_state:
+            # # set flushed state if it's not defined or there are no records so far
+            if not flushed_state or sum(row_count.values()) == 0:
                 flushed_state = copy.deepcopy(state)
 
         else:
