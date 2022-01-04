@@ -14,23 +14,25 @@ setup(name="pipelinewise-target-snowflake",
       url='https://github.com/transferwise/pipelinewise-target-snowflake',
       classifiers=[
           'License :: OSI Approved :: Apache Software License',
-          'Programming Language :: Python :: 3 :: Only'
+          'Programming Language :: Python :: 3 :: Only',
+          'Programming Language :: Python :: 3.6',
+          'Programming Language :: Python :: 3.7',
+          'Programming Language :: Python :: 3.8',
       ],
       py_modules=["target_snowflake"],
       install_requires=[
           'pipelinewise-singer-python==1.*',
-          'snowflake-connector-python[pandas]==2.4.6',
+          'snowflake-connector-python[pandas]==2.7.*',
           'inflection==0.5.1',
           'joblib==1.1.0',
-          'numpy<1.21.0',
-          'python-dateutil==2.8.2'
+          'boto3==1.20.*',
       ],
       extras_require={
           "test": [
-              "pylint==2.11.1",
+              "pylint==2.12.*",
               'pytest==6.2.5',
               'pytest-cov==3.0.0',
-              "python-dotenv==0.19.1"
+              "python-dotenv==0.19.*"
           ]
       },
       entry_points="""
