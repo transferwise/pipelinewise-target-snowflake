@@ -221,12 +221,12 @@ class TestDBSync(unittest.TestCase):
         self.assertEqual(db_sync.DbSync({**minimal_config,
                                          **external_stage_with_parallel}).connection_config['parallelism'], 5)
 
-        # Using snowflake table stages should enforce single thread parallelism
+        # Using table stages should allow parallelism
         table_stage_with_parallel = {
             'parallelism': 5
         }
         self.assertEqual(db_sync.DbSync({**minimal_config,
-                                         **table_stage_with_parallel}).connection_config['parallelism'], 1)
+                                         **table_stage_with_parallel}).connection_config['parallelism'], 5)
 
     @patch('target_snowflake.upload_clients.s3_upload_client.S3UploadClient.copy_object')
     @patch('target_snowflake.db_sync.DbSync.query')

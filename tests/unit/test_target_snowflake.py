@@ -1,7 +1,10 @@
+import io
+import json
 import unittest
 import os
 import itertools
 
+from contextlib import redirect_stdout
 from datetime import datetime, timedelta
 from unittest.mock import patch
 
@@ -16,6 +19,7 @@ class TestTargetSnowflake(unittest.TestCase):
 
     def setUp(self):
         self.config = {}
+        self.maxDiff = None
 
     @patch('target_snowflake.flush_streams')
     @patch('target_snowflake.DbSync')
@@ -85,7 +89,7 @@ class TestTargetSnowflake(unittest.TestCase):
         target_snowflake.persist_lines(self.config, lines)
 
         # Expecting flush after every records + 1 at the end
-        assert flush_streams_mock.call_count == 41
+        self.assertEqual(flush_streams_mock.call_count, 41)
 
     @patch('target_snowflake.DbSync')
     @patch('target_snowflake.os.remove')
@@ -105,9 +109,9 @@ class TestTargetSnowflake(unittest.TestCase):
         target_snowflake.persist_lines(self.config, lines)
 
         copy_to_archive_args = instance.copy_to_archive.call_args[0]
-        assert copy_to_archive_args[0] == 'some-s3-folder/some-name_date_batch_hash.csg.gz'
-        assert copy_to_archive_args[1] == 'test_tap_id/test_simple_table/some-name_date_batch_hash.csg.gz'
-        assert copy_to_archive_args[2] == {
+        self.assertEqual(copy_to_archive_args[0], 'some-s3-folder/some-name_date_batch_hash.csg.gz')
+        self.assertEqual(copy_to_archive_args[1], 'test_tap_id/test_simple_table/some-name_date_batch_hash.csg.gz')
+        self.assertDictEqual(copy_to_archive_args[2], {
             'tap': 'test_tap_id',
             'schema': 'tap_mysql_test',
             'table': 'test_simple_table',
@@ -115,7 +119,7 @@ class TestTargetSnowflake(unittest.TestCase):
             'incremental-key': 'id',
             'incremental-key-min': '1',
             'incremental-key-max': '5'
-        }
+        })
 
     @patch('target_snowflake.DbSync')
     @patch('target_snowflake.os.remove')
@@ -134,11 +138,39 @@ class TestTargetSnowflake(unittest.TestCase):
         target_snowflake.persist_lines(self.config, lines)
 
         copy_to_archive_args = instance.copy_to_archive.call_args[0]
-        assert copy_to_archive_args[0] == 'some-s3-folder/some-name_date_batch_hash.csg.gz'
-        assert copy_to_archive_args[1] == 'test_tap_id/logical1_table2/some-name_date_batch_hash.csg.gz'
-        assert copy_to_archive_args[2] == {
+        self.assertEqual(copy_to_archive_args[0], 'some-s3-folder/some-name_date_batch_hash.csg.gz')
+        self.assertEqual(copy_to_archive_args[1], 'test_tap_id/logical1_table2/some-name_date_batch_hash.csg.gz')
+        self.assertDictEqual(copy_to_archive_args[2], {
             'tap': 'test_tap_id',
             'schema': 'logical1',
             'table': 'logical1_table2',
             'archived-by': 'pipelinewise_target_snowflake'
-        }
+        })
+
+    @patch('target_snowflake.flush_streams')
+    @patch('target_snowflake.DbSync')
+    def test_persist_lines_with_only_state_messages(self, dbSync_mock, flush_streams_mock):
+        """
+        Given only state messages, target should emit the last one
+        """
+
+        self.config['batch_size_rows'] = 5
+
+        with open(f'{os.path.dirname(__file__)}/resources/streams_only_state.json', 'r') as f:
+            lines = f.readlines()
+
+        instance = dbSync_mock.return_value
+        instance.create_schema_if_not_exists.return_value = None
+        instance.sync_table.return_value = None
+
+        # catch stdout
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            target_snowflake.persist_lines(self.config, lines)
+
+        flush_streams_mock.assert_not_called()
+
+        self.assertEqual(
+            buf.getvalue().strip(),
+            '{"bookmarks": {"tap_mysql_test-test_simple_table": {"replication_key": "id", '
+            '"replication_key_value": 100, "version": 1}}}')

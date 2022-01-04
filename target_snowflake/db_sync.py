@@ -282,17 +282,6 @@ class DbSync:
             self.upload_client = S3UploadClient(connection_config)
         # Use table stage
         else:
-            # Enforce no parallelism with table stages.
-            # The PUT command in the snowflake-python-connector is using boto3.create_client() function which is not
-            # thread safe. More info at https://github.com/boto/boto3/issues/801
-            if connection_config.get('parallelism') != 1:
-                self.logger.warning('Enforcing to use single thread parallelism with table stages. '
-                                    'The PUT command in the snowflake-python-connector is using boto3 create_client() '
-                                    'function which is not thread safe. '
-                                    'If you need parallel file upload please use external stage by adding s3_bucket '
-                                    'key to the configuration')
-                connection_config['parallelism'] = 1
-
             self.upload_client = SnowflakeUploadClient(connection_config, self)
 
     def open_connection(self):
