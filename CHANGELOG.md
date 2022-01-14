@@ -1,10 +1,10 @@
 1.15.0 (2022-01-14)
 -------------------
 
-*New*
+*Added*
 - Support parallelism for table stages
 
-*Fix*
+*Fixes*
 - Emit last encountered state message if there are no records.
 
 *Changes*
