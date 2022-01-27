@@ -5,7 +5,7 @@ import pandas
 from typing import Dict, List
 from tempfile import mkstemp
 
-import target_snowflake.flattening as flattening
+from target_snowflake import flattening
 
 
 def create_copy_sql(table_name: str,
@@ -14,18 +14,13 @@ def create_copy_sql(table_name: str,
                     file_format_name: str,
                     columns: List):
     """Generate a Parquet compatible snowflake COPY INTO command"""
-    return "COPY INTO {} ({}) " \
-           "FROM (SELECT {} FROM '@{}/{}') " \
-           "FILE_FORMAT = (format_name='{}')".format(
-        table_name,
-        ', '.join([c['name'] for c in columns]),
-        ', '.join(["{}($1:{}) {}".format(c['trans'],
-                                         c['json_element_name'],
-                                         c['name'])
-                   for i, c in enumerate(columns)]),
-        stage_name,
-        s3_key,
-        file_format_name)
+    p_target_columns = ', '.join([c['name'] for c in columns])
+    p_source_columns = ', '.join([f"{c['trans']}($1:{c['json_element_name']}) {c['name']}"
+                                  for i, c in enumerate(columns)])
+
+    return f"COPY INTO {table_name} ({p_target_columns}) " \
+           f"FROM (SELECT {p_source_columns} FROM '@{stage_name}/{s3_key}') " \
+           f"FILE_FORMAT = (format_name='{file_format_name}')"
 
 
 def create_merge_sql(table_name: str,
@@ -35,27 +30,21 @@ def create_merge_sql(table_name: str,
                      columns: List,
                      pk_merge_condition: str) -> str:
     """Generate a Parquet compatible snowflake MERGE INTO command"""
-    return "MERGE INTO {} t USING (" \
-           "SELECT {} " \
-           "FROM '@{}/{}' " \
-           "(FILE_FORMAT => '{}')) s " \
-           "ON {} " \
-           "WHEN MATCHED THEN UPDATE SET {} " \
+    p_source_columns = ', '.join([f"{c['trans']}($1:{c['json_element_name']}) {c['name']}"
+                                  for i, c in enumerate(columns)])
+    p_update = ', '.join([f"{c['name']}=s.{c['name']}" for c in columns])
+    p_insert_cols = ', '.join([c['name'] for c in columns])
+    p_insert_values = ', '.join([f"s.{c['name']}" for c in columns])
+
+    return f"MERGE INTO {table_name} t USING (" \
+           f"SELECT {p_source_columns} " \
+           f"FROM '@{stage_name}/{s3_key}' " \
+           f"(FILE_FORMAT => '{file_format_name}')) s " \
+           f"ON {pk_merge_condition} " \
+           f"WHEN MATCHED THEN UPDATE SET {p_update} " \
            "WHEN NOT MATCHED THEN " \
-           "INSERT ({}) " \
-           "VALUES ({})".format(
-        table_name,
-        ', '.join(["{}($1:{}) {}".format(c['trans'],
-                                         c['json_element_name'],
-                                         c['name'])
-                   for i, c in enumerate(columns)]),
-        stage_name,
-        s3_key,
-        file_format_name,
-        pk_merge_condition,
-        ', '.join(['{0}=s.{0}'.format(c['name']) for c in columns]),
-        ', '.join([c['name'] for c in columns]),
-        ', '.join(['s.{}'.format(c['name']) for c in columns]))
+           f"INSERT ({p_insert_cols}) " \
+           f"VALUES ({p_insert_values})"
 
 
 def records_to_dataframe(records: Dict,

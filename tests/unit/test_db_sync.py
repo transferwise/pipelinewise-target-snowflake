@@ -19,6 +19,8 @@ class TestDBSync(unittest.TestCase):
             'str_or_null': {"type": ["string", "null"]},
             'dt': {"type": ["string"], "format": "date-time"},
             'dt_or_null': {"type": ["string", "null"], "format": "date-time"},
+            'd': {"type": ["string"], "format": "date"},
+            'd_or_null': {"type": ["string", "null"], "format": "date"},            
             'time': {"type": ["string"], "format": "time"},
             'time_or_null': {"type": ["string", "null"], "format": "time"},
             'binary': {"type": ["string", "null"], "format": "binary"},
@@ -99,6 +101,8 @@ class TestDBSync(unittest.TestCase):
             'str_or_null': 'text',
             'dt': 'timestamp_ntz',
             'dt_or_null': 'timestamp_ntz',
+            'd': 'date',
+            'd_or_null': 'date',            
             'time': 'time',
             'time_or_null': 'time',
             'binary': 'binary',
@@ -124,6 +128,8 @@ class TestDBSync(unittest.TestCase):
             'str_or_null': '',
             'dt': '',
             'dt_or_null': '',
+            'd': '',
+            'd_or_null': '',            
             'time': '',
             'time_or_null': '',
             'binary': 'to_binary',
@@ -215,12 +221,12 @@ class TestDBSync(unittest.TestCase):
         self.assertEqual(db_sync.DbSync({**minimal_config,
                                          **external_stage_with_parallel}).connection_config['parallelism'], 5)
 
-        # Using snowflake table stages should enforce single thread parallelism
+        # Using table stages should allow parallelism
         table_stage_with_parallel = {
             'parallelism': 5
         }
         self.assertEqual(db_sync.DbSync({**minimal_config,
-                                         **table_stage_with_parallel}).connection_config['parallelism'], 1)
+                                         **table_stage_with_parallel}).connection_config['parallelism'], 5)
 
     @patch('target_snowflake.upload_clients.s3_upload_client.S3UploadClient.copy_object')
     @patch('target_snowflake.db_sync.DbSync.query')

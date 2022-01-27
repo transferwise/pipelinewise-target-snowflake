@@ -1,3 +1,27 @@
+1.15.0 (2022-01-14)
+-------------------
+
+*Added*
+- Support parallelism for table stages
+
+*Fixes*
+- Emit last encountered state message if there are no records.
+
+*Changes*
+- Migrate CI to github actions
+- Bump dependencies
+
+
+1.14.1 (2021-10-14)
+-------------------
+- Increase `max_records` when selecting columns by an order of magnitude
+- Bumping dependencies
+
+1.14.0 (2021-09-30)
+-------------------
+- Add support for `date` property format
+- Stop logging record when error happens
+
 1.13.1 (2021-07-15)
 -------------------
 - Fixed an issue with S3 metadata required for decryption not being included in archived load files.

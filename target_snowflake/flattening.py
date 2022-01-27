@@ -68,7 +68,7 @@ def flatten_schema(d, parent_key=None, sep='__', level=0, max_level=0):
     sorted_items = sorted(items, key=key_func)
     for k, g in itertools.groupby(sorted_items, key=key_func):
         if len(list(g)) > 1:
-            raise ValueError('Duplicate column name produced in schema: {}'.format(k))
+            raise ValueError(f'Duplicate column name produced in schema: {k}')
 
     return dict(sorted_items)
 

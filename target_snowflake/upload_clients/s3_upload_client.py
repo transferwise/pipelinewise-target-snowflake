@@ -6,7 +6,7 @@ import boto3
 import datetime
 
 from snowflake.connector.encryption_util import SnowflakeEncryptionUtil
-from snowflake.connector.remote_storage_util import SnowflakeFileEncryptionMaterial
+from snowflake.connector.storage_client import SnowflakeFileEncryptionMaterial
 
 from .base_upload_client import BaseUploadClient
 
@@ -50,11 +50,9 @@ class S3UploadClient(BaseUploadClient):
         bucket = self.connection_config['s3_bucket']
         s3_acl = self.connection_config.get('s3_acl')
         s3_key_prefix = self.connection_config.get('s3_key_prefix', '')
-        s3_key = "{}pipelinewise_{}_{}_{}".format(s3_key_prefix,
-                                                  stream,
-                                                  datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f"),
-                                                  os.path.basename(file))
+        timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f")
 
+        s3_key = f"{s3_key_prefix}pipelinewise_{stream}_{timestamp}_{os.path.basename(file)}"
         self.logger.info('Target S3 bucket: %s, local file: %s, S3 key: %s', bucket, file, s3_key)
 
         # Encrypt csv if client side encryption enabled
@@ -73,7 +71,7 @@ class S3UploadClient(BaseUploadClient):
             )
 
             # Upload to s3
-            extra_args = {'ACL': s3_acl} if s3_acl else dict()
+            extra_args = {'ACL': s3_acl} if s3_acl else {}
 
             # Send key and iv in the metadata, that will be required to decrypt and upload the encrypted file
             extra_args['Metadata'] = {
