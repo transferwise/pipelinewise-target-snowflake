@@ -242,13 +242,10 @@ To develop with docker:
 ```
 docker build . -t ppw-snowflake-target
 ```
-3. Now you can run your tests with `docker run --env-file .docker-env ppw-snowflake-target <command>`, where `<command>` is one of:
-* `test --unit` (runs unit tests)
-* `test --integration` (runs integration tests)
-* `test` (runs both unit and integration tests)
-* `lint` (runs pylint)
-
-You can also combine them, so `test --unit lint` will run unit tests and then lint your code. 
+3. Now you can run `docker run --rm -it --env-file .docker-env -v $(pwd):/app ppw-snowflake-target`, to run whatever commands are necessary while making edits to the source files in your choice of IDE
+* `pytest` to run all tests
+* `pytest <dir>` to run test in the specified directory
+* `pylint target_snowflake` to run the linter (probably doesn't pass due to upstream changes)
 
 ## License
 
