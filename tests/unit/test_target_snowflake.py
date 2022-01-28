@@ -193,4 +193,3 @@ class TestTargetSnowflake(unittest.TestCase):
 
         target_snowflake.persist_lines(self.config, lines)
         flush_streams_mock.assert_called_once()
-        assert target_snowflake._verify_snowpipe_usage() == 'dict with all key values=1'
