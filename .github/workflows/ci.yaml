@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+jobs:
+  lint_and_test:
+    name: Linting and Testing
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [ 3.6, 3.7, 3.8 ]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Setup virtual environment
+        run: make venv
+
+      - name: Pylinting
+        run: make pylint
+
+      - name: Unit Tests
+        run: make unit_test
+
+  integration_test:
+    name: Integration Testing
+    runs-on: ubuntu-latest
+    environment: ci_tests
+    strategy:
+      matrix:
+        python-version: [ 3.8 ]
+    concurrency:
+      group: integration_tests-${{ github.head_ref }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Setup virtual environment
+        run: make venv
+
+      - name: Integration tests
+        run: make integration_test
+        env:
+          TARGET_SNOWFLAKE_ACCOUNT: ${{ secrets.TARGET_SNOWFLAKE_ACCOUNT }}
+          TARGET_SNOWFLAKE_DBNAME: ${{ secrets.TARGET_SNOWFLAKE_DBNAME }}
+          TARGET_SNOWFLAKE_USER: ${{ secrets.TARGET_SNOWFLAKE_USER }}
+          TARGET_SNOWFLAKE_PASSWORD: ${{ secrets.TARGET_SNOWFLAKE_PASSWORD }}
+          TARGET_SNOWFLAKE_WAREHOUSE: ${{ secrets.TARGET_SNOWFLAKE_WAREHOUSE }}
+          TARGET_SNOWFLAKE_SCHEMA: ${{ secrets.TARGET_SNOWFLAKE_SCHEMA }}
+          TARGET_SNOWFLAKE_AWS_ACCESS_KEY: ${{ secrets.TARGET_SNOWFLAKE_AWS_ACCESS_KEY }}
+          TARGET_SNOWFLAKE_AWS_SECRET_ACCESS_KEY: ${{ secrets.TARGET_SNOWFLAKE_AWS_SECRET_ACCESS_KEY }}
+          TARGET_SNOWFLAKE_S3_BUCKET: ${{ secrets.TARGET_SNOWFLAKE_S3_BUCKET }}
+          TARGET_SNOWFLAKE_S3_KEY_PREFIX: ${{ secrets.TARGET_SNOWFLAKE_S3_KEY_PREFIX }}
+          TARGET_SNOWFLAKE_STAGE: ${{ secrets.TARGET_SNOWFLAKE_STAGE }}
+          TARGET_SNOWFLAKE_FILE_FORMAT_CSV: ${{ secrets.TARGET_SNOWFLAKE_FILE_FORMAT_CSV }}
+          TARGET_SNOWFLAKE_FILE_FORMAT_PARQUET: ${{ secrets.TARGET_SNOWFLAKE_FILE_FORMAT_PARQUET }}
+          CLIENT_SIDE_ENCRYPTION_MASTER_KEY: ${{ secrets.TARGET_SNOWFLAKE_CLIENT_SIDE_ENCRYPTION_MASTER_KEY }}
