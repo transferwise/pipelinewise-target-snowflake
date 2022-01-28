@@ -17,10 +17,8 @@ from target_snowflake.upload_clients.snowflake_upload_client import SnowflakeUpl
 
 from snowflake.connector.errors import ProgrammingError
 from snowflake.connector.encryption_util import SnowflakeEncryptionUtil
-from snowflake.connector.remote_storage_util import SnowflakeFileEncryptionMaterial
 from snowflake.ingest import SimpleIngestManager, \
     StagedFile
-from snowflake.ingest.utils.uris import DEFAULT_SCHEME
 from requests import HTTPError
 from cryptography.hazmat.primitives.serialization import load_pem_private_key, \
     Encoding, \

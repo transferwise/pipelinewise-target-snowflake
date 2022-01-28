@@ -4,7 +4,7 @@ import unittest
 import os
 import gzip
 import tempfile
-import mock
+from unittest import mock
 import itertools
 
 from contextlib import redirect_stdout
