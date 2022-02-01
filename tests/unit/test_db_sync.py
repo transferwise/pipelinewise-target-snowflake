@@ -319,33 +319,47 @@ class TestDBSync(unittest.TestCase):
                                     "Cannot find \['invalid_col'\] primary key\(s\) in record\. Available fields: \['id', 'c_str'\]"):
             dbsync.record_primary_key_string({'id': 123, 'c_str': 'xyz'})
 
+    @patch('target_snowflake.db_sync.DbSync.query')
+    def test_generate_s3_key_prefix(self, query_patch):
+        query_patch.return_value = [{'type': 'CSV'}]
+        minimal_config = {
+            'account': "dummy-value",
+            'dbname': "dummy-value",
+            'user': "dummy-value",
+            'password': "dummy-value",
+            'warehouse': "dummy-value",
+            'default_target_schema': "dummy-target-schema",
+            'file_format': "dummy-value",
+            's3_bucket': 'dummy-bucket',
+            'stage': 'dummy_schema.dummy_stage',
+            's3_key_prefix': 'dummy_key_prefix/',
+        }
 
-    def test_generate_s3_key_prefix(self):
+        s3_config = {}
+        record_stream_name = "dummy_tap_schema-dummy_tap_table"
+        schema_record = json.loads('{"type": "SCHEMA", "stream": "public-table1", "schema": {"definitions": {"sdc_recursive_boolean_array": {"items": {"$ref": "#/definitions/sdc_recursive_boolean_array"}, "type": ["null", "boolean", "array"]}, "sdc_recursive_integer_array": {"items": {"$ref": "#/definitions/sdc_recursive_integer_array"}, "type": ["null", "integer", "array"]}, "sdc_recursive_number_array": {"items": {"$ref": "#/definitions/sdc_recursive_number_array"}, "type": ["null", "number", "array"]}, "sdc_recursive_object_array": {"items": {"$ref": "#/definitions/sdc_recursive_object_array"}, "type": ["null", "object", "array"]}, "sdc_recursive_string_array": {"items": {"$ref": "#/definitions/sdc_recursive_string_array"}, "type": ["null", "string", "array"]}, "sdc_recursive_timestamp_array": {"format": "date-time", "items": {"$ref": "#/definitions/sdc_recursive_timestamp_array"}, "type": ["null", "string", "array"]}}, "properties": {"cid": {"maximum": 2147483647, "minimum": -2147483648, "type": ["integer"]}, "cvarchar": {"type": ["null", "string"]}, "_sdc_deleted_at": {"type": ["null", "string"], "format": "date-time"}}, "type": "object"}, "key_properties": ["cid"], "bookmark_properties": ["lsn"]}')
+        DbSync_obj = db_sync.DbSync({**minimal_config, **s3_config}, schema_record)
 
-        with open(f'{os.path.dirname(__file__)}/resources/same-schemas-multiple-times.json', 'r') as f:
-            lines = f.readlines()
-        
-        self.config = test_utils.get_test_config()
-        DbSync_obj = db_sync.DbSync(self.config, json.loads(lines[0]))
-
-        expected_string = f"{self.config['s3_key_prefix'].replace('/','')}/{self.config['default_target_schema']}__test_table_one/"
-        s3_key_with_snowpipe = DbSync_obj._generate_s3_key_prefix('tap_mysql_test-test_table_one', True)        
+        # Test snowpipe alteration
+        expected_string = f'{minimal_config["s3_key_prefix"].replace("/","")}/{minimal_config["default_target_schema"]}__dummy_tap_table/'
+        s3_key_with_snowpipe = DbSync_obj._generate_s3_key_prefix(record_stream_name, True)
         self.assertEqual(s3_key_with_snowpipe, expected_string)
+        # Test normal behavior without snowpipe
+        s3_key_without_snowpipe = DbSync_obj._generate_s3_key_prefix(record_stream_name, False)
+        self.assertEqual(s3_key_without_snowpipe, minimal_config["s3_key_prefix"])
 
-        s3_key_without_snowpipe = DbSync_obj._generate_s3_key_prefix('tap_mysql_test-test_table_one', False)
-        self.assertEqual(s3_key_without_snowpipe, f"{self.config['s3_key_prefix'].replace('/','')}/")
-
-
-    def test_snowpipe_detail_generation(self):
-        with open(f'{os.path.dirname(__file__)}/resources/same-schemas-multiple-times.json', 'r') as f:
-            lines = f.readlines()
-        self.config = test_utils.get_test_config()
-        
-        DbSync_obj = db_sync.DbSync(self.config, json.loads(lines[0]))
-        schema_table_name = DbSync_obj.table_name('tap_mysql_test-test_table_one', False)
-        pipe_name = DbSync_obj._generate_pipe_name(self.config['dbname'], schema_table_name)
-        stripped_db_name = self.config['dbname'].replace('"','')
-        stripped_table_name = schema_table_name.replace('"','')
-        expected_pipe_name = f"{stripped_db_name}.{stripped_table_name}_s3_pipe"
-
-        self.assertEqual(pipe_name, expected_pipe_name)
+    @patch('target_snowflake.db_sync.DbSync.query')
+    def test_snowpipe_detail_generation(self, query_patch):
+        query_patch.return_value = [{'type': 'CSV'}]
+        minimal_config = {
+            'account': "dummy-value",
+            'dbname': "dummy-value",
+            'user': "dummy-value",
+            'password': "dummy-value",
+            'warehouse': "dummy-value",
+            'default_target_schema': "dummy-target-schema",
+            'file_format': "dummy-value",
+            's3_bucket': 'dummy-bucket',
+            'stage': 'dummy_schema.dummy_stage',
+            's3_key_prefix': 'dummy_key_prefix/',
+        }

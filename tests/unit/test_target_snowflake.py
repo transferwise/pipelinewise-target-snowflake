@@ -193,3 +193,5 @@ class TestTargetSnowflake(unittest.TestCase):
 
         target_snowflake.persist_lines(self.config, lines)
         flush_streams_mock.assert_called_once()
+
+        # TODO add useful assertion here
