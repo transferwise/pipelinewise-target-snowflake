@@ -452,7 +452,7 @@ def _set_stream_snowpipe_usage(stream_to_sync, config) -> dict:
     use_snowpipe = dict((stream, False) for stream in stream_to_sync)
 
     # snowpipe can perform copy and not merge(based on keys).
-    if config['load_via_snowpipe']:
+    if config.get('load_via_snowpipe', False):
         for stream, db_sync in stream_to_sync.items():
             if len(db_sync.stream_schema_message['key_properties']) == 0 or \
                 config.get('ignore_primary_key', False):

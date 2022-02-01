@@ -347,19 +347,3 @@ class TestDBSync(unittest.TestCase):
         # Test normal behavior without snowpipe
         s3_key_without_snowpipe = DbSync_obj._generate_s3_key_prefix(record_stream_name, False)
         self.assertEqual(s3_key_without_snowpipe, minimal_config["s3_key_prefix"])
-
-    @patch('target_snowflake.db_sync.DbSync.query')
-    def test_snowpipe_detail_generation(self, query_patch):
-        query_patch.return_value = [{'type': 'CSV'}]
-        minimal_config = {
-            'account': "dummy-value",
-            'dbname': "dummy-value",
-            'user': "dummy-value",
-            'password': "dummy-value",
-            'warehouse': "dummy-value",
-            'default_target_schema': "dummy-target-schema",
-            'file_format': "dummy-value",
-            's3_bucket': 'dummy-bucket',
-            'stage': 'dummy_schema.dummy_stage',
-            's3_key_prefix': 'dummy_key_prefix/',
-        }

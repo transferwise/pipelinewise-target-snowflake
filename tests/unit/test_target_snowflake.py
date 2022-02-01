@@ -194,4 +194,30 @@ class TestTargetSnowflake(unittest.TestCase):
         target_snowflake.persist_lines(self.config, lines)
         flush_streams_mock.assert_called_once()
 
-        # TODO add useful assertion here
+
+    @patch('target_snowflake.DbSync')
+    @patch('target_snowflake.DbSync')
+    def test_verify_snowpipe_usage(self, dbsync_mock1, dbsync_mock2):
+        """ Test setting of snowpipe usage """
+        min_config = {
+            'account': "dummy-value",
+            'dbname': "dummy-value",
+            'user': "dummy-value",
+            'password': "dummy-value",
+            'warehouse': "dummy-value",
+            'default_target_schema': "dummy-target-schema",
+            'file_format': "dummy-value",
+            's3_bucket': 'dummy-bucket',
+            'stage': 'dummy_schema.dummy_stage',
+            's3_key_prefix': 'dummy_key_prefix/',
+            'load_via_snowpipe': True
+        }
+        # Set the key properties for stream2 to check ignoring of load_via_snowpipe case
+        dbsync_mock2.stream_schema_message = {"key_properties": ["col1"]}
+        input_stream = {"stream1": dbsync_mock1, "stream2": dbsync_mock2}
+        expected_output = {"stream1": True, "stream2": False}
+        with open(f'{os.path.dirname(__file__)}/resources/same-schemas-multiple-times.json', 'r') as f:
+            lines = f.readlines()
+
+        output = target_snowflake._set_stream_snowpipe_usage(input_stream, min_config)
+        self.assertEqual(output, expected_output)
