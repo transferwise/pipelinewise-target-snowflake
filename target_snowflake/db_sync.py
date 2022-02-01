@@ -411,7 +411,7 @@ class DbSync:
     def put_to_stage(self, file, stream, count, temp_dir=None, load_via_snowpipe=False):
         self.logger.info("Uploading {} rows to stage".format(count))
         s3_key_prefix = self._generate_s3_key_prefix(stream, load_via_snowpipe)
-        return self.uploadClient.upload_file(file, stream, temp_dir=temp_dir, s3_key_prefix=s3_key_prefix)
+        return self.upload_client.upload_file(file, stream, temp_dir=temp_dir, s3_key_prefix=s3_key_prefix)
 
     def delete_from_stage(self, stream, s3_key):
         """Delete file from snowflake stage"""
