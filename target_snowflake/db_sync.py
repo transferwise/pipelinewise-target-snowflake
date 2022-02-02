@@ -27,10 +27,6 @@ from cryptography.hazmat.primitives.serialization import load_pem_private_key, \
 from cryptography.hazmat.backends import default_backend
 from distutils.util import strtobool
 
-class TooManyRecordsException(Exception):
-    """Exception to raise when query returns more records than max_records"""
-    pass
-
 
 def validate_config(config):
     """Validate configuration"""
