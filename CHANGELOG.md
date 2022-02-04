@@ -1,3 +1,17 @@
+1.15.0 (2022-01-14)
+-------------------
+
+*Added*
+- Support parallelism for table stages
+
+*Fixes*
+- Emit last encountered state message if there are no records.
+
+*Changes*
+- Migrate CI to github actions
+- Bump dependencies
+
+
 1.14.1 (2021-10-14)
 -------------------
 - Increase `max_records` when selecting columns by an order of magnitude
