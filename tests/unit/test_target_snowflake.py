@@ -1,9 +1,14 @@
+import io
+import json
 import unittest
 import os
 import gzip
 import tempfile
-import mock
+from unittest import mock
+import itertools
 
+from contextlib import redirect_stdout
+from datetime import datetime, timedelta
 from unittest.mock import patch
 
 import target_snowflake
@@ -17,6 +22,7 @@ class TestTargetSnowflake(unittest.TestCase):
 
     def setUp(self):
         self.config = {}
+        self.maxDiff = None
 
     @patch('target_snowflake.flush_streams')
     @patch('target_snowflake.DbSync')
@@ -36,7 +42,7 @@ class TestTargetSnowflake(unittest.TestCase):
 
         target_snowflake.persist_lines(self.config, lines)
 
-        flush_streams_mock.assert_called_once()
+        self.assertEqual(1, flush_streams_mock.call_count)
 
     @patch('target_snowflake.flush_streams')
     @patch('target_snowflake.DbSync')
@@ -55,85 +61,122 @@ class TestTargetSnowflake(unittest.TestCase):
 
         target_snowflake.persist_lines(self.config, lines)
 
-        flush_streams_mock.assert_called_once()
+        self.assertEqual(1, flush_streams_mock.call_count)
 
-    def test_adjust_timestamps_in_record(self):
-        record = {
-            'key1': '1',
-            'key2': '2030-01-22',
-            'key3': '10000-01-22 12:04:22',
-            'key4': '25:01:01',
-            'key5': 'I\'m good',
-            'key6': None
-        }
+    @patch('target_snowflake.datetime')
+    @patch('target_snowflake.flush_streams')
+    @patch('target_snowflake.DbSync')
+    def test_persist_40_records_with_batch_wait_limit(self, dbSync_mock, flush_streams_mock, dateTime_mock):
 
-        schema = {
-            'properties': {
-                'key1': {
-                    'type': ['null', 'string', 'integer'],
-                },
-                'key2': {
-                    'anyOf': [
-                        {'type': ['null', 'string'], 'format': 'date'},
-                        {'type': ['null', 'string']}
-                    ]
-                },
-                'key3': {
-                    'type': ['null', 'string'], 'format': 'date-time',
-                },
-                'key4': {
-                    'anyOf': [
-                        {'type': ['null', 'string'], 'format': 'time'},
-                        {'type': ['null', 'string']}
-                    ]
-                },
-                'key5': {
-                    'type': ['null', 'string'],
-                },
-                'key6': {
-                    'type': ['null', 'string'], 'format': 'time',
-                },
-            }
-        }
+        start_time = datetime(2021, 4, 6, 0, 0, 0)
+        increment = 11
+        counter = itertools.count()
 
-        target_snowflake.adjust_timestamps_in_record(record, schema)
+        # Move time forward by {{increment}} seconds every time utcnow() is called
+        dateTime_mock.utcnow.side_effect = lambda: start_time + timedelta(seconds=increment * next(counter))
 
-        self.assertDictEqual({
-            'key1': '1',
-            'key2': '2030-01-22',
-            'key3': '9999-12-31 23:59:59.999999',
-            'key4': '23:59:59.999999',
-            'key5': 'I\'m good',
-            'key6': None
-        }, record)
+        self.config['batch_size_rows'] = 100
+        self.config['batch_wait_limit_seconds'] = 10
+        self.config['flush_all_streams'] = True
 
-    def test_write_record_to_uncompressed_file(self):
-        records = {'pk_1': 'data1,data2,data3,data4'}
+        # Expecting 40 records
+        with open(f'{os.path.dirname(__file__)}/resources/logical-streams.json', 'r') as f:
+            lines = f.readlines()
 
-        # Write uncompressed CSV file
-        csv_file = tempfile.NamedTemporaryFile(delete=False)
-        with open(csv_file.name, 'wb') as f:
-            target_snowflake.write_record_to_file(f, records, _mock_record_to_csv_line)
+        instance = dbSync_mock.return_value
+        instance.create_schema_if_not_exists.return_value = None
+        instance.sync_table.return_value = None
 
-        # Read and validate uncompressed CSV file
-        with open(csv_file.name, 'rt') as f:
-            self.assertEquals(f.readlines(), ['data1,data2,data3,data4\n'])
+        flush_streams_mock.return_value = '{"currently_syncing": null}'
 
-        os.remove(csv_file.name)
+        target_snowflake.persist_lines(self.config, lines)
 
-    def test_write_record_to_compressed_file(self):
-        records = {'pk_1': 'data1,data2,data3,data4'}
+        # Expecting flush after every records + 1 at the end
+        self.assertEqual(flush_streams_mock.call_count, 41)
 
-        # Write gzip compressed CSV file
-        csv_file = tempfile.NamedTemporaryFile(delete=False)
-        with gzip.open(csv_file.name, 'wb') as f:
-            target_snowflake.write_record_to_file(f, records, _mock_record_to_csv_line)
+    @patch('target_snowflake.DbSync')
+    @patch('target_snowflake.os.remove')
+    def test_archive_load_files_incremental_replication(self, os_remove_mock, dbSync_mock):
+        self.config['tap_id'] = 'test_tap_id'
+        self.config['archive_load_files'] = True
+        self.config['s3_bucket'] = 'dummy_bucket'
 
-        # Read and validate gzip compressed CSV file
-        with gzip.open(csv_file.name, 'rt') as f:
-            self.assertEquals(f.readlines(), ['data1,data2,data3,data4\n'])
+        with open(f'{os.path.dirname(__file__)}/resources/messages-simple-table.json', 'r') as f:
+            lines = f.readlines()
 
-        os.remove(csv_file.name)
+        instance = dbSync_mock.return_value
+        instance.create_schema_if_not_exists.return_value = None
+        instance.sync_table.return_value = None
+        instance.put_to_stage.return_value = 'some-s3-folder/some-name_date_batch_hash.csg.gz'
+
+        target_snowflake.persist_lines(self.config, lines)
+
+        copy_to_archive_args = instance.copy_to_archive.call_args[0]
+        self.assertEqual(copy_to_archive_args[0], 'some-s3-folder/some-name_date_batch_hash.csg.gz')
+        self.assertEqual(copy_to_archive_args[1], 'test_tap_id/test_simple_table/some-name_date_batch_hash.csg.gz')
+        self.assertDictEqual(copy_to_archive_args[2], {
+            'tap': 'test_tap_id',
+            'schema': 'tap_mysql_test',
+            'table': 'test_simple_table',
+            'archived-by': 'pipelinewise_target_snowflake',
+            'incremental-key': 'id',
+            'incremental-key-min': '1',
+            'incremental-key-max': '5'
+        })
+
+    @patch('target_snowflake.DbSync')
+    @patch('target_snowflake.os.remove')
+    def test_archive_load_files_log_based_replication(self, os_remove_mock, dbSync_mock):
+        self.config['tap_id'] = 'test_tap_id'
+        self.config['archive_load_files'] = True
+
+        with open(f'{os.path.dirname(__file__)}/resources/logical-streams.json', 'r') as f:
+            lines = f.readlines()
+
+        instance = dbSync_mock.return_value
+        instance.create_schema_if_not_exists.return_value = None
+        instance.sync_table.return_value = None
+        instance.put_to_stage.return_value = 'some-s3-folder/some-name_date_batch_hash.csg.gz'
+
+        target_snowflake.persist_lines(self.config, lines)
+
+        copy_to_archive_args = instance.copy_to_archive.call_args[0]
+        self.assertEqual(copy_to_archive_args[0], 'some-s3-folder/some-name_date_batch_hash.csg.gz')
+        self.assertEqual(copy_to_archive_args[1], 'test_tap_id/logical1_table2/some-name_date_batch_hash.csg.gz')
+        self.assertDictEqual(copy_to_archive_args[2], {
+            'tap': 'test_tap_id',
+            'schema': 'logical1',
+            'table': 'logical1_table2',
+            'archived-by': 'pipelinewise_target_snowflake'
+        })
+
+    @patch('target_snowflake.flush_streams')
+    @patch('target_snowflake.DbSync')
+    def test_persist_lines_with_only_state_messages(self, dbSync_mock, flush_streams_mock):
+        """
+        Given only state messages, target should emit the last one
+        """
+
+        self.config['batch_size_rows'] = 5
+
+        with open(f'{os.path.dirname(__file__)}/resources/streams_only_state.json', 'r') as f:
+            lines = f.readlines()
+
+        instance = dbSync_mock.return_value
+        instance.create_schema_if_not_exists.return_value = None
+        instance.sync_table.return_value = None
+
+        # catch stdout
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            target_snowflake.persist_lines(self.config, lines)
+
+        flush_streams_mock.assert_not_called()
+
+        self.assertEqual(
+            buf.getvalue().strip(),
+            '{"bookmarks": {"tap_mysql_test-test_simple_table": {"replication_key": "id", '
+            '"replication_key_value": 100, "version": 1}}}')
 
 
     @patch('target_snowflake.flush_streams')
@@ -146,11 +189,35 @@ class TestTargetSnowflake(unittest.TestCase):
         instance = dbSync_mock.return_value
         instance.create_schema_if_not_exists.return_value = None
         instance.sync_table.return_value = None
-
         flush_streams_mock.return_value = '{"currently_syncing": null}'
 
         target_snowflake.persist_lines(self.config, lines)
-
         flush_streams_mock.assert_called_once()
 
-        assert target_snowflake._verify_snowpipe_usage() == 'dict with all key values=1'
+
+    @patch('target_snowflake.DbSync')
+    @patch('target_snowflake.DbSync')
+    def test_verify_snowpipe_usage(self, dbsync_mock1, dbsync_mock2):
+        """ Test setting of snowpipe usage """
+        min_config = {
+            'account': "dummy-value",
+            'dbname': "dummy-value",
+            'user': "dummy-value",
+            'password': "dummy-value",
+            'warehouse': "dummy-value",
+            'default_target_schema': "dummy-target-schema",
+            'file_format': "dummy-value",
+            's3_bucket': 'dummy-bucket',
+            'stage': 'dummy_schema.dummy_stage',
+            's3_key_prefix': 'dummy_key_prefix/',
+            'load_via_snowpipe': True
+        }
+        # Set the key properties for stream2 to check ignoring of load_via_snowpipe case
+        dbsync_mock2.stream_schema_message = {"key_properties": ["col1"]}
+        input_stream = {"stream1": dbsync_mock1, "stream2": dbsync_mock2}
+        expected_output = {"stream1": True, "stream2": False}
+        with open(f'{os.path.dirname(__file__)}/resources/same-schemas-multiple-times.json', 'r') as f:
+            lines = f.readlines()
+
+        output = target_snowflake._set_stream_snowpipe_usage(input_stream, min_config)
+        self.assertEqual(output, expected_output)

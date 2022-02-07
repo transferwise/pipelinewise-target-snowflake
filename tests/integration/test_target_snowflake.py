@@ -1,22 +1,25 @@
 import datetime
+import gzip
 import json
+import tempfile
 import unittest
-import mock
 import os
 import botocore
-
-from nose.tools import assert_raises
-
+import boto3
 import target_snowflake
+
+
 from target_snowflake import RecordValidationException
 from target_snowflake.db_sync import DbSync
-from target_snowflake.s3_upload_client import S3UploadClient
+from target_snowflake.upload_clients.s3_upload_client import S3UploadClient
 
+from unittest import mock
+from pyarrow.lib import ArrowTypeError
 from snowflake.connector.errors import ProgrammingError
 from snowflake.connector.errors import DatabaseError
 
 try:
-    import tests.utils as test_utils
+    import tests.integration.utils as test_utils
 except ImportError:
     import utils as test_utils
 
@@ -39,6 +42,20 @@ class TestIntegration(unittest.TestCase):
         if self.config['default_target_schema']:
             snowflake.query("DROP SCHEMA IF EXISTS {}".format(self.config['default_target_schema']))
 
+        # Set up S3 client
+        aws_access_key_id = self.config.get('aws_access_key_id')
+        aws_secret_access_key = self.config.get('aws_secret_access_key')
+        aws_session_token = self.config.get('aws_session_token')
+        aws_session = boto3.session.Session(
+            aws_access_key_id=aws_access_key_id,
+            aws_secret_access_key=aws_secret_access_key,
+            aws_session_token=aws_session_token
+        )
+
+        self.s3_client = aws_session.client('s3',
+                                            region_name=self.config.get('s3_region_name'),
+                                            endpoint_url=self.config.get('s3_endpoint_url'))
+
     def persist_lines(self, lines):
         """Loads singer messages into snowflake without table caching option"""
         target_snowflake.persist_lines(self.config, lines)
@@ -54,8 +71,8 @@ class TestIntegration(unittest.TestCase):
         Selecting from a real table instead of INFORMATION_SCHEMA and keeping it
         in memory while the target-snowflake is running results better load performance.
         """
-        table_cache = target_snowflake.load_table_cache(self.config)
-        target_snowflake.persist_lines(self.config, lines, table_cache)
+        table_cache, file_format_type = target_snowflake.get_snowflake_statics(self.config)
+        target_snowflake.persist_lines(self.config, lines, table_cache, file_format_type)
 
     def remove_metadata_columns_from_rows(self, rows):
         """Removes metadata columns from a list of rows"""
@@ -119,17 +136,17 @@ class TestIntegration(unittest.TestCase):
             self.remove_metadata_columns_from_rows(table_one), expected_table_one)
 
         # ----------------------------------------------------------------------
-        # Check rows in table_tow
+        # Check rows in table_two
         # ----------------------------------------------------------------------
         expected_table_two = []
         if not should_hard_deleted_rows:
             expected_table_two = [
-                {'C_INT': 1, 'C_PK': 1, 'C_VARCHAR': '1', 'C_DATE': datetime.datetime(2019, 2, 1, 15, 12, 45)},
-                {'C_INT': 2, 'C_PK': 2, 'C_VARCHAR': '2', 'C_DATE': datetime.datetime(2019, 2, 10, 2, 0, 0)}
+                {'C_INT': 1, 'C_PK': 1, 'C_VARCHAR': '1', 'C_DATE': datetime.datetime(2019, 2, 1, 15, 12, 45), 'C_ISO_DATE':datetime.date(2019, 2, 1)},
+                {'C_INT': 2, 'C_PK': 2, 'C_VARCHAR': '2', 'C_DATE': datetime.datetime(2019, 2, 10, 2, 0, 0), 'C_ISO_DATE':datetime.date(2019, 2, 10)}
             ]
         else:
             expected_table_two = [
-                {'C_INT': 2, 'C_PK': 2, 'C_VARCHAR': '2', 'C_DATE': datetime.datetime(2019, 2, 10, 2, 0, 0)}
+                {'C_INT': 2, 'C_PK': 2, 'C_VARCHAR': '2', 'C_DATE': datetime.datetime(2019, 2, 10, 2, 0, 0), 'C_ISO_DATE':datetime.date(2019, 2, 10)}
             ]
 
         self.assertEqual(
@@ -186,7 +203,7 @@ class TestIntegration(unittest.TestCase):
         ]
 
         # ----------------------------------------------------------------------
-        # Check rows in table_tow
+        # Check rows in table_two
         # ----------------------------------------------------------------------
         expected_table_two = [
             {'CID': 1, 'CVARCHAR': "updated row"},
@@ -273,13 +290,13 @@ class TestIntegration(unittest.TestCase):
     def test_invalid_json(self):
         """Receiving invalid JSONs should raise an exception"""
         tap_lines = test_utils.get_test_tap_lines('invalid-json.json')
-        with assert_raises(json.decoder.JSONDecodeError):
+        with self.assertRaises(json.decoder.JSONDecodeError):
             self.persist_lines_with_cache(tap_lines)
 
     def test_message_order(self):
         """RECORD message without a previously received SCHEMA message should raise an exception"""
         tap_lines = test_utils.get_test_tap_lines('invalid-message-order.json')
-        with assert_raises(Exception):
+        with self.assertRaises(Exception):
             self.persist_lines_with_cache(tap_lines)
 
     def test_run_query(self):
@@ -340,7 +357,7 @@ class TestIntegration(unittest.TestCase):
 
         # Turning on client-side encryption and load but using a well formatted but wrong master key
         self.config['client_side_encryption_master_key'] = "Wr0n6m45t3rKeY0123456789a0123456789a0123456="
-        with assert_raises(ProgrammingError):
+        with self.assertRaises(ProgrammingError):
             self.persist_lines_with_cache(tap_lines)
 
     def test_loading_tables_with_metadata_columns(self):
@@ -589,15 +606,15 @@ class TestIntegration(unittest.TestCase):
             [{'C_INT': 1, 'C_PK': 1, 'C_VARCHAR': '1'}])
 
         # Table two should have a versioned column and a new column
-        self.assertEquals(
+        self.assertEqual(
             table_two,
             [
                 {previous_column_name: datetime.datetime(2019, 2, 1, 15, 12, 45), 'C_INT': 1, 'C_PK': 1,
-                 'C_VARCHAR': '1', 'C_DATE': None, 'C_NEW_COLUMN': None},
+                 'C_VARCHAR': '1', 'C_DATE': None, 'C_ISO_DATE': datetime.date(2019, 2, 1), 'C_NEW_COLUMN': None},
                 {previous_column_name: datetime.datetime(2019, 2, 10, 2), 'C_INT': 2, 'C_PK': 2, 'C_VARCHAR': '2',
-                 'C_DATE': '2019-02-12 02:00:00', 'C_NEW_COLUMN': 'data 1'},
+                 'C_DATE': '2019-02-12 02:00:00', 'C_ISO_DATE': datetime.date(2019, 2, 10), 'C_NEW_COLUMN': 'data 1'},
                 {previous_column_name: None, 'C_INT': 3, 'C_PK': 3, 'C_VARCHAR': '2', 'C_DATE': '2019-02-15 02:00:00',
-                 'C_NEW_COLUMN': 'data 2'}
+                 'C_ISO_DATE': datetime.date(2019, 2, 15), 'C_NEW_COLUMN': 'data 2'}
             ]
         )
 
@@ -650,16 +667,16 @@ class TestIntegration(unittest.TestCase):
             [{'C_INT': 1, 'C_PK': 1, 'C_VARCHAR': '1'}])
 
         # Table two should have a versioned column and a new column
-        self.assertEquals(
+        self.assertEqual(
             table_two,
             [
                 {previous_column_name: datetime.datetime(2019, 2, 1, 15, 12, 45), 'C_INT': 1, 'C_PK': 1,
-                 'C_VARCHAR': '1', 'C_DATE': None, 'C_NEW_COLUMN': None},
+                 'C_VARCHAR': '1', 'C_DATE': None, 'C_ISO_DATE': datetime.date(2019, 2, 1), 'C_NEW_COLUMN': None},
                 {previous_column_name: datetime.datetime(2019, 2, 10, 2), 'C_INT': 2, 'C_PK': 2, 'C_VARCHAR': '2',
-                 'C_DATE': '2019-02-12 02:00:00', 'C_NEW_COLUMN': 'data 1'},
+                 'C_DATE': '2019-02-12 02:00:00', 'C_ISO_DATE': datetime.date(2019, 2, 10), 'C_NEW_COLUMN': 'data 1'},
                 {previous_column_name: None, 'C_INT': 3, 'C_PK': 3, 'C_VARCHAR': '2', 'C_DATE': '2019-02-15 02:00:00',
-                 'C_NEW_COLUMN': 'data 2'}
-            ]
+                 'C_ISO_DATE': datetime.date(2019, 2, 15), 'C_NEW_COLUMN': 'data 2'}
+            ]            
         )
 
         # Table three should have a renamed columns and a new column
@@ -720,7 +737,7 @@ class TestIntegration(unittest.TestCase):
         self.persist_lines_with_cache(tap_lines)
 
         # State should be emitted only once with the latest received STATE message
-        self.assertEquals(
+        self.assertEqual(
             mock_emit_state.mock_calls,
             [
                 mock.call({"currently_syncing": None, "bookmarks": {
@@ -748,7 +765,7 @@ class TestIntegration(unittest.TestCase):
         self.persist_lines_with_cache(tap_lines)
 
         # State should be emitted multiple times, updating the positions only in the stream which got flushed
-        self.assertEquals(
+        self.assertEqual(
             mock_emit_state.call_args_list,
             [
                 # Flush #1 - Flushed edgydata until lsn: 108197216
@@ -823,7 +840,7 @@ class TestIntegration(unittest.TestCase):
         self.persist_lines_with_cache(tap_lines)
 
         # State should be emitted 6 times, flushing every stream and updating every stream position
-        self.assertEquals(
+        self.assertEqual(
             mock_emit_state.call_args_list,
             [
                 # Flush #1 - Flush every stream until lsn: 108197216
@@ -885,19 +902,39 @@ class TestIntegration(unittest.TestCase):
         # Every table should be loaded correctly
         self.assert_logical_streams_are_in_snowflake(True)
 
+    @mock.patch('target_snowflake.emit_state')
+    def test_flush_streams_based_on_batch_wait_limit(self, mock_emit_state):
+        """Tests logical streams from pg with inserts, updates and deletes"""
+        tap_lines = test_utils.get_test_tap_lines('messages-pg-logical-streams.json')
+
+        mock_emit_state.get.return_value = None
+
+        self.config['hard_delete'] = True
+        self.config['batch_size_rows'] = 1000
+        self.config['batch_wait_limit_seconds'] = 0.1
+        self.persist_lines_with_cache(tap_lines)
+
+        self.assert_logical_streams_are_in_snowflake(True)
+        self.assertGreater(mock_emit_state.call_count, 1, 'Expecting multiple flushes')
+
     def test_record_validation(self):
         """Test validating records"""
         tap_lines = test_utils.get_test_tap_lines('messages-with-invalid-records.json')
 
         # Loading invalid records when record validation enabled should fail at ...
         self.config['validate_records'] = True
-        with assert_raises(RecordValidationException):
+        with self.assertRaises(RecordValidationException):
             self.persist_lines_with_cache(tap_lines)
 
         # Loading invalid records when record validation disabled should fail at load time
         self.config['validate_records'] = False
-        with assert_raises(ProgrammingError):
-            self.persist_lines_with_cache(tap_lines)
+        if self.config['file_format'] == os.environ.get('TARGET_SNOWFLAKE_FILE_FORMAT_CSV'):
+            with self.assertRaises(ProgrammingError):
+                self.persist_lines_with_cache(tap_lines)
+
+        if self.config['file_format'] == os.environ.get('TARGET_SNOWFLAKE_FILE_FORMAT_PARQUET'):
+            with self.assertRaises(ArrowTypeError):
+                self.persist_lines_with_cache(tap_lines)
 
     def test_pg_records_validation(self):
         """Test validating records from postgres tap"""
@@ -905,7 +942,7 @@ class TestIntegration(unittest.TestCase):
 
         # Loading invalid records when record validation enabled should fail at ...
         self.config['validate_records'] = True
-        with assert_raises(RecordValidationException):
+        with self.assertRaises(RecordValidationException):
             self.persist_lines_with_cache(tap_lines_invalid_records)
 
         # Loading invalid records when record validation disabled, should pass without any exceptions
@@ -945,7 +982,7 @@ class TestIntegration(unittest.TestCase):
 
             # Create a new S3 client using env vars
             s3Client = S3UploadClient(self.config)
-            s3Client.create_s3_client()
+            s3Client._create_s3_client()
 
         # Restore the original state to not confuse other tests
         finally:
@@ -965,9 +1002,9 @@ class TestIntegration(unittest.TestCase):
             self.config['aws_profile'] = 'fake-profile'
 
             # Create a new S3 client using profile based authentication
-            with assert_raises(botocore.exceptions.ProfileNotFound):
+            with self.assertRaises(botocore.exceptions.ProfileNotFound):
                 s3UploaddClient = S3UploadClient(self.config)
-                s3UploaddClient.create_s3_client()
+                s3UploaddClient._create_s3_client()
 
         # Restore the original state to not confuse other tests
         finally:
@@ -985,9 +1022,9 @@ class TestIntegration(unittest.TestCase):
             os.environ['AWS_PROFILE'] = 'fake_profile'
 
             # Create a new S3 client using profile based authentication
-            with assert_raises(botocore.exceptions.ProfileNotFound):
+            with self.assertRaises(botocore.exceptions.ProfileNotFound):
                 s3UploaddClient = S3UploadClient(self.config)
-                s3UploaddClient.create_s3_client()
+                s3UploaddClient._create_s3_client()
 
         # Restore the original state to not confuse other tests
         finally:
@@ -1004,9 +1041,9 @@ class TestIntegration(unittest.TestCase):
             self.config['s3_endpoint_url'] = 'fake-endpoint-url'
 
             # Botocore should raise ValurError in case of fake S3 endpoint url
-            with assert_raises(ValueError):
+            with self.assertRaises(ValueError):
                 s3UploaddClient = S3UploadClient(self.config)
-                s3UploaddClient.create_s3_client()
+                s3UploaddClient._create_s3_client()
 
         # Restore the original state to not confuse other tests
         finally:
@@ -1021,7 +1058,7 @@ class TestIntegration(unittest.TestCase):
         self.assertEqual(len(sample_rows), 50000)
 
         # Should raise exception when max_records exceeded
-        with assert_raises(target_snowflake.db_sync.TooManyRecordsException):
+        with self.assertRaises(target_snowflake.db_sync.TooManyRecordsException):
             snowflake.query("SELECT seq4() FROM TABLE(GENERATOR(ROWCOUNT => 50000))", max_records=10000)
 
     def test_loading_tables_with_no_compression(self):
@@ -1060,31 +1097,44 @@ class TestIntegration(unittest.TestCase):
         current_time = datetime.datetime.now().strftime('%H:%M:%s')
 
         # Tag queries with dynamic schema and table tokens
-        self.config['query_tag'] = f'PPW test tap run at {current_time}. Loading into {{schema}}.{{table}}'
+        self.config['query_tag'] = f'PPW test tap run at {current_time}. ' \
+                                   f'Loading into {{{{database}}}}.{{{{schema}}}}.{{{{table}}}}'
         self.persist_lines_with_cache(tap_lines)
 
         # Get query tags from QUERY_HISTORY
-        result = snowflake.query("SELECT query_tag, count(*) queries "
-                                 f"FROM table(information_schema.query_history_by_user('{self.config['user']}')) "
-                                 f"WHERE query_tag like '%PPW test tap run at {current_time}%'"
-                                 "GROUP BY query_tag "
-                                 "ORDER BY 1")
+        result = snowflake.query(f"""SELECT query_tag, count(*) queries
+                                 FROM table(information_schema.query_history_by_user('{self.config['user']}'))
+                                 WHERE query_tag like '%%PPW test tap run at {current_time}%%'
+                                 GROUP BY query_tag
+                                 ORDER BY 1""")
+
+        target_db = self.config['dbname']
         target_schema = self.config['default_target_schema']
         self.assertEqual(result, [{
-            'QUERY_TAG': f'PPW test tap run at {current_time}. Loading into {target_schema}."TEST_TABLE_ONE"',
-            'QUERIES': 12
-            },
-            {
-            'QUERY_TAG': f'PPW test tap run at {current_time}. Loading into {target_schema}."TEST_TABLE_THREE"',
-            'QUERIES': 10
-            },
-            {
-            'QUERY_TAG': f'PPW test tap run at {current_time}. Loading into {target_schema}."TEST_TABLE_TWO"',
-            'QUERIES': 10
-            },
-            {
-            'QUERY_TAG': f'PPW test tap run at {current_time}. Loading into unknown-schema.unknown-table',
+            'QUERY_TAG': f'PPW test tap run at {current_time}. Loading into {target_db}..',
             'QUERIES': 4
+            },
+            {
+            'QUERY_TAG': f'PPW test tap run at {current_time}. Loading into {target_db}.{target_schema}.TEST_TABLE_ONE',
+            'QUERIES': 7
+            },
+            {
+            'QUERY_TAG': f'PPW test tap run at {current_time}. Loading into {target_db}.{target_schema}.TEST_TABLE_THREE',
+            'QUERIES': 6
+            },
+            {
+            'QUERY_TAG': f'PPW test tap run at {current_time}. Loading into {target_db}.{target_schema}.TEST_TABLE_TWO',
+            'QUERIES': 6
+            }
+        ])
+
+        # Detecting file format type should run only once
+        result = snowflake.query(f"""SELECT count(*) show_file_format_queries
+                                 FROM table(information_schema.query_history_by_user('{self.config['user']}'))
+                                 WHERE query_tag like '%%PPW test tap run at {current_time}%%'
+                                   AND query_text like 'SHOW FILE FORMATS%%'""")
+        self.assertEqual(result, [{
+            'SHOW_FILE_FORMAT_QUERIES': 1
             }
         ])
 
@@ -1095,9 +1145,17 @@ class TestIntegration(unittest.TestCase):
         # Set s3_bucket and stage to None to use table stages
         self.config['s3_bucket'] = None
         self.config['stage'] = None
+
+        # Table stages should work with CSV files
+        self.config['file_format'] = os.environ.get('TARGET_SNOWFLAKE_FILE_FORMAT_CSV')
         self.persist_lines_with_cache(tap_lines)
 
         self.assert_three_streams_are_into_snowflake()
+
+        # Table stages should not work with Parquet files
+        self.config['file_format'] = os.environ.get('TARGET_SNOWFLAKE_FILE_FORMAT_PARQUET')
+        with self.assertRaises(SystemExit):
+            self.persist_lines_with_cache(tap_lines)
 
     def test_custom_role(self):
         """Test if custom role can be used"""
@@ -1108,5 +1166,77 @@ class TestIntegration(unittest.TestCase):
 
         # Using not existing or not authorized role should raise snowflake Database exception:
         # 250001 (08001): Role 'INVALID-ROLE' specified in the connect string does not exist or not authorized.
-        with assert_raises(DatabaseError):
+        with self.assertRaises(DatabaseError):
             self.persist_lines_with_cache(tap_lines)
+
+    def test_parsing_date_failure(self):
+        """Test if custom role can be used"""
+        tap_lines = test_utils.get_test_tap_lines('messages-with-unexpected-types.json')
+
+        with self.assertRaises(target_snowflake.UnexpectedValueTypeException):
+            self.persist_lines_with_cache(tap_lines)
+
+    def test_parquet(self):
+        """Test if parquet file can be loaded"""
+        tap_lines = test_utils.get_test_tap_lines('messages-with-three-streams.json')
+
+        # Set parquet file format
+        self.config['file_format'] = os.environ.get('TARGET_SNOWFLAKE_FILE_FORMAT_PARQUET')
+        self.persist_lines_with_cache(tap_lines)
+
+        # Check if data loaded correctly and metadata columns exist
+        self.assert_three_streams_are_into_snowflake()
+
+    def test_archive_load_files(self):
+        """Test if load file is copied to archive folder"""
+        self.config['archive_load_files'] = True
+        self.config['archive_load_files_s3_prefix'] = 'archive_folder'
+        self.config['tap_id'] = 'test_tap_id'
+        self.config['client_side_encryption_master_key'] = ''
+
+        s3_bucket = self.config['s3_bucket']
+
+        # Delete any dangling files from archive
+        files_in_s3_archive = self.s3_client.list_objects(
+            Bucket=s3_bucket, Prefix="archive_folder/test_tap_id/").get('Contents', [])
+        for file_in_archive in files_in_s3_archive:
+            key = file_in_archive["Key"]
+            self.s3_client.delete_object(Bucket=s3_bucket, Key=key)
+
+        tap_lines = test_utils.get_test_tap_lines('messages-simple-table.json')
+        self.persist_lines_with_cache(tap_lines)
+
+        # Verify expected file metadata in S3
+        files_in_s3_archive = self.s3_client.list_objects(Bucket=s3_bucket, Prefix="archive_folder/test_tap_id/").get(
+            'Contents')
+        self.assertIsNotNone(files_in_s3_archive)
+        self.assertEqual(1, len(files_in_s3_archive))
+
+        archived_file_key = files_in_s3_archive[0]['Key']
+        archive_metadata = self.s3_client.head_object(Bucket=s3_bucket, Key=archived_file_key)['Metadata']
+        self.assertEqual({
+            'tap': 'test_tap_id',
+            'schema': 'tap_mysql_test',
+            'table': 'test_simple_table',
+            'archived-by': 'pipelinewise_target_snowflake',
+            'incremental-key': 'id',
+            'incremental-key-min': '1',
+            'incremental-key-max': '5'
+        }, archive_metadata)
+
+        # Verify expected file contents
+        tmpfile = tempfile.NamedTemporaryFile()
+        with open(tmpfile.name, 'wb') as f:
+            self.s3_client.download_fileobj(s3_bucket, archived_file_key, f)
+
+        lines = []
+        with gzip.open(tmpfile, "rt") as gzipfile:
+            for line in gzipfile.readlines():
+                lines.append(line)
+
+        self.assertEqual(''.join(lines), '''1,"xyz1","not-formatted-time-1"
+2,"xyz2","not-formatted-time-2"
+3,"xyz3","not-formatted-time-3"
+4,"xyz4","not-formatted-time-4"
+5,"xyz5","not-formatted-time-5"
+''')

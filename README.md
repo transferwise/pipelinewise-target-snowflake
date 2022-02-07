@@ -54,12 +54,21 @@ It's reading incoming messages from STDIN and using the properites in `config.js
 
 You need to create a few objects in snowflake in one schema before start using this target.
 
-1. Create a named file format. This will be used by the MERGE/COPY commands to parse the CSV files correctly from S3:
+1. Create a named file format. This will be used by the MERGE/COPY commands to parse the files correctly from S3. You can use CSV or Parquet file formats.
 
+To use CSV files:
 ```
 CREATE FILE FORMAT {database}.{schema}.{file_format_name}
 TYPE = 'CSV' ESCAPE='\\' FIELD_OPTIONALLY_ENCLOSED_BY='"';
 ```
+
+To use Parquet files (experimental):
+
+```
+CREATE FILE FORMAT {database}.{schema}.{file_format_name} TYPE = 'PARQUET';
+```
+
+**Important:** Parquet files are not supported with [table stages](https://docs.snowflake.com/en/user-guide/data-load-local-file-system-create-stage.html#table-stages). If you want to use Parquet files then you need to have an external stage in snowflake. Please read further for more details in point 4).
 
 2. Create a Role with all the required permissions:
 
@@ -149,6 +158,7 @@ Full list of options in `config.json`:
 | stage                               | String  | No         | Named external stage name created at pre-requirements section. Has to be a fully qualified name including the schema name. If not specified, table internal stage are used. When this is defined then `s3_bucket` has to be defined as well. |
 | file_format                         | String  | Yes        | Named file format name created at pre-requirements section. Has to be a fully qualified name including the schema name. |
 | batch_size_rows                     | Integer |            | (Default: 100000) Maximum number of rows in each batch. At the end of each batch, the rows in the batch are loaded into Snowflake. |
+| batch_wait_limit_seconds            | Integer |            | (Default: None) Maximum time to wait for batch to reach `batch_size_rows`. |
 | flush_all_streams                   | Boolean |            | (Default: False) Flush and load every stream into Snowflake when one batch is full. Warning: This may trigger the COPY command to use files with low number of records, and may cause performance problems. |
 | parallelism                         | Integer |            | (Default: 0) The number of threads used to flush tables. 0 will create a thread for each stream, up to parallelism_max. -1 will create a thread for each CPU core. Any other positive number will create that number of threads, up to parallelism_max. |
 | parallelism_max                     | Integer |            | (Default: 16) Max number of parallel threads to use when flushing tables. |
@@ -163,9 +173,12 @@ Full list of options in `config.json`:
 | data_flattening_max_level           | Integer |            | (Default: 0) Object type RECORD items from taps can be loaded into VARIANT columns as JSON (default) or we can flatten the schema by creating columns automatically.<br><br>When value is 0 (default) then flattening functionality is turned off. |
 | primary_key_required                | Boolean |            | (Default: True) Log based and Incremental replications on tables with no Primary Key cause duplicates when merging UPDATE events. When set to true, stop loading data if no Primary Key is defined. |
 | validate_records                    | Boolean |            | (Default: False) Validate every single record message to the corresponding JSON schema. This option is disabled by default and invalid RECORD messages will fail only at load time by Snowflake. Enabling this option will detect invalid records earlier but could cause performance degradation. |
-| temp_dir                            | String  |            | (Default: platform-dependent) Directory of temporary CSV files with RECORD messages. |
-| no_compression                      | Boolean |            | (Default: False) Generate uncompressed CSV files when loading to Snowflake. Normally, by default GZIP compressed files are generated. |
-| query_tag                           | String  |            | (Default: None) Optional string to tag executed queries in Snowflake. Replaces tokens `schema` and `table` with the appropriate values. The tags are displayed in the output of the Snowflake `QUERY_HISTORY`, `QUERY_HISTORY_BY_*` functions. |
+| temp_dir                            | String  |            | (Default: platform-dependent) Directory of temporary files with RECORD messages. |
+| no_compression                      | Boolean |            | (Default: False) Generate uncompressed files when loading to Snowflake. Normally, by default GZIP compressed files are generated. |
+| query_tag                           | String  |            | (Default: None) Optional string to tag executed queries in Snowflake. Replaces tokens `{{database}}`, `{{schema}}` and `{{table}}` with the appropriate values. The tags are displayed in the output of the Snowflake `QUERY_HISTORY`, `QUERY_HISTORY_BY_*` functions. |
+| archive_load_files                  | Boolean |            | (Default: False) When enabled, the files loaded to Snowflake will also be stored in `archive_load_files_s3_bucket` under the key `/{archive_load_files_s3_prefix}/{schema_name}/{table_name}/`. All archived files will have `tap`, `schema`, `table` and `archived-by` as S3 metadata keys. When incremental replication is used, the archived files will also have the following S3 metadata keys: `incremental-key`, `incremental-key-min` and `incremental-key-max`. 
+| archive_load_files_s3_prefix        | String  |            | (Default: "archive") When `archive_load_files` is enabled, the archived files will be placed in the archive S3 bucket under this prefix.
+| archive_load_files_s3_bucket        | String  |            | (Default: Value of `s3_bucket`) When `archive_load_files` is enabled, the archived files will be placed in this bucket.
 
 ### To run tests:
 
@@ -174,7 +187,7 @@ Full list of options in `config.json`:
   export TARGET_SNOWFLAKE_ACCOUNT=<snowflake-account-name>
   export TARGET_SNOWFLAKE_DBNAME=<snowflake-database-name>
   export TARGET_SNOWFLAKE_USER=<snowflake-user>
-  export TARGET_SNOWFLAKE_PASSWORD=<snowfale-password>
+  export TARGET_SNOWFLAKE_PASSWORD=<snowflake-password>
   export TARGET_SNOWFLAKE_WAREHOUSE=<snowflake-warehouse>
   export TARGET_SNOWFLAKE_SCHEMA=<snowflake-schema>
   export TARGET_SNOWFLAKE_AWS_ACCESS_KEY=<aws-access-key-id>
@@ -183,12 +196,13 @@ Full list of options in `config.json`:
   export TARGET_SNOWFLAKE_S3_BUCKET=<s3-external-bucket>
   export TARGET_SNOWFLAKE_S3_KEY_PREFIX=<bucket-directory>
   export TARGET_SNOWFLAKE_STAGE=<stage-object-with-schema-name>
-  export TARGET_SNOWFLAKE_FILE_FORMAT=<file-format-object-with-schema-name>
+  export TARGET_SNOWFLAKE_FILE_FORMAT_CSV=<file-format-csv-object-with-schema-name>
+  export TARGET_SNOWFLAKE_FILE_FORMAT_PARQUET=<file-format-parquet-object-with-schema-name>
   export CLIENT_SIDE_ENCRYPTION_MASTER_KEY=<client_side_encryption_master_key>
   export CLIENT_SIDE_ENCRYPTION_STAGE_OBJECT=<client_side_encryption_stage_object>
 ```
 
-2. Install python test dependencies in a virtual env and run nose unit and integration tests
+2. Install python test dependencies in a virtual env and run unit and integration tests
 ```
   python3 -m venv venv
   . venv/bin/activate
@@ -198,12 +212,12 @@ Full list of options in `config.json`:
 
 3. To run unit tests:
 ```
-  nosetests --where=tests/unit
+  pytest tests/unit
 ```
 
 4. To run integration tests:
 ```
-  nosetests --where=tests/integration
+  pytest tests/integration
 ```
 
 ### To run pylint:
@@ -213,9 +227,8 @@ Full list of options in `config.json`:
   python3 -m venv venv
   . venv/bin/activate
   pip install --upgrade pip
-  pip install .
-  pip install pylint
-  pylint target_snowflake -d C,W,unexpected-keyword-arg,duplicate-code
+  pip install .[test]
+  pylint target_snowflake
 ```
 
 ## Developing the Target in Docker
@@ -229,13 +242,10 @@ To develop with docker:
 ```
 docker build . -t ppw-snowflake-target
 ```
-3. Now you can run your tests with `docker run --env-file .docker-env ppw-snowflake-target <command>`, where `<command>` is one of:
-* `test --unit` (runs unit tests)
-* `test --integration` (runs integration tests)
-* `test` (runs both unit and integration tests)
-* `lint` (runs pylint)
-
-You can also combine them, so `test --unit lint` will run unit tests and then lint your code. 
+3. Now you can run `docker run --rm -it --env-file .docker-env -v $(pwd):/app ppw-snowflake-target`, to run whatever commands are necessary while making edits to the source files in your choice of IDE
+* `pytest` to run all tests
+* `pytest <dir>` to run test in the specified directory
+* `pylint target_snowflake` to run the linter (probably doesn't pass due to upstream changes)
 
 ## License
 

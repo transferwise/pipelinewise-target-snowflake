@@ -1,7 +1,10 @@
+import json
 import unittest
 import os
 import json
+from unittest.mock import patch
 from target_snowflake import db_sync
+from target_snowflake.exceptions import PrimaryKeyNotFoundException
 try:
     import tests.integration.utils as test_utils
 except ImportError:
@@ -22,6 +25,8 @@ class TestDBSync(unittest.TestCase):
             'str_or_null': {"type": ["string", "null"]},
             'dt': {"type": ["string"], "format": "date-time"},
             'dt_or_null': {"type": ["string", "null"], "format": "date-time"},
+            'd': {"type": ["string"], "format": "date"},
+            'd_or_null': {"type": ["string", "null"], "format": "date"},            
             'time': {"type": ["string"], "format": "time"},
             'time_or_null': {"type": ["string", "null"], "format": "time"},
             'binary': {"type": ["string", "null"], "format": "binary"},
@@ -87,6 +92,11 @@ class TestDBSync(unittest.TestCase):
         config_with_external_stage['stage'] = 'dummy-value'
         self.assertGreater(len(validator(config_with_external_stage)), 0)
 
+        # Configuration with archive_load_files but no s3_bucket
+        config_with_archive_load_files = minimal_config.copy()
+        config_with_archive_load_files['archive_load_files'] = True
+        self.assertGreater(len(validator(config_with_external_stage)), 0)
+
     def test_column_type_mapping(self):
         """Test JSON type to Snowflake column type mappings"""
         mapper = db_sync.column_type
@@ -97,6 +107,8 @@ class TestDBSync(unittest.TestCase):
             'str_or_null': 'text',
             'dt': 'timestamp_ntz',
             'dt_or_null': 'timestamp_ntz',
+            'd': 'date',
+            'd_or_null': 'date',            
             'time': 'time',
             'time_or_null': 'time',
             'binary': 'binary',
@@ -122,6 +134,8 @@ class TestDBSync(unittest.TestCase):
             'str_or_null': '',
             'dt': '',
             'dt_or_null': '',
+            'd': '',
+            'd_or_null': '',            
             'time': '',
             'time_or_null': '',
             'binary': 'to_binary',
@@ -137,279 +151,199 @@ class TestDBSync(unittest.TestCase):
         for key, val in self.json_types.items():
             self.assertEqual(trans(val), sf_trans[key])
 
-    def test_stream_name_to_dict(self):
-        """Test identifying catalog, schema and table names from fully qualified stream and table names"""
-        # Singer stream name format (Default '-' separator)
-        self.assertEqual(
-            db_sync.stream_name_to_dict('my_table'),
-            {"catalog_name": None, "schema_name": None, "table_name": "my_table"})
-
-        # Singer stream name format (Default '-' separator)
-        self.assertEqual(
-            db_sync.stream_name_to_dict('my_schema-my_table'),
-            {"catalog_name": None, "schema_name": "my_schema", "table_name": "my_table"})
-
-        # Singer stream name format (Default '-' separator)
-        self.assertEqual(
-            db_sync.stream_name_to_dict('my_catalog-my_schema-my_table'),
-            {"catalog_name": "my_catalog", "schema_name": "my_schema", "table_name": "my_table"})
-
-        # Snowflake table format (Custom '.' separator)
-        self.assertEqual(
-            db_sync.stream_name_to_dict('my_table', separator='.'),
-            {"catalog_name": None, "schema_name": None, "table_name": "my_table"})
-
-        # Snowflake table format (Custom '.' separator)
-        self.assertEqual(
-            db_sync.stream_name_to_dict('my_schema.my_table', separator='.'),
-            {"catalog_name": None, "schema_name": "my_schema", "table_name": "my_table"})
-
-        # Snowflake table format (Custom '.' separator)
-        self.assertEqual(
-            db_sync.stream_name_to_dict('my_catalog.my_schema.my_table', separator='.'),
-            {"catalog_name": "my_catalog", "schema_name": "my_schema", "table_name": "my_table"})
-
-    def test_flatten_schema(self):
-        """Test flattening of SCHEMA messages"""
-        flatten_schema = db_sync.flatten_schema
-
-        # Schema with no object properties should be empty dict
-        schema_with_no_properties = {"type": "object"}
-        self.assertEqual(flatten_schema(schema_with_no_properties), {})
-
-        not_nested_schema = {
-            "type": "object",
-            "properties": {
-                "c_pk": {"type": ["null", "integer"]},
-                "c_varchar": {"type": ["null", "string"]},
-                "c_int": {"type": ["null", "integer"]}}}
-
-        # NO FLATTENING - Schema with simple properties should be a plain dictionary
-        self.assertEqual(flatten_schema(not_nested_schema), not_nested_schema['properties'])
-
-        nested_schema_with_no_properties = {
-            "type": "object",
-            "properties": {
-                "c_pk": {"type": ["null", "integer"]},
-                "c_varchar": {"type": ["null", "string"]},
-                "c_int": {"type": ["null", "integer"]},
-                "c_obj": {"type": ["null", "object"]}}}
-
-        # NO FLATTENING - Schema with object type property but without further properties should be a plain dictionary
-        self.assertEqual(flatten_schema(nested_schema_with_no_properties),
-                          nested_schema_with_no_properties['properties'])
-
-        nested_schema_with_properties = {
-            "type": "object",
-            "properties": {
-                "c_pk": {"type": ["null", "integer"]},
-                "c_varchar": {"type": ["null", "string"]},
-                "c_int": {"type": ["null", "integer"]},
-                "c_obj": {
-                    "type": ["null", "object"],
-                    "properties": {
-                        "nested_prop1": {"type": ["null", "string"]},
-                        "nested_prop2": {"type": ["null", "string"]},
-                        "nested_prop3": {
-                            "type": ["null", "object"],
-                            "properties": {
-                                "multi_nested_prop1": {"type": ["null", "string"]},
-                                "multi_nested_prop2": {"type": ["null", "string"]}
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        # NO FLATTENING - Schema with object type property but without further properties should be a plain dictionary
-        # No flattening (default)
-        self.assertEqual(flatten_schema(nested_schema_with_properties), nested_schema_with_properties['properties'])
-
-        # NO FLATTENING - Schema with object type property but without further properties should be a plain dictionary
-        #   max_level: 0 : No flattening (default)
-        self.assertEqual(flatten_schema(nested_schema_with_properties, max_level=0),
-                          nested_schema_with_properties['properties'])
-
-        # FLATTENING - Schema with object type property but without further properties should be a dict with
-        # flattened properties
-        self.assertEqual(flatten_schema(nested_schema_with_properties, max_level=1),
-                          {
-                              'c_pk': {'type': ['null', 'integer']},
-                              'c_varchar': {'type': ['null', 'string']},
-                              'c_int': {'type': ['null', 'integer']},
-                              'c_obj__nested_prop1': {'type': ['null', 'string']},
-                              'c_obj__nested_prop2': {'type': ['null', 'string']},
-                              'c_obj__nested_prop3': {
-                                  'type': ['null', 'object'],
-                                  "properties": {
-                                      "multi_nested_prop1": {"type": ["null", "string"]},
-                                      "multi_nested_prop2": {"type": ["null", "string"]}
-                                  }
-                              }
-                          })
-
-        # FLATTENING - Schema with object type property but without further properties should be a dict with
-        # flattened properties
-        self.assertEqual(flatten_schema(nested_schema_with_properties, max_level=10),
-                          {
-                              'c_pk': {'type': ['null', 'integer']},
-                              'c_varchar': {'type': ['null', 'string']},
-                              'c_int': {'type': ['null', 'integer']},
-                              'c_obj__nested_prop1': {'type': ['null', 'string']},
-                              'c_obj__nested_prop2': {'type': ['null', 'string']},
-                              'c_obj__nested_prop3__multi_nested_prop1': {'type': ['null', 'string']},
-                              'c_obj__nested_prop3__multi_nested_prop2': {'type': ['null', 'string']}
-                          })
-
-    def test_flatten_record(self):
-        """Test flattening of RECORD messages"""
-        flatten_record = db_sync.flatten_record
-
-        empty_record = {}
-        # Empty record should be empty dict
-        self.assertEqual(flatten_record(empty_record), {})
-
-        not_nested_record = {"c_pk": 1, "c_varchar": "1", "c_int": 1}
-        # NO FLATTENING - Record with simple properties should be a plain dictionary
-        self.assertEqual(flatten_record(not_nested_record), not_nested_record)
-
-        nested_record = {
-            "c_pk": 1,
-            "c_varchar": "1",
-            "c_int": 1,
-            "c_obj": {
-                "nested_prop1": "value_1",
-                "nested_prop2": "value_2",
-                "nested_prop3": {
-                    "multi_nested_prop1": "multi_value_1",
-                    "multi_nested_prop2": "multi_value_2",
-                }}}
-
-        # NO FLATTENING - No flattening (default)
-        self.assertEqual(flatten_record(nested_record),
-                          {
-                              "c_pk": 1,
-                              "c_varchar": "1",
-                              "c_int": 1,
-                              "c_obj": '{"nested_prop1": "value_1", "nested_prop2": "value_2", "nested_prop3": {'
-                                       '"multi_nested_prop1": "multi_value_1", "multi_nested_prop2": "multi_value_2"}}'
-                          })
-
-        # NO FLATTENING
-        #   max_level: 0 : No flattening (default)
-        self.assertEqual(flatten_record(nested_record, max_level=0),
-                          {
-                              "c_pk": 1,
-                              "c_varchar": "1",
-                              "c_int": 1,
-                              "c_obj": '{"nested_prop1": "value_1", "nested_prop2": "value_2", "nested_prop3": {'
-                                       '"multi_nested_prop1": "multi_value_1", "multi_nested_prop2": "multi_value_2"}}'
-                          })
-
-        # SEMI FLATTENING
-        #   max_level: 1 : Semi-flattening (default)
-        self.assertEqual(flatten_record(nested_record, max_level=1),
-                          {
-                              "c_pk": 1,
-                              "c_varchar": "1",
-                              "c_int": 1,
-                              "c_obj__nested_prop1": "value_1",
-                              "c_obj__nested_prop2": "value_2",
-                              "c_obj__nested_prop3": '{"multi_nested_prop1": "multi_value_1", "multi_nested_prop2": '
-                                                     '"multi_value_2"}'
-                          })
-
-        # FLATTENING
-        self.assertEqual(flatten_record(nested_record, max_level=10),
-                          {
-                              "c_pk": 1,
-                              "c_varchar": "1",
-                              "c_int": 1,
-                              "c_obj__nested_prop1": "value_1",
-                              "c_obj__nested_prop2": "value_2",
-                              "c_obj__nested_prop3__multi_nested_prop1": "multi_value_1",
-                              "c_obj__nested_prop3__multi_nested_prop2": "multi_value_2"
-                          })
-
-    def test_flatten_record_with_flatten_schema(self):
-        flatten_record = db_sync.flatten_record
-
-        flatten_schema = {
-            "id": {
-                "type": [
-                    "object",
-                    "array",
-                    "null"
-                ]
-            }
-        }
-
-        test_cases = [
-            (
-                True,
-                {
-                    "id": 1,
-                    "data": "xyz"
-                },
-                {
-                    "id": "1",
-                    "data": "xyz"
-                }
-            ),
-            (
-                False,
-                {
-                    "id": 1,
-                    "data": "xyz"
-                },
-                {
-                    "id": 1,
-                    "data": "xyz"
-                }
-            )
-        ]
-
-        for idx, (should_use_flatten_schema, record, expected_output) in enumerate(test_cases):
-            output = flatten_record(record, flatten_schema if should_use_flatten_schema else None)
-            self.assertEqual(output, expected_output, f"Test {idx} failed. Testcase: {test_cases[idx]}")
-
     def test_create_query_tag(self):
-        assert db_sync.create_query_tag(None) is None
-        assert db_sync.create_query_tag('This is a test query tag') == 'This is a test query tag'
-        assert db_sync.create_query_tag('Loading into {schema}.{table}',
+        self.assertIsNone(db_sync.create_query_tag(None))
+        self.assertEqual(db_sync.create_query_tag('This is a test query tag'), 'This is a test query tag')
+        self.assertEqual(db_sync.create_query_tag('Loading into {{database}}.{{schema}}.{{table}}',
+                                        database='test_database',
                                         schema='test_schema',
-                                        table='test_table') == 'Loading into test_schema.test_table'
-        assert db_sync.create_query_tag('Loading into {schema}.{table}',
+                                        table='test_table'), 'Loading into test_database.test_schema.test_table')
+        self.assertEqual(db_sync.create_query_tag('Loading into {{database}}.{{schema}}.{{table}}',
+                                        database=None,
                                         schema=None,
-                                        table=None) == 'Loading into unknown-schema.unknown-table'
+                                        table=None), 'Loading into ..')
 
-    def test_generate_s3_key_prefix(self):
+        # JSON formatted query tags with variables
+        json_query_tag = db_sync.create_query_tag(
+            '{"database": "{{database}}", "schema": "{{schema}}", "table": "{{table}}"}',
+            database='test_database',
+            schema='test_schema',
+            table='test_table')
+        # Load the generated JSON formatted query tag to make sure it's a valid JSON
+        self.assertEqual(json.loads(json_query_tag), {
+            'database': 'test_database',
+            'schema': 'test_schema',
+            'table': 'test_table'
+        })
 
-        with open(f'{os.path.dirname(__file__)}/resources/same-schemas-multiple-times.json', 'r') as f:
-            lines = f.readlines()
-        
-        self.config = test_utils.get_test_config()
-        DbSync_obj = db_sync.DbSync(self.config, json.loads(lines[0]))
+        # JSON formatted query tags with variables quotes in the middle
+        json_query_tag = db_sync.create_query_tag(
+            '{"database": "{{database}}", "schema": "{{schema}}", "table": "{{table}}"}',
+            database='test"database',
+            schema='test"schema',
+            table='test"table')
 
-        expected_string = f"{self.config['s3_key_prefix'].replace('/','')}/{self.config['default_target_schema']}__test_table_one/"
-        s3_key_with_snowpipe = DbSync_obj._generate_s3_key_prefix('tap_mysql_test-test_table_one', True)        
+        # Load the generated JSON formatted query tag to make sure it's a valid JSON
+        self.assertEqual(json.loads(json_query_tag), {
+            'database': 'test"database',
+            'schema': 'test"schema',
+            'table': 'test"table'
+        })
+
+        # JSON formatted query tags with quoted variables
+        json_query_tag = db_sync.create_query_tag(
+            '{"database": "{{database}}", "schema": "{{schema}}", "table": "{{table}}"}',
+            database='"test_database"',
+            schema='"test_schema"',
+            table='"test_table"')
+        # Load the generated JSON formatted query tag to make sure it's a valid JSON
+        self.assertEqual(json.loads(json_query_tag), {
+            'database': 'test_database',
+            'schema': 'test_schema',
+            'table': 'test_table'
+        })
+
+    @patch('target_snowflake.db_sync.DbSync.query')
+    def test_parallelism(self, query_patch):
+        query_patch.return_value = [{ 'type': 'CSV' }]
+
+        minimal_config = {
+            'account': "dummy-value",
+            'dbname': "dummy-value",
+            'user': "dummy-value",
+            'password': "dummy-value",
+            'warehouse': "dummy-value",
+            'default_target_schema': "dummy-value",
+            'file_format': "dummy-value"
+        }
+
+        # Using external stages should allow parallelism
+        external_stage_with_parallel = {
+            's3_bucket': 'dummy-bucket',
+            'stage': 'dummy_schema.dummy_stage',
+            'parallelism': 5
+        }
+
+        self.assertEqual(db_sync.DbSync({**minimal_config,
+                                         **external_stage_with_parallel}).connection_config['parallelism'], 5)
+
+        # Using table stages should allow parallelism
+        table_stage_with_parallel = {
+            'parallelism': 5
+        }
+        self.assertEqual(db_sync.DbSync({**minimal_config,
+                                         **table_stage_with_parallel}).connection_config['parallelism'], 5)
+
+    @patch('target_snowflake.upload_clients.s3_upload_client.S3UploadClient.copy_object')
+    @patch('target_snowflake.db_sync.DbSync.query')
+    def test_copy_to_archive(self, query_patch, copy_object_patch):
+        query_patch.return_value = [{'type': 'CSV'}]
+        minimal_config = {
+            'account': "dummy-value",
+            'dbname': "dummy-value",
+            'user': "dummy-value",
+            'password': "dummy-value",
+            'warehouse': "dummy-value",
+            'default_target_schema': "dummy-value",
+            'file_format': "dummy-value",
+            's3_bucket': 'dummy-bucket',
+            'stage': 'dummy_schema.dummy_stage'
+        }
+
+        # Assert default values (same bucket, 'archive' as the archive prefix)
+        s3_config = {}
+        dbsync = db_sync.DbSync({**minimal_config, **s3_config})
+        dbsync.copy_to_archive('source/file', 'tap/schema/file', {'meta': "data"})
+
+        self.assertEqual(copy_object_patch.call_args[0][0], 'dummy-bucket/source/file')
+        self.assertEqual(copy_object_patch.call_args[0][1], 'dummy-bucket')
+        self.assertEqual(copy_object_patch.call_args[0][2], 'archive/tap/schema/file')
+
+        # Assert custom archive bucket and prefix
+        s3_config = {
+            'archive_load_files_s3_bucket': "custom-bucket",
+            'archive_load_files_s3_prefix': "custom-prefix"
+        }
+        dbsync = db_sync.DbSync({**minimal_config, **s3_config})
+        dbsync.copy_to_archive('source/file', 'tap/schema/file', {'meta': "data"})
+
+        self.assertEqual(copy_object_patch.call_args[0][0], 'dummy-bucket/source/file')
+        self.assertEqual(copy_object_patch.call_args[0][1], 'custom-bucket')
+        self.assertEqual(copy_object_patch.call_args[0][2], 'custom-prefix/tap/schema/file')
+
+    def test_safe_column_name(self):
+        self.assertEqual(db_sync.safe_column_name("columnname"), '"COLUMNNAME"')
+        self.assertEqual(db_sync.safe_column_name("columnName"), '"COLUMNNAME"')
+        self.assertEqual(db_sync.safe_column_name("column-name"), '"COLUMN-NAME"')
+        self.assertEqual(db_sync.safe_column_name("column name"), '"COLUMN NAME"')
+
+    def json_element_name(self):
+        self.assertEqual(db_sync.safe_column_name("columnname"), 'columnname"')
+        self.assertEqual(db_sync.safe_column_name("columnName"), 'columnName"')
+        self.assertEqual(db_sync.safe_column_name("column-name"), 'column-name')
+        self.assertEqual(db_sync.safe_column_name('"column name"'), '"column name"')
+
+    @patch('target_snowflake.db_sync.DbSync.query')
+    def test_record_primary_key_string(self, query_patch):
+        query_patch.return_value = [{'type': 'CSV'}]
+        minimal_config = {
+            'account': "dummy-value",
+            'dbname': "dummy-value",
+            'user': "dummy-value",
+            'password': "dummy-value",
+            'warehouse': "dummy-value",
+            'default_target_schema': "dummy-value",
+            'file_format': "dummy-value"
+        }
+
+        stream_schema_message = {"stream": "public-table1",
+                                 "schema": {
+                                     "properties": {
+                                         "id": { "type": ["integer"]},
+                                         "c_str": {"type": ["null", "string"]}}},
+                                 "key_properties": ["id"]}
+
+        # Single primary key string
+        dbsync = db_sync.DbSync(minimal_config, stream_schema_message)
+        self.assertEqual(dbsync.record_primary_key_string({'id': 123}), '123')
+
+        # Composite primary key string
+        stream_schema_message['key_properties'] = ['id', 'c_str']
+        dbsync = db_sync.DbSync(minimal_config, stream_schema_message)
+        self.assertEqual(dbsync.record_primary_key_string({'id': 123, 'c_str': 'xyz'}), '123,xyz')
+
+        # Missing field as PK
+        stream_schema_message['key_properties'] = ['invalid_col']
+        dbsync = db_sync.DbSync(minimal_config, stream_schema_message)
+        with self.assertRaisesRegex(PrimaryKeyNotFoundException,
+                                    "Cannot find \['invalid_col'\] primary key\(s\) in record\. Available fields: \['id', 'c_str'\]"):
+            dbsync.record_primary_key_string({'id': 123, 'c_str': 'xyz'})
+
+    @patch('target_snowflake.db_sync.DbSync.query')
+    def test_generate_s3_key_prefix(self, query_patch):
+        query_patch.return_value = [{'type': 'CSV'}]
+        minimal_config = {
+            'account': "dummy-value",
+            'dbname': "dummy-value",
+            'user': "dummy-value",
+            'password': "dummy-value",
+            'warehouse': "dummy-value",
+            'default_target_schema': "dummy-target-schema",
+            'file_format': "dummy-value",
+            's3_bucket': 'dummy-bucket',
+            'stage': 'dummy_schema.dummy_stage',
+            's3_key_prefix': 'dummy_key_prefix/',
+        }
+
+        s3_config = {}
+        record_stream_name = "dummy_tap_schema-dummy_tap_table"
+        schema_record = json.loads('{"type": "SCHEMA", "stream": "public-table1", "schema": {"definitions": {"sdc_recursive_boolean_array": {"items": {"$ref": "#/definitions/sdc_recursive_boolean_array"}, "type": ["null", "boolean", "array"]}, "sdc_recursive_integer_array": {"items": {"$ref": "#/definitions/sdc_recursive_integer_array"}, "type": ["null", "integer", "array"]}, "sdc_recursive_number_array": {"items": {"$ref": "#/definitions/sdc_recursive_number_array"}, "type": ["null", "number", "array"]}, "sdc_recursive_object_array": {"items": {"$ref": "#/definitions/sdc_recursive_object_array"}, "type": ["null", "object", "array"]}, "sdc_recursive_string_array": {"items": {"$ref": "#/definitions/sdc_recursive_string_array"}, "type": ["null", "string", "array"]}, "sdc_recursive_timestamp_array": {"format": "date-time", "items": {"$ref": "#/definitions/sdc_recursive_timestamp_array"}, "type": ["null", "string", "array"]}}, "properties": {"cid": {"maximum": 2147483647, "minimum": -2147483648, "type": ["integer"]}, "cvarchar": {"type": ["null", "string"]}, "_sdc_deleted_at": {"type": ["null", "string"], "format": "date-time"}}, "type": "object"}, "key_properties": ["cid"], "bookmark_properties": ["lsn"]}')
+        DbSync_obj = db_sync.DbSync({**minimal_config, **s3_config}, schema_record)
+
+        # Test snowpipe alteration
+        expected_string = f'{minimal_config["s3_key_prefix"].replace("/","")}/{minimal_config["default_target_schema"]}__dummy_tap_table/'
+        s3_key_with_snowpipe = DbSync_obj._generate_s3_key_prefix(record_stream_name, True)
         self.assertEqual(s3_key_with_snowpipe, expected_string)
-
-        s3_key_without_snowpipe = DbSync_obj._generate_s3_key_prefix('tap_mysql_test-test_table_one', False)
-        self.assertEqual(s3_key_without_snowpipe, f"{self.config['s3_key_prefix'].replace('/','')}/")
-
-
-    def test_snowpipe_detail_generation(self):
-        with open(f'{os.path.dirname(__file__)}/resources/same-schemas-multiple-times.json', 'r') as f:
-            lines = f.readlines()
-        self.config = test_utils.get_test_config()
-        
-        DbSync_obj = db_sync.DbSync(self.config, json.loads(lines[0]))
-        schema_table_name = DbSync_obj.table_name('tap_mysql_test-test_table_one', False)
-        pipe_name = DbSync_obj._generate_pipe_name(self.config['dbname'], schema_table_name)
-        stripped_db_name = self.config['dbname'].replace('"','')
-        stripped_table_name = schema_table_name.replace('"','')
-        expected_pipe_name = f"{stripped_db_name}.{stripped_table_name}_s3_pipe"
-
-        self.assertEqual(pipe_name, expected_pipe_name)
+        # Test normal behavior without snowpipe
+        s3_key_without_snowpipe = DbSync_obj._generate_s3_key_prefix(record_stream_name, False)
+        self.assertEqual(s3_key_without_snowpipe, minimal_config["s3_key_prefix"])

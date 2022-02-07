@@ -21,7 +21,7 @@ def get_db_config():
     config['warehouse'] = os.environ.get('TARGET_SNOWFLAKE_WAREHOUSE')
     config['default_target_schema'] = os.environ.get("TARGET_SNOWFLAKE_SCHEMA")
     config['stage'] = os.environ.get("TARGET_SNOWFLAKE_STAGE")
-    config['file_format'] = os.environ.get("TARGET_SNOWFLAKE_FILE_FORMAT")
+    config['file_format'] = os.environ.get("TARGET_SNOWFLAKE_FILE_FORMAT_CSV")
     config['load_via_snowpipe'] = os.environ.get("TARGET_SNOWFLAKE_LOAD_VIA_SNOWPIPE")
 
     # AWS IAM and S3 bucket

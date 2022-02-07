@@ -1,5 +1,74 @@
-1.9.0 (2020-11-18)
+1.15.0 (2022-01-14)
 -------------------
+
+*Added*
+- Support parallelism for table stages
+
+*Fixes*
+- Emit last encountered state message if there are no records.
+
+*Changes*
+- Migrate CI to github actions
+- Bump dependencies
+
+
+1.14.1 (2021-10-14)
+-------------------
+- Increase `max_records` when selecting columns by an order of magnitude
+- Bumping dependencies
+
+1.14.0 (2021-09-30)
+-------------------
+- Add support for `date` property format
+- Stop logging record when error happens
+
+1.13.1 (2021-07-15)
+-------------------
+- Fixed an issue with S3 metadata required for decryption not being included in archived load files.
+
+1.13.0 (2021-06-23)
+-------------------
+- Add `archive_load_files` parameter to optionally archive load files on S3
+- Bumping dependencies
+
+1.12.0 (2021-04-12)
+-------------------
+- Add optional `batch_wait_limit_seconds` parameter
+- Bumping dependencies
+
+1.11.1 (2021-03-23)
+-------------------
+- Fixed an issue when `SHOW FILE FORMATS` ran too many times slowing down the startup time of the target
+- Bump `snowflake-connectory-python` from `2.3.10` to `2.4.1`
+- Bump `numpy` from `<1.20.0` to `<1.21.0`
+
+1.11.0 (2021-03-17)
+-------------------
+- Add parquet support
+- Add check and few logs in the date parsing routine
+- Bumping dependencies
+  
+1.10.1 (2021-01-08)
+-------------------
+- Update caching mechanism to fix issue with badly ordered queryies in a transaction
+- Introduced a reserved named parameter for prepared statements.
+- Do not use parallel file upload with PUT command and table stages.
+- Bumping dependencies
+
+1.10.0 (2020-12-03)
+-------------------
+
+- Add `{{database}}` token to `query_tag` parameter
+- Use Jinja style `query_tag` template variables
+
+1.9.1 (2020-12-02)
+-------------------
+
+- Fixed a dependency issue
+- Add everything from the unreleased `1.9.0`
+
+1.9.0 (2020-11-18) - NOT RELEASED TO PyPI
+-----------------------------------------
 
 - Use snowflake table stages by default to load data into tables
 - Add optional `query_tag` parameter
