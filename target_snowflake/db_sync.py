@@ -464,13 +464,19 @@ class DbSync:
                                                                             pk_merge_condition=
                                                                                 self.primary_key_merge_condition())
                     self.logger.debug('Running query: %s', merge_sql)
-                    cur.execute(merge_sql)
 
-                    # Get number of inserted and updated records - MERGE does insert and update
-                    results = cur.fetchall()
-                    if len(results) > 0:
-                        inserts = results[0].get('number of rows inserted', 0)
-                        updates = results[0].get('number of rows updated', 0)
+                    try:
+                        cur.execute(merge_sql)
+                        # Get number of inserted and updated records - MERGE does insert and update
+                        results = cur.fetchall()
+                        if len(results) > 0:
+                            inserts = results[0].get('number of rows inserted', 0)
+                            updates = results[0].get('number of rows updated', 0)
+                    except Exception as ex:
+                        self.logger.error(
+                            f'Error while executing MERGE query for table "{self.table_name(stream, False)}" in stream "{stream}"'
+                        )
+                        raise ex
 
                 # Insert only with COPY command if no primary key
                 else:
@@ -481,12 +487,18 @@ class DbSync:
                                                                             self.connection_config['file_format'],
                                                                           columns=columns_with_trans)
                     self.logger.debug('Running query: %s', copy_sql)
-                    cur.execute(copy_sql)
 
-                    # Get number of inserted records - COPY does insert only
-                    results = cur.fetchall()
-                    if len(results) > 0:
-                        inserts = results[0].get('rows_loaded', 0)
+                    try:
+                        cur.execute(copy_sql)
+                        # Get number of inserted records - COPY does insert only
+                        results = cur.fetchall()
+                        if len(results) > 0:
+                            inserts = results[0].get('rows_loaded', 0)
+                    except Exception as ex:
+                        self.logger.error(
+                            f'Error while executing COPY query for table "{self.table_name(stream, False)}" in stream "{stream}"'
+                        )
+                        raise ex
 
                 self.logger.info('Loading into %s: %s',
                     self.table_name(stream, False),
