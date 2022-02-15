@@ -474,7 +474,8 @@ class DbSync:
                             updates = results[0].get('number of rows updated', 0)
                     except Exception as ex:
                         self.logger.error(
-                            f'Error while executing MERGE query for table "{self.table_name(stream, False)}" in stream "{stream}"'
+                            'Error while executing MERGE query for table "%s" in stream "%s"',
+                            self.table_name(stream, False), stream
                         )
                         raise ex
 
@@ -496,7 +497,8 @@ class DbSync:
                             inserts = results[0].get('rows_loaded', 0)
                     except Exception as ex:
                         self.logger.error(
-                            f'Error while executing COPY query for table "{self.table_name(stream, False)}" in stream "{stream}"'
+                            'Error while executing COPY query for table "%s" in stream "%s"',
+                            self.table_name(stream, False), stream
                         )
                         raise ex
 
