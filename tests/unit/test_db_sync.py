@@ -310,5 +310,5 @@ class TestDBSync(unittest.TestCase):
         stream_schema_message['key_properties'] = ['invalid_col']
         dbsync = db_sync.DbSync(minimal_config, stream_schema_message)
         with self.assertRaisesRegex(PrimaryKeyNotFoundException,
-                                    "Cannot find \['invalid_col'\] primary key\(s\) in record\. Available fields: \['id', 'c_str'\]"):
+                                    r"Cannot find \['invalid_col'\] primary key\(s\) in record\. Available fields: \['id', 'c_str'\]"):
             dbsync.record_primary_key_string({'id': 123, 'c_str': 'xyz'})
