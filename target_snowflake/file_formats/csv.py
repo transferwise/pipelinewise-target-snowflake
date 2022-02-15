@@ -7,25 +7,25 @@ from typing import Callable, Dict, List
 from tempfile import mkstemp
 
 from target_snowflake import flattening
-
+from target_snowflake.file_formats import FileFormat
 
 def create_copy_sql(table_name: str,
                     stage_name: str,
                     s3_key: str,
-                    file_format_name: str,
+                    file_format: FileFormat,
                     columns: List):
     """Generate a CSV compatible snowflake COPY INTO command"""
     p_columns = ', '.join([c['name'] for c in columns])
 
     return f"COPY INTO {table_name} ({p_columns}) " \
            f"FROM '@{stage_name}/{s3_key}' " \
-           f"FILE_FORMAT = (format_name='{file_format_name}')"
+           f"{file_format.declaration_for_copy}"
 
 
 def create_merge_sql(table_name: str,
                      stage_name: str,
                      s3_key: str,
-                     file_format_name: str,
+                     file_format: FileFormat,
                      columns: List,
                      pk_merge_condition: str) -> str:
     """Generate a CSV compatible snowflake MERGE INTO command"""
@@ -37,7 +37,7 @@ def create_merge_sql(table_name: str,
     return f"MERGE INTO {table_name} t USING (" \
            f"SELECT {p_source_columns} " \
            f"FROM '@{stage_name}/{s3_key}' " \
-           f"(FILE_FORMAT => '{file_format_name}')) s " \
+           f"({file_format.declaration_for_merge})) s " \
            f"ON {pk_merge_condition} " \
            f"WHEN MATCHED THEN UPDATE SET {p_update} " \
            "WHEN NOT MATCHED THEN " \

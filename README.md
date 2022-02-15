@@ -56,7 +56,12 @@ You need to create a few objects in snowflake in one schema before start using t
 
 1. Create a named file format. This will be used by the MERGE/COPY commands to parse the files correctly from S3. You can use CSV or Parquet file formats.
 
-To use CSV files:
+To use the default (CSV) file format option:
+
+Leave `file_format` blank in settings to use the default CSV format options.
+
+To use a named CSV file format:
+
 ```
 CREATE FILE FORMAT {database}.{schema}.{file_format_name}
 TYPE = 'CSV' ESCAPE='\\' FIELD_OPTIONALLY_ENCLOSED_BY='"';
