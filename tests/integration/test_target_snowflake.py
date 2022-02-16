@@ -1136,7 +1136,7 @@ class TestIntegration(unittest.TestCase):
         self.config['s3_bucket'] = None
         self.config['stage'] = None
 
-        # Table stages should work with CSV files
+        # Table stages should work with CSV files test
         self.config['file_format'] = os.environ.get('TARGET_SNOWFLAKE_FILE_FORMAT_CSV')
         self.persist_lines_with_cache(tap_lines)
 
