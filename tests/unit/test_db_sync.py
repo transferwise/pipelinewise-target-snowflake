@@ -310,5 +310,81 @@ class TestDBSync(unittest.TestCase):
         stream_schema_message['key_properties'] = ['invalid_col']
         dbsync = db_sync.DbSync(minimal_config, stream_schema_message)
         with self.assertRaisesRegex(PrimaryKeyNotFoundException,
-                                    "Cannot find \['invalid_col'\] primary key\(s\) in record\. Available fields: \['id', 'c_str'\]"):
+                                    r"Cannot find \['invalid_col'\] primary key\(s\) in record\. Available fields: \['id', 'c_str'\]"):
             dbsync.record_primary_key_string({'id': 123, 'c_str': 'xyz'})
+
+    @patch('target_snowflake.db_sync.DbSync.query')
+    @patch('target_snowflake.db_sync.DbSync._load_file_merge')
+    def test_merge_failure_message(self, load_file_merge_patch, query_patch):
+        LOGGER_NAME = "target_snowflake"
+        query_patch.return_value = [{'type': 'CSV'}]
+        minimal_config = {
+            'account': "dummy_account",
+            'dbname': "dummy_dbname",
+            'user': "dummy_user",
+            'password': "dummy_password",
+            'warehouse': "dummy_warehouse",
+            'default_target_schema': "dummy_default_target_schema",
+            'file_format': "dummy_file_format",
+        }
+
+        stream_schema_message = {
+            "stream": "dummy_stream",
+            "schema": {
+                "properties": {
+                    "id": {"type": ["integer"]},
+                    "c_str": {"type": ["null", "string"]}
+                }
+            },
+            "key_properties": ["id"]
+        }
+
+        # Single primary key string
+        dbsync = db_sync.DbSync(minimal_config, stream_schema_message)
+        load_file_merge_patch.side_effect = Exception()
+        expected_msg = (
+            f'ERROR:{LOGGER_NAME}:Error while executing MERGE query '
+            f'for table "{minimal_config["default_target_schema"]}."{stream_schema_message["stream"].upper()}"" '
+            f'in stream "{stream_schema_message["stream"]}"'
+        )
+        with self.assertRaises(Exception), self.assertLogs(logger=LOGGER_NAME, level="ERROR") as captured_logs:
+            dbsync.load_file(s3_key="dummy-key", count=256, size_bytes=256)
+        self.assertIn(expected_msg, captured_logs.output)
+
+    @patch('target_snowflake.db_sync.DbSync.query')
+    @patch('target_snowflake.db_sync.DbSync._load_file_copy')
+    def test_copy_failure_message(self, load_file_copy_patch, query_patch):
+        LOGGER_NAME = "target_snowflake"
+        query_patch.return_value = [{'type': 'CSV'}]
+        minimal_config = {
+            'account': "dummy_account",
+            'dbname': "dummy_dbname",
+            'user': "dummy_user",
+            'password': "dummy_password",
+            'warehouse': "dummy_warehouse",
+            'default_target_schema': "dummy_default_target_schema",
+            'file_format': "dummy_file_format",
+        }
+
+        stream_schema_message = {
+            "stream": "dummy_stream",
+            "schema": {
+                "properties": {
+                    "id": {"type": ["integer"]},
+                    "c_str": {"type": ["null", "string"]}
+                }
+            },
+            "key_properties": []
+        }
+
+        # Single primary key string
+        dbsync = db_sync.DbSync(minimal_config, stream_schema_message)
+        load_file_copy_patch.side_effect = Exception()
+        expected_msg = (
+            f'ERROR:{LOGGER_NAME}:Error while executing COPY query '
+            f'for table "{minimal_config["default_target_schema"]}."{stream_schema_message["stream"].upper()}"" '
+            f'in stream "{stream_schema_message["stream"]}"'
+        )
+        with self.assertRaises(Exception), self.assertLogs(logger=LOGGER_NAME, level="ERROR") as captured_logs:
+            dbsync.load_file(s3_key="dummy-key", count=256, size_bytes=256)
+        self.assertIn(expected_msg, captured_logs.output)

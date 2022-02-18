@@ -1,6 +1,6 @@
 import json
 import sys
-from typing import List, Dict, Union
+from typing import List, Dict, Union, Tuple
 
 import snowflake.connector
 import re
@@ -434,8 +434,7 @@ class DbSync:
 
     def load_file(self, s3_key, count, size_bytes):
         """Load a supported file type from snowflake stage into target table"""
-        stream_schema_message = self.stream_schema_message
-        stream = stream_schema_message['stream']
+        stream = self.stream_schema_message['stream']
         self.logger.info("Loading %d rows into '%s'", count, self.table_name(stream, False))
 
         # Get list if columns with types
@@ -448,50 +447,90 @@ class DbSync:
             for (name, schema) in self.flatten_schema.items()
         ]
 
+        inserts = 0
+        updates = 0
+
+        # Insert or Update with MERGE command if primary key defined
+        if len(self.stream_schema_message['key_properties']) > 0:
+            try:
+                inserts, updates = self._load_file_merge(
+                    s3_key=s3_key,
+                    stream=stream,
+                    columns_with_trans=columns_with_trans
+                )
+            except Exception as ex:
+                self.logger.error(
+                    'Error while executing MERGE query for table "%s" in stream "%s"',
+                    self.table_name(stream, False), stream
+                )
+                raise ex
+
+        # Insert only with COPY command if no primary key
+        else:
+            try:
+                inserts, updates = (
+                    self._load_file_copy(
+                        s3_key=s3_key,
+                        stream=stream,
+                        columns_with_trans=columns_with_trans
+                    ),
+                    0,
+                )
+            except Exception as ex:
+                self.logger.error(
+                    'Error while executing COPY query for table "%s" in stream "%s"',
+                    self.table_name(stream, False), stream
+                )
+                raise ex
+
+        self.logger.info(
+            'Loading into %s: %s',
+            self.table_name(stream, False),
+            json.dumps({'inserts': inserts, 'updates': updates, 'size_bytes': size_bytes})
+        )
+
+    def _load_file_merge(self, s3_key, stream, columns_with_trans) -> Tuple[int, int]:
+        # MERGE does insert and update
+        inserts = 0
+        updates = 0
         with self.open_connection() as connection:
             with connection.cursor(snowflake.connector.DictCursor) as cur:
-                inserts = 0
-                updates = 0
+                merge_sql = self.file_format.formatter.create_merge_sql(
+                    table_name=self.table_name(stream, False),
+                    stage_name=self.get_stage_name(stream),
+                    s3_key=s3_key,
+                    file_format_name=self.connection_config['file_format'],
+                    columns=columns_with_trans,
+                    pk_merge_condition=self.primary_key_merge_condition()
+                )
+                self.logger.debug('Running query: %s', merge_sql)
+                cur.execute(merge_sql)
+                # Get number of inserted and updated records
+                results = cur.fetchall()
+                if len(results) > 0:
+                    inserts = results[0].get('number of rows inserted', 0)
+                    updates = results[0].get('number of rows updated', 0)
+        return inserts, updates
 
-                # Insert or Update with MERGE command if primary key defined
-                if len(self.stream_schema_message['key_properties']) > 0:
-                    merge_sql = self.file_format.formatter.create_merge_sql(table_name=self.table_name(stream, False),
-                                                                            stage_name=self.get_stage_name(stream),
-                                                                            s3_key=s3_key,
-                                                                            file_format_name=
-                                                                                self.connection_config['file_format'],
-                                                                            columns=columns_with_trans,
-                                                                            pk_merge_condition=
-                                                                                self.primary_key_merge_condition())
-                    self.logger.debug('Running query: %s', merge_sql)
-                    cur.execute(merge_sql)
-
-                    # Get number of inserted and updated records - MERGE does insert and update
-                    results = cur.fetchall()
-                    if len(results) > 0:
-                        inserts = results[0].get('number of rows inserted', 0)
-                        updates = results[0].get('number of rows updated', 0)
-
-                # Insert only with COPY command if no primary key
-                else:
-                    copy_sql = self.file_format.formatter.create_copy_sql(table_name=self.table_name(stream, False),
-                                                                          stage_name=self.get_stage_name(stream),
-                                                                          s3_key=s3_key,
-                                                                          file_format_name=
-                                                                            self.connection_config['file_format'],
-                                                                          columns=columns_with_trans)
-                    self.logger.debug('Running query: %s', copy_sql)
-                    cur.execute(copy_sql)
-
-                    # Get number of inserted records - COPY does insert only
-                    results = cur.fetchall()
-                    if len(results) > 0:
-                        inserts = results[0].get('rows_loaded', 0)
-
-                self.logger.info('Loading into %s: %s',
-                    self.table_name(stream, False),
-                    json.dumps({'inserts': inserts, 'updates': updates, 'size_bytes': size_bytes}))
-
+    def _load_file_copy(self, s3_key, stream, columns_with_trans) -> int:
+        # COPY does insert only
+        inserts = 0
+        with self.open_connection() as connection:
+            with connection.cursor(snowflake.connector.DictCursor) as cur:
+                copy_sql = self.file_format.formatter.create_copy_sql(
+                    table_name=self.table_name(stream, False),
+                    stage_name=self.get_stage_name(stream),
+                    s3_key=s3_key,
+                    file_format_name=self.connection_config['file_format'],
+                    columns=columns_with_trans
+                )
+                self.logger.debug('Running query: %s', copy_sql)
+                cur.execute(copy_sql)
+                # Get number of inserted records - COPY does insert only
+                results = cur.fetchall()
+                if len(results) > 0:
+                    inserts = results[0].get('rows_loaded', 0)
+        return inserts
     def primary_key_merge_condition(self):
         """Generate SQL join condition on primary keys for merge SQL statements"""
         stream_schema_message = self.stream_schema_message
