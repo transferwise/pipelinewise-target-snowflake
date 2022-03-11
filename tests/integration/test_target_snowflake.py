@@ -1170,15 +1170,15 @@ class TestIntegration(unittest.TestCase):
         },
             {
                 'QUERY_TAG': f'PPW test tap run at {current_time}. Loading into {target_db}.{target_schema}.TEST_TABLE_ONE',
-                'QUERIES': 7
+                'QUERIES': 10
             },
             {
                 'QUERY_TAG': f'PPW test tap run at {current_time}. Loading into {target_db}.{target_schema}.TEST_TABLE_THREE',
-                'QUERIES': 6
+                'QUERIES': 9
             },
             {
                 'QUERY_TAG': f'PPW test tap run at {current_time}. Loading into {target_db}.{target_schema}.TEST_TABLE_TWO',
-                'QUERIES': 6
+                'QUERIES': 9
             }
         ])
 
