@@ -115,9 +115,11 @@ def safe_column_name(name):
     """Generate SQL friendly column name"""
     return f'"{name}"'.upper()
 
+
 def json_element_name(name):
     """Generate SQL friendly semi structured element reference name"""
     return f'"{name}"'
+
 
 def column_clause(name, schema_property):
     """Generate DDL column name with column type string"""
@@ -214,7 +216,7 @@ class DbSync:
         self.file_format = FileFormat(self.connection_config['file_format'], self.query, file_format_type)
 
         if not self.connection_config.get('stage') and self.file_format.file_format_type == FileFormatTypes.PARQUET:
-            self.logger.error("Table stages with Parquet file format is not suppported. "
+            self.logger.error("Table stages with Parquet file format is not supported. "
                               "Use named stages with Parquet file format or table stages with CSV files format")
             sys.exit(1)
 
@@ -323,7 +325,7 @@ class DbSync:
 
                 # Run every query in one transaction if query is a list of SQL
                 if isinstance(query, list):
-                    self.logger.info('Starting Transaction')
+                    self.logger.debug('Starting Transaction')
                     cur.execute("START TRANSACTION")
                     queries = query
                 else:
@@ -337,7 +339,7 @@ class DbSync:
                     # update the LAST_QID
                     params['LAST_QID'] = qid
 
-                    self.logger.info("Running query: '%s' with Params %s", q, params)
+                    self.logger.debug("Running query: '%s' with Params %s", q, params)
 
                     cur.execute(q, params)
                     qid = cur.sfqid
@@ -392,7 +394,6 @@ class DbSync:
 
     def delete_from_stage(self, stream, s3_key):
         """Delete file from snowflake stage"""
-        self.logger.info('Deleting %s from stage', format(s3_key))
         self.upload_client.delete_object(stream, s3_key)
 
     def copy_to_archive(self, s3_source_key, s3_archive_key, s3_archive_metadata):
@@ -533,6 +534,7 @@ class DbSync:
                 if len(results) > 0:
                     inserts = results[0].get('rows_loaded', 0)
         return inserts
+
     def primary_key_merge_condition(self):
         """Generate SQL join condition on primary keys for merge SQL statements"""
         stream_schema_message = self.stream_schema_message
@@ -809,7 +811,6 @@ class DbSync:
             query = self.create_table_query()
             self.logger.info('Table %s does not exist. Creating...', table_name_with_schema)
             self.query(query)
-
             self.grant_privilege(self.schema_name, self.grantees, self.grant_select_on_all_tables_in_schema)
 
             # Refresh columns cache if required
