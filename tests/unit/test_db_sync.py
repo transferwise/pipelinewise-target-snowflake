@@ -271,12 +271,6 @@ class TestDBSync(unittest.TestCase):
         self.assertEqual(db_sync.safe_column_name("column-name"), '"COLUMN-NAME"')
         self.assertEqual(db_sync.safe_column_name("column name"), '"COLUMN NAME"')
 
-    def json_element_name(self):
-        self.assertEqual(db_sync.safe_column_name("columnname"), 'columnname"')
-        self.assertEqual(db_sync.safe_column_name("columnName"), 'columnName"')
-        self.assertEqual(db_sync.safe_column_name("column-name"), 'column-name')
-        self.assertEqual(db_sync.safe_column_name('"column name"'), '"column name"')
-
     @patch('target_snowflake.db_sync.DbSync.query')
     def test_record_primary_key_string(self, query_patch):
         query_patch.return_value = [{'type': 'CSV'}]
