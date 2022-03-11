@@ -818,3 +818,59 @@ class DbSync:
         else:
             self.logger.info('Table %s exists', table_name_with_schema)
             self.update_columns()
+
+        self._refresh_table_pks()
+
+    def _refresh_table_pks(self):
+        """
+        Refresh table PK constraints by either dropping or adding PK based on changes to `key_properties` of the
+        stream schema.
+        The non-nullability of PK column is also dropped.
+        """
+        table_name = self.table_name(self.stream_schema_message['stream'], False)
+        current_pks = self._get_current_pks()
+        new_pks = set(pk.upper() for pk in self.stream_schema_message.get('key_properties', []))
+
+        queries = []
+
+        self.logger.debug('Table: %s, Current PKs: %s | New PKs: %s ',
+                          self.stream_schema_message['stream'],
+                          current_pks,
+                          new_pks
+                          )
+
+        if not new_pks and current_pks:
+            self.logger.info('Table "%s" currently has PK constraint, but we need to drop it.', table_name)
+            queries.append(f'alter table {table_name} drop primary key;')
+
+        elif new_pks != current_pks:
+            self.logger.info('Changes detected in pk columns of table "%s", need to refresh PK.', table_name)
+            pk_list = ', '.join([safe_column_name(col) for col in new_pks])
+            queries.extend([
+                f'alter table {table_name} drop primary key;',
+                f'alter table {table_name} add primary key({pk_list});'
+            ])
+
+        self.query(queries)
+
+    def _get_current_pks(self) -> Set[str]:
+        """
+        Finds the stream's current Pk in Snowflake.
+        Returns: Set of pk columns, in upper case. Empty means table has no PK
+        """
+        table_name = self.table_name(self.stream_schema_message['stream'], False)
+
+        show_query = f"show primary keys in table {self.connection_config['dbname']}.{table_name};"
+
+        columns = set()
+        try:
+            columns = self.query(show_query)
+
+        # Catch exception when schema not exists and SHOW TABLES throws a ProgrammingError
+        # Regexp to extract snowflake error code and message from the exception message
+        # Do nothing if schema not exists
+        except snowflake.connector.errors.ProgrammingError as exc:
+            if not re.match(r'002043 \(02000\):.*\n.*does not exist.*', str(sys.exc_info()[1])):
+                raise exc
+
+        return set(col['column_name'] for col in columns)
