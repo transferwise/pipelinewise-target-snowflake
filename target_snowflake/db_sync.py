@@ -380,7 +380,7 @@ class DbSync:
         for key_prop in self.stream_schema_message['key_properties']:
             if not flatten.get(key_prop):
                 raise PrimaryKeyNotFoundException(
-                    f"Primary key '{key_prop}' is nonexistent or null in record."
+                    f"Primary key '{key_prop}' does not exist in record or is null. "
                     f"Available fields: {list(flatten.keys())}")
 
             key_props.append(str(flatten[key_prop]))
