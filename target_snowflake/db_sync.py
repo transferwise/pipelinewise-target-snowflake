@@ -1,11 +1,10 @@
 import json
 import sys
-from typing import List, Dict, Union, Tuple
-
 import snowflake.connector
 import re
 import time
 
+from typing import List, Dict, Union, Tuple, Set
 from singer import get_logger
 from target_snowflake import flattening
 from target_snowflake import stream_utils
@@ -374,13 +373,16 @@ class DbSync:
         if len(self.stream_schema_message['key_properties']) == 0:
             return None
         flatten = flattening.flatten_record(record, self.flatten_schema, max_level=self.data_flattening_max_level)
-        try:
-            key_props = [str(flatten[p]) for p in self.stream_schema_message['key_properties']]
-        except Exception as exc:
-            pks = self.stream_schema_message['key_properties']
-            fields = list(flatten.keys())
-            raise PrimaryKeyNotFoundException(f"Cannot find {pks} primary key(s) in record. "
-                                              f"Available fields: {fields}") from exc
+
+        key_props = []
+        for key_prop in self.stream_schema_message['key_properties']:
+            if not flatten.get(key_prop):
+                raise PrimaryKeyNotFoundException(
+                    f"Primary key '{key_prop}' is nonexistent or null in record."
+                    f"Available fields: {list(flatten.keys())}")
+
+            key_props.append(str(flatten[key_prop]))
+
         return ','.join(key_props)
 
     def put_to_stage(self, file, stream, count, temp_dir=None):
