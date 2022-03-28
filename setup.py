@@ -29,7 +29,7 @@ setup(name="pipelinewise-target-snowflake",
       ],
       extras_require={
           "test": [
-              "pylint==2.12.*",
+              "pylint>=2.12,<2.14",
               'pytest==6.2.5',
               'pytest-cov==3.0.0',
               "python-dotenv==0.19.*"
