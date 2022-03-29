@@ -1,3 +1,17 @@
+2.0.0 (2022-03-29)
+-------------------
+
+*Fixes*
+- Respecting `flush_all_streams` when SCHEMA messages arrive.
+- Improve logging for failed merge & copy queries.
+- Drop NOT NULL constraint from primary key columns.
+- Update PK constraints according to changes to SCHEMA's key properties.
+
+*Changes*
+- Dropping Python 3.6 from CI matrix
+- Adding Python 3.9 to CI matrix
+- Bumpy pytest to `7.1.1`
+
 1.15.0 (2022-01-14)
 -------------------
 
