@@ -1,6 +1,7 @@
 import json
 import unittest
-from unittest.mock import patch
+
+from unittest.mock import patch, call
 
 from target_snowflake import db_sync
 from target_snowflake.exceptions import PrimaryKeyNotFoundException
@@ -20,7 +21,7 @@ class TestDBSync(unittest.TestCase):
             'dt': {"type": ["string"], "format": "date-time"},
             'dt_or_null': {"type": ["string", "null"], "format": "date-time"},
             'd': {"type": ["string"], "format": "date"},
-            'd_or_null': {"type": ["string", "null"], "format": "date"},            
+            'd_or_null': {"type": ["string", "null"], "format": "date"},
             'time': {"type": ["string"], "format": "time"},
             'time_or_null': {"type": ["string", "null"], "format": "time"},
             'binary': {"type": ["string", "null"], "format": "binary"},
@@ -102,7 +103,7 @@ class TestDBSync(unittest.TestCase):
             'dt': 'timestamp_ntz',
             'dt_or_null': 'timestamp_ntz',
             'd': 'date',
-            'd_or_null': 'date',            
+            'd_or_null': 'date',
             'time': 'time',
             'time_or_null': 'time',
             'binary': 'binary',
@@ -129,7 +130,7 @@ class TestDBSync(unittest.TestCase):
             'dt': '',
             'dt_or_null': '',
             'd': '',
-            'd_or_null': '',            
+            'd_or_null': '',
             'time': '',
             'time_or_null': '',
             'binary': 'to_binary',
@@ -271,12 +272,6 @@ class TestDBSync(unittest.TestCase):
         self.assertEqual(db_sync.safe_column_name("column-name"), '"COLUMN-NAME"')
         self.assertEqual(db_sync.safe_column_name("column name"), '"COLUMN NAME"')
 
-    def json_element_name(self):
-        self.assertEqual(db_sync.safe_column_name("columnname"), 'columnname"')
-        self.assertEqual(db_sync.safe_column_name("columnName"), 'columnName"')
-        self.assertEqual(db_sync.safe_column_name("column-name"), 'column-name')
-        self.assertEqual(db_sync.safe_column_name('"column name"'), '"column name"')
-
     @patch('target_snowflake.db_sync.DbSync.query')
     def test_record_primary_key_string(self, query_patch):
         query_patch.return_value = [{'type': 'CSV'}]
@@ -310,8 +305,17 @@ class TestDBSync(unittest.TestCase):
         stream_schema_message['key_properties'] = ['invalid_col']
         dbsync = db_sync.DbSync(minimal_config, stream_schema_message)
         with self.assertRaisesRegex(PrimaryKeyNotFoundException,
-                                    r"Cannot find \['invalid_col'\] primary key\(s\) in record\. Available fields: \['id', 'c_str'\]"):
+                                    r"Primary key 'invalid_col' does not exist in record or is null\. Available "
+                                    r"fields: \['id', 'c_str'\]"):
             dbsync.record_primary_key_string({'id': 123, 'c_str': 'xyz'})
+
+        # Null PK field
+        stream_schema_message['key_properties'] = ['id']
+        dbsync = db_sync.DbSync(minimal_config, stream_schema_message)
+        with self.assertRaisesRegex(PrimaryKeyNotFoundException,
+                                    r"Primary key 'id' does not exist in record or is null\. Available "
+                                    r"fields: \['id', 'c_str'\]"):
+            dbsync.record_primary_key_string({'id': None, 'c_str': 'xyz'})
 
     @patch('target_snowflake.db_sync.DbSync.query')
     @patch('target_snowflake.db_sync.DbSync._load_file_merge')
@@ -388,3 +392,171 @@ class TestDBSync(unittest.TestCase):
         with self.assertRaises(Exception), self.assertLogs(logger=LOGGER_NAME, level="ERROR") as captured_logs:
             dbsync.load_file(s3_key="dummy-key", count=256, size_bytes=256)
         self.assertIn(expected_msg, captured_logs.output)
+
+    @patch('target_snowflake.db_sync.DbSync.query')
+    def test_sync_table_with_no_changes_to_pk(self, query_patch):
+        minimal_config = {
+            'account': "dummy-account",
+            'dbname': "dummy-db",
+            'user': "dummy-user",
+            'password': "dummy-passwd",
+            'warehouse': "dummy-wh",
+            'default_target_schema': "dummy-schema",
+            'file_format': "dummy-file-format"
+        }
+
+        stream_schema_message = {"stream": "public-table1",
+                                 "schema": {
+                                     "properties": {
+                                         "id": {"type": ["integer"]},
+                                         "c_str": {"type": ["null", "string"]}}},
+                                 "key_properties": ["id"]}
+
+        table_cache = [
+            {
+                'SCHEMA_NAME': 'DUMMY-SCHEMA',
+                'TABLE_NAME': 'TABLE1',
+                'COLUMN_NAME': 'ID',
+                'DATA_TYPE': 'NUMBER'
+            },
+            {
+                'SCHEMA_NAME': 'DUMMY-SCHEMA',
+                'TABLE_NAME': 'TABLE1',
+                'COLUMN_NAME': 'C_STR',
+                'DATA_TYPE': 'TEXT'
+            }
+        ]
+        query_patch.side_effect = [
+            [{'type': 'CSV'}],
+            [{'column_name': 'ID'}],
+            None
+        ]
+
+        dbsync = db_sync.DbSync(minimal_config, stream_schema_message, table_cache)
+        dbsync.sync_table()
+
+        query_patch.assert_has_calls([
+            call('SHOW FILE FORMATS LIKE \'dummy-file-format\''),
+            call('show primary keys in table dummy-db.dummy-schema."TABLE1";'),
+            call(['alter table dummy-schema."TABLE1" alter column "ID" drop not null;'])
+        ])
+
+    @patch('target_snowflake.db_sync.DbSync.query')
+    def test_sync_table_with_new_pk_in_stream(self, query_patch):
+        minimal_config = {
+            'account': "dummy-account",
+            'dbname': "dummy-db",
+            'user': "dummy-user",
+            'password': "dummy-passwd",
+            'warehouse': "dummy-wh",
+            'default_target_schema': "dummy-schema",
+            'file_format': "dummy-file-format"
+        }
+
+        stream_schema_message = {"stream": "public-table1",
+                                 "schema": {
+                                     "properties": {
+                                         "id": {"type": ["integer"]},
+                                         "c_str": {"type": ["null", "string"]},
+                                         "name": {"type": ["string"]},
+                                     }
+                                 },
+                                 "key_properties": ["id", "name"]}
+
+        table_cache = [
+            {
+                'SCHEMA_NAME': 'DUMMY-SCHEMA',
+                'TABLE_NAME': 'TABLE1',
+                'COLUMN_NAME': 'ID',
+                'DATA_TYPE': 'NUMBER'
+            },
+            {
+                'SCHEMA_NAME': 'DUMMY-SCHEMA',
+                'TABLE_NAME': 'TABLE1',
+                'COLUMN_NAME': 'C_STR',
+                'DATA_TYPE': 'TEXT'
+            },
+            {
+                'SCHEMA_NAME': 'DUMMY-SCHEMA',
+                'TABLE_NAME': 'TABLE1',
+                'COLUMN_NAME': 'NAME',
+                'DATA_TYPE': 'TEXT'
+            }
+        ]
+        query_patch.side_effect = [
+            [{'type': 'CSV'}],
+            [{'column_name': 'ID'}],
+            None
+        ]
+
+        dbsync = db_sync.DbSync(minimal_config, stream_schema_message, table_cache)
+        dbsync.sync_table()
+
+        # due to usage of sets in the code, order of columns in queries in not guaranteed
+        # so have to break assertions to account for this.
+        calls = query_patch.call_args_list
+        self.assertEqual(3, len(calls))
+
+        self.assertEqual('SHOW FILE FORMATS LIKE \'dummy-file-format\'', calls[0][0][0])
+        self.assertEqual('show primary keys in table dummy-db.dummy-schema."TABLE1";', calls[1][0][0])
+
+        self.assertEqual('alter table dummy-schema."TABLE1" drop primary key;', calls[2][0][0][0])
+
+        self.assertIn(calls[2][0][0][1], {'alter table dummy-schema."TABLE1" add primary key("ID", "NAME");',
+                                       'alter table dummy-schema."TABLE1" add primary key("NAME", "ID");'})
+
+        self.assertListEqual(sorted(calls[2][0][0][2:]),
+                             [
+                                 'alter table dummy-schema."TABLE1" alter column "ID" drop not null;',
+                                 'alter table dummy-schema."TABLE1" alter column "NAME" drop not null;',
+                             ]
+                             )
+
+    @patch('target_snowflake.db_sync.DbSync.query')
+    def test_sync_table_with_stream_that_changes_to_have_no_pk(self, query_patch):
+        minimal_config = {
+            'account': "dummy-account",
+            'dbname': "dummy-db",
+            'user': "dummy-user",
+            'password': "dummy-passwd",
+            'warehouse': "dummy-wh",
+            'default_target_schema': "dummy-schema",
+            'file_format': "dummy-file-format"
+        }
+
+        stream_schema_message = {"stream": "public-table1",
+                                 "schema": {
+                                     "properties": {
+                                         "id": {"type": ["integer"]},
+                                         "c_str": {"type": ["null", "string"]}}},
+                                 "key_properties": []}
+
+        table_cache = [
+            {
+                'SCHEMA_NAME': 'DUMMY-SCHEMA',
+                'TABLE_NAME': 'TABLE1',
+                'COLUMN_NAME': 'ID',
+                'DATA_TYPE': 'NUMBER'
+            },
+            {
+                'SCHEMA_NAME': 'DUMMY-SCHEMA',
+                'TABLE_NAME': 'TABLE1',
+                'COLUMN_NAME': 'C_STR',
+                'DATA_TYPE': 'TEXT'
+            }
+        ]
+        query_patch.side_effect = [
+            [{'type': 'CSV'}],
+            [{'column_name': 'ID'}],
+            None
+        ]
+
+        dbsync = db_sync.DbSync(minimal_config, stream_schema_message, table_cache)
+        dbsync.sync_table()
+
+        query_patch.assert_has_calls([
+            call('SHOW FILE FORMATS LIKE \'dummy-file-format\''),
+            call('show primary keys in table dummy-db.dummy-schema."TABLE1";'),
+            call(['alter table dummy-schema."TABLE1" drop primary key;',
+                  'alter table dummy-schema."TABLE1" alter column "ID" drop not null;'])
+        ])
