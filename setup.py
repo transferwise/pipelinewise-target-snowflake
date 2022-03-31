@@ -20,6 +20,7 @@ setup(name="pipelinewise-target-snowflake",
           'Programming Language :: Python :: 3.9',
       ],
       py_modules=["target_snowflake"],
+      python_requires='>=3.7',
       install_requires=[
           'pipelinewise-singer-python==1.*',
           'snowflake-connector-python[pandas]==2.7.*',

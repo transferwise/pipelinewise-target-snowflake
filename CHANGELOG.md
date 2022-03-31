@@ -8,9 +8,11 @@
 - Update PK constraints according to changes to SCHEMA's key properties.
 
 *Changes*
-- Dropping Python 3.6 from CI matrix
-- Adding Python 3.9 to CI matrix
-- Bumpy pytest to `7.1.1`
+- Dropping support for Python 3.6
+- Adding support for Python 3.9
+- Bump pytest to `7.1.1`
+- Bump boto3 to `1.21`
+
 
 1.15.0 (2022-01-14)
 -------------------
