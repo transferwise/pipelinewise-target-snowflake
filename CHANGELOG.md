@@ -1,3 +1,11 @@
+2.0.1 (2022-04-08)
+-------------------
+
+*Fixes*
+- Only drop pk constraint if table has one
+- Don't raise `PrimaryKeyNotFoundException` when a record has a flasy pk value
+
+
 2.0.0 (2022-03-29)
 -------------------
 
