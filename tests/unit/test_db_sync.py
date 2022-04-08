@@ -150,13 +150,14 @@ class TestDBSync(unittest.TestCase):
         self.assertIsNone(db_sync.create_query_tag(None))
         self.assertEqual(db_sync.create_query_tag('This is a test query tag'), 'This is a test query tag')
         self.assertEqual(db_sync.create_query_tag('Loading into {{database}}.{{schema}}.{{table}}',
-                                        database='test_database',
-                                        schema='test_schema',
-                                        table='test_table'), 'Loading into test_database.test_schema.test_table')
+                                                  database='test_database',
+                                                  schema='test_schema',
+                                                  table='test_table'),
+                         'Loading into test_database.test_schema.test_table')
         self.assertEqual(db_sync.create_query_tag('Loading into {{database}}.{{schema}}.{{table}}',
-                                        database=None,
-                                        schema=None,
-                                        table=None), 'Loading into ..')
+                                                  database=None,
+                                                  schema=None,
+                                                  table=None), 'Loading into ..')
 
         # JSON formatted query tags with variables
         json_query_tag = db_sync.create_query_tag(
@@ -200,7 +201,7 @@ class TestDBSync(unittest.TestCase):
 
     @patch('target_snowflake.db_sync.DbSync.query')
     def test_parallelism(self, query_patch):
-        query_patch.return_value = [{ 'type': 'CSV' }]
+        query_patch.return_value = [{'type': 'CSV'}]
 
         minimal_config = {
             'account': "dummy-value",
@@ -288,8 +289,10 @@ class TestDBSync(unittest.TestCase):
         stream_schema_message = {"stream": "public-table1",
                                  "schema": {
                                      "properties": {
-                                         "id": { "type": ["integer"]},
-                                         "c_str": {"type": ["null", "string"]}}},
+                                         "id": {"type": ["integer"]},
+                                         "c_str": {"type": ["null", "string"]},
+                                         "c_bool": {"type": ["boolean"]}
+                                     }},
                                  "key_properties": ["id"]}
 
         # Single primary key string
@@ -316,6 +319,16 @@ class TestDBSync(unittest.TestCase):
                                     r"Primary key 'id' does not exist in record or is null\. Available "
                                     r"fields: \['id', 'c_str'\]"):
             dbsync.record_primary_key_string({'id': None, 'c_str': 'xyz'})
+
+        # falsy PK field accepted
+        stream_schema_message['key_properties'] = ['id']
+        dbsync = db_sync.DbSync(minimal_config, stream_schema_message)
+        self.assertEqual(dbsync.record_primary_key_string({'id': 0, 'c_str': 'xyz'}), '0')
+
+        # falsy PK field accepted
+        stream_schema_message['key_properties'] = ['id', 'c_bool']
+        dbsync = db_sync.DbSync(minimal_config, stream_schema_message)
+        self.assertEqual(dbsync.record_primary_key_string({'id': 1, 'c_bool': False, 'c_str': 'xyz'}), '1,False')
 
     @patch('target_snowflake.db_sync.DbSync.query')
     @patch('target_snowflake.db_sync.DbSync._load_file_merge')
@@ -503,7 +516,7 @@ class TestDBSync(unittest.TestCase):
         self.assertEqual('alter table dummy-schema."TABLE1" drop primary key;', calls[2][0][0][0])
 
         self.assertIn(calls[2][0][0][1], {'alter table dummy-schema."TABLE1" add primary key("ID", "NAME");',
-                                       'alter table dummy-schema."TABLE1" add primary key("NAME", "ID");'})
+                                          'alter table dummy-schema."TABLE1" add primary key("NAME", "ID");'})
 
         self.assertListEqual(sorted(calls[2][0][0][2:]),
                              [
@@ -558,5 +571,54 @@ class TestDBSync(unittest.TestCase):
             call('SHOW FILE FORMATS LIKE \'dummy-file-format\''),
             call('show primary keys in table dummy-db.dummy-schema."TABLE1";'),
             call(['alter table dummy-schema."TABLE1" drop primary key;',
+                  'alter table dummy-schema."TABLE1" alter column "ID" drop not null;'])
+        ])
+
+    @patch('target_snowflake.db_sync.DbSync.query')
+    def test_sync_table_with_stream_that_has_no_pk_but_get_a_new_one(self, query_patch):
+        minimal_config = {
+            'account': "dummy-account",
+            'dbname': "dummy-db",
+            'user': "dummy-user",
+            'password': "dummy-passwd",
+            'warehouse': "dummy-wh",
+            'default_target_schema': "dummy-schema",
+            'file_format': "dummy-file-format"
+        }
+
+        stream_schema_message = {"stream": "public-table1",
+                                 "schema": {
+                                     "properties": {
+                                         "id": {"type": ["integer"]},
+                                         "c_str": {"type": ["null", "string"]}}},
+                                 "key_properties": ['id']}
+
+        table_cache = [
+            {
+                'SCHEMA_NAME': 'DUMMY-SCHEMA',
+                'TABLE_NAME': 'TABLE1',
+                'COLUMN_NAME': 'ID',
+                'DATA_TYPE': 'NUMBER'
+            },
+            {
+                'SCHEMA_NAME': 'DUMMY-SCHEMA',
+                'TABLE_NAME': 'TABLE1',
+                'COLUMN_NAME': 'C_STR',
+                'DATA_TYPE': 'TEXT'
+            }
+        ]
+        query_patch.side_effect = [
+            [{'type': 'CSV'}],
+            [],
+            None
+        ]
+
+        dbsync = db_sync.DbSync(minimal_config, stream_schema_message, table_cache)
+        dbsync.sync_table()
+
+        query_patch.assert_has_calls([
+            call('SHOW FILE FORMATS LIKE \'dummy-file-format\''),
+            call('show primary keys in table dummy-db.dummy-schema."TABLE1";'),
+            call(['alter table dummy-schema."TABLE1" add primary key("ID");',
                   'alter table dummy-schema."TABLE1" alter column "ID" drop not null;'])
         ])

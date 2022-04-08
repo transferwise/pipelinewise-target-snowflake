@@ -378,10 +378,11 @@ class DbSync:
 
         key_props = []
         for key_prop in self.stream_schema_message['key_properties']:
-            if not flatten.get(key_prop):
+            if key_prop not in flatten or flatten[key_prop] is None:
                 raise PrimaryKeyNotFoundException(
                     f"Primary key '{key_prop}' does not exist in record or is null. "
-                    f"Available fields: {list(flatten.keys())}")
+                    f"Available fields: {list(flatten.keys())}"
+                )
 
             key_props.append(str(flatten[key_prop]))
 
@@ -847,10 +848,11 @@ class DbSync:
         elif new_pks != current_pks:
             self.logger.info('Changes detected in pk columns of table "%s", need to refresh PK.', table_name)
             pk_list = ', '.join([safe_column_name(col) for col in new_pks])
-            queries.extend([
-                f'alter table {table_name} drop primary key;',
-                f'alter table {table_name} add primary key({pk_list});'
-            ])
+
+            if current_pks:
+                queries.append(f'alter table {table_name} drop primary key;')
+
+            queries.append(f'alter table {table_name} add primary key({pk_list});')
 
         # For now, we don't wish to enforce non-nullability on the pk columns
         for pk in current_pks.union(new_pks):
