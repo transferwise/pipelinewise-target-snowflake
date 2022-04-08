@@ -847,10 +847,11 @@ class DbSync:
         elif new_pks != current_pks:
             self.logger.info('Changes detected in pk columns of table "%s", need to refresh PK.', table_name)
             pk_list = ', '.join([safe_column_name(col) for col in new_pks])
-            queries.extend([
-                f'alter table {table_name} drop primary key;',
-                f'alter table {table_name} add primary key({pk_list});'
-            ])
+
+            if current_pks:
+                queries.append(f'alter table {table_name} drop primary key;')
+
+            queries.append(f'alter table {table_name} add primary key({pk_list});')
 
         # For now, we don't wish to enforce non-nullability on the pk columns
         for pk in current_pks.union(new_pks):
