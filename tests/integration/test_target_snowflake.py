@@ -1363,3 +1363,14 @@ class TestIntegration(unittest.TestCase):
         self.assertEqual('NAME', table_desc[3]['name'])
         self.assertEqual('Y', table_desc[3]['null?'])
         self.assertEqual('Y', table_desc[3]['primary key'])
+
+    def test_stream_with_falsy_pks_should_succeed(self):
+        """Test if data will be loaded if records have falsy values"""
+        tap_lines = test_utils.get_test_tap_lines('messages-with-falsy-pk-values.json')
+
+        self.persist_lines_with_cache(tap_lines)
+
+        rows_count = self.snowflake.query(f'select count(1) as _count from'
+                                          f' {self.config["default_target_schema"]}.test_simple_table;')
+
+        self.assertEqual(8, rows_count[0]['_COUNT'])

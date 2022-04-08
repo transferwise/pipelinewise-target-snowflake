@@ -290,7 +290,9 @@ class TestDBSync(unittest.TestCase):
                                  "schema": {
                                      "properties": {
                                          "id": {"type": ["integer"]},
-                                         "c_str": {"type": ["null", "string"]}}},
+                                         "c_str": {"type": ["null", "string"]},
+                                         "c_bool": {"type": ["boolean"]}
+                                     }},
                                  "key_properties": ["id"]}
 
         # Single primary key string
@@ -317,6 +319,16 @@ class TestDBSync(unittest.TestCase):
                                     r"Primary key 'id' does not exist in record or is null\. Available "
                                     r"fields: \['id', 'c_str'\]"):
             dbsync.record_primary_key_string({'id': None, 'c_str': 'xyz'})
+
+        # falsy PK field accepted
+        stream_schema_message['key_properties'] = ['id']
+        dbsync = db_sync.DbSync(minimal_config, stream_schema_message)
+        self.assertEqual(dbsync.record_primary_key_string({'id': 0, 'c_str': 'xyz'}), '0')
+
+        # falsy PK field accepted
+        stream_schema_message['key_properties'] = ['id', 'c_bool']
+        dbsync = db_sync.DbSync(minimal_config, stream_schema_message)
+        self.assertEqual(dbsync.record_primary_key_string({'id': 1, 'c_bool': False, 'c_str': 'xyz'}), '1,False')
 
     @patch('target_snowflake.db_sync.DbSync.query')
     @patch('target_snowflake.db_sync.DbSync._load_file_merge')
