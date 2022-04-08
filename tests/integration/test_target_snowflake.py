@@ -1331,3 +1331,35 @@ class TestIntegration(unittest.TestCase):
 
         with self.assertRaises(PrimaryKeyNotFoundException):
             self.persist_lines_with_cache(tap_lines)
+
+    def test_stream_with_new_pks_should_succeed(self):
+        """Test if table will have new PKs after not having any"""
+        tap_lines = test_utils.get_test_tap_lines('messages-with-new-pk.json')
+
+        self.config['primary_key_required'] = False
+
+        self.persist_lines_with_cache(tap_lines)
+
+        table_desc = self.snowflake.query(f'desc table {self.config["default_target_schema"]}.test_simple_table;')
+        rows_count = self.snowflake.query(f'select count(1) as _count from'
+                                          f' {self.config["default_target_schema"]}.test_simple_table;')
+
+        self.assertEqual(6, rows_count[0]['_COUNT'])
+
+        self.assertEqual(4, len(table_desc))
+
+        self.assertEqual('ID', table_desc[0]['name'])
+        self.assertEqual('Y', table_desc[0]['null?'])
+        self.assertEqual('Y', table_desc[0]['primary key'])
+
+        self.assertEqual('RESULTS', table_desc[1]['name'])
+        self.assertEqual('Y', table_desc[1]['null?'])
+        self.assertEqual('N', table_desc[1]['primary key'])
+
+        self.assertEqual('TIME_CREATED', table_desc[2]['name'])
+        self.assertEqual('Y', table_desc[2]['null?'])
+        self.assertEqual('N', table_desc[2]['primary key'])
+
+        self.assertEqual('NAME', table_desc[3]['name'])
+        self.assertEqual('Y', table_desc[3]['null?'])
+        self.assertEqual('Y', table_desc[3]['primary key'])
