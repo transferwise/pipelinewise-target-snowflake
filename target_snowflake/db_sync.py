@@ -490,7 +490,7 @@ class DbSync:
         self.logger.info(
             'Loading into %s: %s',
             self.table_name(stream, False),
-            json.dumps({'inserts': inserts, 'updates': updates, 'size_bytes': size_bytes})
+            ujson.dumps({'inserts': inserts, 'updates': updates, 'size_bytes': size_bytes})
         )
 
     def _load_file_merge(self, s3_key, stream, columns_with_trans) -> Tuple[int, int]:
