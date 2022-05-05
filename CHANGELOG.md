@@ -1,3 +1,27 @@
+2.0.1 (2022-04-08)
+-------------------
+
+*Fixes*
+- Only drop pk constraint if table has one
+- Don't raise `PrimaryKeyNotFoundException` when a record has a flasy pk value
+
+
+2.0.0 (2022-03-29)
+-------------------
+
+*Fixes*
+- Respecting `flush_all_streams` when SCHEMA messages arrive.
+- Improve logging for failed merge & copy queries.
+- Drop NOT NULL constraint from primary key columns.
+- Update PK constraints according to changes to SCHEMA's key properties.
+
+*Changes*
+- Dropping support for Python 3.6
+- Adding support for Python 3.9
+- Bump pytest to `7.1.1`
+- Bump boto3 to `1.21`
+
+
 1.15.0 (2022-01-14)
 -------------------
 

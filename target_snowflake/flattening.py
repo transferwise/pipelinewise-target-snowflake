@@ -52,17 +52,11 @@ def flatten_schema(d, parent_key=None, sep='__', level=0, max_level=0):
                 items.extend(flatten_schema(v, parent_key + [k], sep=sep, level=level + 1, max_level=max_level).items())
             else:
                 items.append((new_key, v))
-        else:
-            if len(v.values()) > 0:
-                if list(v.values())[0][0]['type'] == 'string':
-                    list(v.values())[0][0]['type'] = ['null', 'string']
-                    items.append((new_key, list(v.values())[0][0]))
-                elif list(v.values())[0][0]['type'] == 'array':
-                    list(v.values())[0][0]['type'] = ['null', 'array']
-                    items.append((new_key, list(v.values())[0][0]))
-                elif list(v.values())[0][0]['type'] == 'object':
-                    list(v.values())[0][0]['type'] = ['null', 'object']
-                    items.append((new_key, list(v.values())[0][0]))
+        elif len(v.values()) > 0:
+            value_type = list(v.values())[0][0]['type']
+            if value_type in ['string', 'array', 'object']:
+                list(v.values())[0][0]['type'] = ['null', value_type]
+                items.append((new_key, list(v.values())[0][0]))
 
     key_func = lambda item: item[0]
     sorted_items = sorted(items, key=key_func)
