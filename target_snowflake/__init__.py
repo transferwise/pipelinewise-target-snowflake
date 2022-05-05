@@ -2,7 +2,7 @@
 
 import argparse
 import io
-import json
+import ujson
 import logging
 import os
 import sys
@@ -55,7 +55,7 @@ def add_metadata_columns_to_schema(schema_message):
 def emit_state(state: Optional[Dict]):
     """Print state to stdout"""
     if state is not None:
-        line = json.dumps(state)
+        line = ujson.dumps(state)
         LOGGER.info('Emitting state %s', line)
         sys.stdout.write(f"{line}\n")
         sys.stdout.flush()
@@ -120,8 +120,8 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
     # Loop over lines from stdin
     for line in lines:
         try:
-            o = json.loads(line)
-        except json.decoder.JSONDecodeError:
+            o = ujson.loads(line)
+        except ValueError:
             LOGGER.error('Unable to parse:\n%s', line)
             raise
 
@@ -514,7 +514,7 @@ def main():
 
     if args.config:
         with open(args.config, encoding="utf8") as config_input:
-            config = json.load(config_input)
+            config = ujson.load(config_input)
     else:
         config = {}
 

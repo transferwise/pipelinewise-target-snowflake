@@ -1,7 +1,7 @@
 import collections
 import inflection
 import itertools
-import json
+import ujson
 import re
 
 
@@ -108,6 +108,6 @@ def flatten_record(d, schema=None, parent_key=None, sep='__', level=0, max_level
             items.extend(flatten_record(v, schema, parent_key + [k], sep=sep, level=level + 1,
                                         max_level=max_level).items())
         else:
-            items.append((new_key, json.dumps(v) if _should_json_dump_value(k, v, schema) else v))
+            items.append((new_key, ujson.dumps(v) if _should_json_dump_value(k, v, schema) else v))
 
     return dict(items)
