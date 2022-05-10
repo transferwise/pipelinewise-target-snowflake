@@ -123,7 +123,7 @@ class TestCsv(unittest.TestCase):
                          "FROM '@foo_stage/foo_s3_key.csv' "
                          "(FILE_FORMAT => 'foo_file_format')) s "
                          "ON s.COL_1 = t.COL_1 "
-                         "WHEN MATCHED THEN UPDATE SET COL_1=s.COL_1, COL_2=s.COL_2, COL_3=s.COL_3 "
+                         "WHEN MATCHED THEN UPDATE SET COL_1 = CASE WHEN s.COL_1 = 'ppw_ignore-4BVdmNiaHxpsFC3wDkwb' THEN t.COL_1 ELSE s.COL_1 END, COL_2 = CASE WHEN s.COL_2 = 'ppw_ignore-4BVdmNiaHxpsFC3wDkwb' THEN t.COL_2 ELSE s.COL_2 END, COL_3 = CASE WHEN s.COL_3 = 'ppw_ignore-4BVdmNiaHxpsFC3wDkwb' THEN t.COL_3 ELSE s.COL_3 END "
                          "WHEN NOT MATCHED THEN "
                          "INSERT (COL_1, COL_2, COL_3) "
                          "VALUES (s.COL_1, s.COL_2, s.COL_3)")
