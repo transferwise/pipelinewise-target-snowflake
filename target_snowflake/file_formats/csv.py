@@ -8,6 +8,8 @@ from tempfile import mkstemp
 
 from target_snowflake import flattening
 
+IGNORE_VALUE = 'ppw_ignore-4BVdmNiaHxpsFC3wDkwb'
+
 
 def create_copy_sql(table_name: str,
                     stage_name: str,
@@ -29,10 +31,21 @@ def create_merge_sql(table_name: str,
                      columns: List,
                      pk_merge_condition: str) -> str:
     """Generate a CSV compatible snowflake MERGE INTO command"""
-    p_source_columns = ', '.join([f"{c['trans']}(${i + 1}) {c['name']}" for i, c in enumerate(columns)])
-    p_update = ', '.join([f"{c['name']}=s.{c['name']}" for c in columns])
+    p_source_columns = ', '.join([f"(${i + 1}) {c['name']}" for i, c in enumerate(columns)])
+    p_update = ', '.join(
+        [
+            f"""
+            {c['name']} = CASE
+              WHEN s.{c['name']} = '{IGNORE_VALUE}' THEN t.{c['name']}
+              ELSE {c['trans']}(s.{c['name']})
+              END"""
+            for c in columns
+        ]
+    )
     p_insert_cols = ', '.join([c['name'] for c in columns])
-    p_insert_values = ', '.join([f"s.{c['name']}" for c in columns])
+    p_insert_values = ', '.join(
+        [f"CASE WHEN s.{c['name']} = '{IGNORE_VALUE}' THEN NULL ELSE {c['trans']}(s.{c['name']}) END" for c in columns]
+    )
 
     return f"MERGE INTO {table_name} t USING (" \
            f"SELECT {p_source_columns} " \
@@ -64,7 +77,8 @@ def record_to_csv_line(record: dict,
     return ','.join(
         [
             ujson.dumps(flatten_record[column], ensure_ascii=False) if column in flatten_record and (
-                    flatten_record[column] == 0 or flatten_record[column]) else ''
+                    flatten_record[column] == 0 or flatten_record[column])
+            else '' if column in flatten_record else IGNORE_VALUE
             for column in schema
         ]
     )

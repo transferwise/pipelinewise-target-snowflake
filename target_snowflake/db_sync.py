@@ -505,7 +505,7 @@ class DbSync:
                     s3_key=s3_key,
                     file_format_name=self.connection_config['file_format'],
                     columns=columns_with_trans,
-                    pk_merge_condition=self.primary_key_merge_condition()
+                    pk_merge_condition=self.primary_key_merge_condition(columns_with_trans)
                 )
                 self.logger.debug('Running query: %s', merge_sql)
                 cur.execute(merge_sql)
@@ -536,11 +536,16 @@ class DbSync:
                     inserts = results[0].get('rows_loaded', 0)
         return inserts
 
-    def primary_key_merge_condition(self):
+    def primary_key_merge_condition(self, columns_with_trans):
         """Generate SQL join condition on primary keys for merge SQL statements"""
         stream_schema_message = self.stream_schema_message
         names = primary_column_names(stream_schema_message)
-        return ' AND '.join([f's.{c} = t.{c}' for c in names])
+
+        trans = {}
+        for column in names:
+            trans[column] = next(item['trans'] for item in columns_with_trans if item["name"] == column)
+
+        return ' AND '.join([f'{trans[c]}(s.{c}) = t.{c}' for c in names])
 
     def column_names(self):
         """Get list of columns in the schema"""

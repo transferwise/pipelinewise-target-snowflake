@@ -7,6 +7,8 @@ from tempfile import mkstemp
 
 from target_snowflake import flattening
 
+IGNORE_VALUE = 'ppw_ignore-4BVdmNiaHxpsFC3wDkwb'
+
 
 def create_copy_sql(table_name: str,
                     stage_name: str,
@@ -30,11 +32,21 @@ def create_merge_sql(table_name: str,
                      columns: List,
                      pk_merge_condition: str) -> str:
     """Generate a Parquet compatible snowflake MERGE INTO command"""
-    p_source_columns = ', '.join([f"{c['trans']}($1:{c['json_element_name']}) {c['name']}"
-                                  for i, c in enumerate(columns)])
-    p_update = ', '.join([f"{c['name']}=s.{c['name']}" for c in columns])
+    p_source_columns = ', '.join([f"($1:{c['json_element_name']}) {c['name']}" for i, c in enumerate(columns)])
+    p_update = ', '.join(
+        [
+            f"""
+            {c['name']} = CASE
+            WHEN s.{c['name']} = '{IGNORE_VALUE}' THEN t.{c['name']}
+            ELSE {c['trans']}(s.{c['name']})
+            END"""
+            for c in columns
+        ]
+    )
     p_insert_cols = ', '.join([c['name'] for c in columns])
-    p_insert_values = ', '.join([f"s.{c['name']}" for c in columns])
+    p_insert_values = ', '.join(
+        [f"CASE WHEN s.{c['name']} = '{IGNORE_VALUE}' THEN NULL ELSE {c['trans']}(s.{c['name']}) END" for c in columns]
+    )
 
     return f"MERGE INTO {table_name} t USING (" \
            f"SELECT {p_source_columns} " \

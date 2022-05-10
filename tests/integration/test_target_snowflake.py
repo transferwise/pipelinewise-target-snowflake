@@ -1374,3 +1374,23 @@ class TestIntegration(unittest.TestCase):
                                           f' {self.config["default_target_schema"]}.test_simple_table;')
 
         self.assertEqual(8, rows_count[0]['_COUNT'])
+
+    def test_deletion_does_not_set_column_data_to_null(self):
+        """Test if table columns will still have original data when doing a partial update during a delete"""
+        tap_lines_initial = test_utils.get_test_tap_lines('messages-pg-logical-streams.json')
+        self.persist_lines_with_cache(tap_lines_initial)
+
+        subject = self.snowflake.query(f'SELECT cid, cjson, cjsonb FROM'
+                                       f' {self.config["default_target_schema"]}.logical1_edgydata WHERE cid = \'17\';')
+
+        for _column, value in subject[0].items():
+            self.assertIsNotNone(value)
+
+        tap_lines_update = test_utils.get_test_tap_lines('messages-pg-logical-streams-update.json')
+        self.persist_lines_with_cache(tap_lines_update)
+
+        subject = self.snowflake.query(f'SELECT cid, cjsonb, cjson, _sdc_deleted_at FROM'
+                                       f' {self.config["default_target_schema"]}.logical1_edgydata WHERE cid = \'17\';')
+
+        for _column, value in subject[0].items():
+            self.assertIsNotNone(value)

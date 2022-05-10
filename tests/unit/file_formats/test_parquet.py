@@ -1,4 +1,5 @@
 import unittest
+import re
 
 from pandas._testing import assert_frame_equal
 from pandas import DataFrame
@@ -67,24 +68,34 @@ class TestParquet(unittest.TestCase):
                          "FILE_FORMAT = (format_name='foo_file_format')")
 
     def test_create_merge_sql(self):
-        self.assertEqual(parquet.create_merge_sql(table_name='foo_table',
-                                                  stage_name='foo_stage',
-                                                  s3_key='foo_s3_key.parquet',
-                                                  file_format_name='foo_file_format',
-                                                  columns=[
-                                                      {'name': 'COL_1', 'json_element_name': 'col_1', 'trans': ''},
-                                                      {'name': 'COL_2', 'json_element_name': 'colTwo', 'trans': ''},
-                                                      {'name': 'COL_3', 'json_element_name': 'col_3',
-                                                       'trans': 'parse_json'}
-                                                  ],
-                                                  pk_merge_condition='s.COL_1 = t.COL_1'),
 
-                         "MERGE INTO foo_table t USING ("
-                         "SELECT ($1:col_1) COL_1, ($1:colTwo) COL_2, parse_json($1:col_3) COL_3 "
-                         "FROM '@foo_stage/foo_s3_key.parquet' "
-                         "(FILE_FORMAT => 'foo_file_format')) s "
-                         "ON s.COL_1 = t.COL_1 "
-                         "WHEN MATCHED THEN UPDATE SET COL_1=s.COL_1, COL_2=s.COL_2, COL_3=s.COL_3 "
-                         "WHEN NOT MATCHED THEN "
-                         "INSERT (COL_1, COL_2, COL_3) "
-                         "VALUES (s.COL_1, s.COL_2, s.COL_3)")
+        subject = parquet.create_merge_sql(table_name='foo_table',
+                                              stage_name='foo_stage',
+                                              s3_key='foo_s3_key.parquet',
+                                              file_format_name='foo_file_format',
+                                              columns=[
+                                                  {'name': 'COL_1', 'json_element_name': 'col_1', 'trans': ''},
+                                                  {'name': 'COL_2', 'json_element_name': 'colTwo', 'trans': ''},
+                                                  {'name': 'COL_3', 'json_element_name': 'col_3',
+                                                   'trans': 'parse_json'}
+                                              ],
+                                              pk_merge_condition='s.COL_1 = t.COL_1').replace("\n", "")
+        sanitized_subject = re.sub(' +', ' ', subject)
+
+        self.assertEqual(
+            sanitized_subject,
+            "MERGE INTO foo_table t USING ("
+            "SELECT ($1:col_1) COL_1, ($1:colTwo) COL_2, ($1:col_3) COL_3 "
+            "FROM '@foo_stage/foo_s3_key.parquet' "
+            "(FILE_FORMAT => 'foo_file_format')) s "
+            "ON s.COL_1 = t.COL_1 "
+            "WHEN MATCHED THEN UPDATE SET COL_1 = CASE WHEN s.COL_1 = 'ppw_ignore-4BVdmNiaHxpsFC3wDkwb' THEN t.COL_1 "
+            "ELSE (s.COL_1) END, COL_2 = CASE WHEN s.COL_2 = 'ppw_ignore-4BVdmNiaHxpsFC3wDkwb' THEN t.COL_2 "
+            "ELSE (s.COL_2) END, COL_3 = CASE WHEN s.COL_3 = 'ppw_ignore-4BVdmNiaHxpsFC3wDkwb' THEN t.COL_3 "
+            "ELSE parse_json(s.COL_3) END "
+            "WHEN NOT MATCHED THEN "
+            "INSERT (COL_1, COL_2, COL_3) "
+            "VALUES (CASE WHEN s.COL_1 = 'ppw_ignore-4BVdmNiaHxpsFC3wDkwb' THEN NULL ELSE (s.COL_1) END, "
+            "CASE WHEN s.COL_2 = 'ppw_ignore-4BVdmNiaHxpsFC3wDkwb' THEN NULL ELSE (s.COL_2) END, "
+            "CASE WHEN s.COL_3 = 'ppw_ignore-4BVdmNiaHxpsFC3wDkwb' THEN NULL ELSE parse_json(s.COL_3) END)"
+        )
