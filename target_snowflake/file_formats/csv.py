@@ -1,6 +1,6 @@
 """CSV file format functions"""
 import gzip
-import ujson
+import json
 import os
 
 from typing import Callable, Dict, List
@@ -63,7 +63,7 @@ def record_to_csv_line(record: dict,
 
     return ','.join(
         [
-            ujson.dumps(flatten_record[column], ensure_ascii=False) if column in flatten_record and (
+            json.dumps(flatten_record[column], ensure_ascii=False) if column in flatten_record and (
                     flatten_record[column] == 0 or flatten_record[column]) else ''
             for column in schema
         ]

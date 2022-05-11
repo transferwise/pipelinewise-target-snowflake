@@ -1,4 +1,4 @@
-import ujson
+import json
 import sys
 import snowflake.connector
 import re
@@ -156,9 +156,9 @@ def create_query_tag(query_tag_pattern: str, database: str = None, schema: str =
 
     # replace tokens, taking care of json formatted value compatibility
     for k, v in {
-        '{{database}}': ujson.dumps(database.strip('"')).strip('"') if database else None,
-        '{{schema}}': ujson.dumps(schema.strip('"')).strip('"') if schema else None,
-        '{{table}}': ujson.dumps(table.strip('"')).strip('"') if table else None
+        '{{database}}': json.dumps(database.strip('"')).strip('"') if database else None,
+        '{{schema}}': json.dumps(schema.strip('"')).strip('"') if schema else None,
+        '{{table}}': json.dumps(table.strip('"')).strip('"') if table else None
     }.items():
         if k in query_tag:
             query_tag = query_tag.replace(k, v or '')
@@ -490,7 +490,7 @@ class DbSync:
         self.logger.info(
             'Loading into %s: %s',
             self.table_name(stream, False),
-            ujson.dumps({'inserts': inserts, 'updates': updates, 'size_bytes': size_bytes})
+            json.dumps({'inserts': inserts, 'updates': updates, 'size_bytes': size_bytes})
         )
 
     def _load_file_merge(self, s3_key, stream, columns_with_trans) -> Tuple[int, int]:
