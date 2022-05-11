@@ -1,4 +1,4 @@
-import ujson
+import json
 import unittest
 
 from unittest.mock import patch, call
@@ -166,7 +166,7 @@ class TestDBSync(unittest.TestCase):
             schema='test_schema',
             table='test_table')
         # Load the generated JSON formatted query tag to make sure it's a valid JSON
-        self.assertEqual(ujson.loads(json_query_tag), {
+        self.assertEqual(json.loads(json_query_tag), {
             'database': 'test_database',
             'schema': 'test_schema',
             'table': 'test_table'
@@ -180,7 +180,7 @@ class TestDBSync(unittest.TestCase):
             table='test"table')
 
         # Load the generated JSON formatted query tag to make sure it's a valid JSON
-        self.assertEqual(ujson.loads(json_query_tag), {
+        self.assertEqual(json.loads(json_query_tag), {
             'database': 'test"database',
             'schema': 'test"schema',
             'table': 'test"table'
@@ -193,7 +193,7 @@ class TestDBSync(unittest.TestCase):
             schema='"test_schema"',
             table='"test_table"')
         # Load the generated JSON formatted query tag to make sure it's a valid JSON
-        self.assertEqual(ujson.loads(json_query_tag), {
+        self.assertEqual(json.loads(json_query_tag), {
             'database': 'test_database',
             'schema': 'test_schema',
             'table': 'test_table'
