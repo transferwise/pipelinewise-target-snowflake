@@ -174,3 +174,13 @@ class TestTargetSnowflake(unittest.TestCase):
             buf.getvalue().strip(),
             '{"bookmarks":{"tap_mysql_test-test_simple_table":{"replication_key":"id",'
             '"replication_key_value":100,"version":1}}}')
+
+    def test_merge_records(self):
+        existing_record = {'a': 1, 'b': None, 'c': 'foo', 'd': 1}
+        new_record = {'a': 2, 'c': None, 'e': '2'}
+
+        merged_records = target_snowflake.merge_records(existing_record, new_record)
+
+        expected = {'a': 2, 'b': None, 'c': None, 'd': 1, 'e': '2'}
+
+        self.assertEqual(merged_records, expected)
