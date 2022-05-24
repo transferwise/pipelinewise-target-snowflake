@@ -3,10 +3,11 @@ import json
 import unittest
 import os
 import itertools
+from types import SimpleNamespace
 
 from contextlib import redirect_stdout
 from datetime import datetime, timedelta
-from unittest.mock import patch
+from unittest.mock import patch, mock_open
 
 import target_snowflake
 
@@ -40,6 +41,31 @@ class TestTargetSnowflake(unittest.TestCase):
         target_snowflake.persist_lines(self.config, lines)
 
         self.assertEqual(1, flush_streams_mock.call_count)
+
+    @patch('target_snowflake.current_memory_consumption_percentage')
+    @patch('target_snowflake.flush_streams')
+    @patch('target_snowflake.DbSync')
+    @patch('target_snowflake.MAX_MEMORY_THRESHOLD_CHECK_EVERY_N_ROWS', 1)
+    def test_persist_lines_with_memory_threshold_reached_expect_multiple_flushings(self, dbSync_mock,
+                                                                              flush_streams_mock,
+                                                                              current_memory_consumption_percentage_mock
+                                                                              ):
+        self.config['batch_size_rows'] = 20
+        self.config['max_memory_threshold'] = 0.1
+
+        with open(f'{os.path.dirname(__file__)}/resources/same-schemas-multiple-times.json', 'r') as f:
+            lines = f.readlines()
+
+        current_memory_consumption_percentage_mock.return_value = 0.2
+        instance = dbSync_mock.return_value
+        instance.create_schema_if_not_exists.return_value = None
+        instance.sync_table.return_value = None
+
+        flush_streams_mock.return_value = '{"currently_syncing": null}'
+
+        target_snowflake.persist_lines(self.config, lines)
+
+        self.assertEqual(5, flush_streams_mock.call_count)
 
     @patch('target_snowflake.flush_streams')
     @patch('target_snowflake.DbSync')
@@ -174,3 +200,15 @@ class TestTargetSnowflake(unittest.TestCase):
             buf.getvalue().strip(),
             '{"bookmarks":{"tap_mysql_test-test_simple_table":{"replication_key":"id",'
             '"replication_key_value":100,"version":1}}}')
+
+    def test_current_memory_consumption_percentage_cgroup(self):
+        with patch('builtins.open', mock_open(read_data='20'), create=True) as mock_builtin_open:
+            assert target_snowflake.current_memory_consumption_percentage() == 1.0
+
+    @patch('psutil.virtual_memory')
+    def test_current_memory_consumption_percentage_psutil(self, psutil_virtual_memory_mock):
+        vmem = SimpleNamespace()
+        vmem.available = 20
+        vmem.total = 100
+        psutil_virtual_memory_mock.return_value = vmem
+        assert target_snowflake.current_memory_consumption_percentage() == 0.8

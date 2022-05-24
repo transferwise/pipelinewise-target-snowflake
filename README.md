@@ -179,7 +179,7 @@ Full list of options in `config.json`:
 | archive_load_files                  | Boolean |            | (Default: False) When enabled, the files loaded to Snowflake will also be stored in `archive_load_files_s3_bucket` under the key `/{archive_load_files_s3_prefix}/{schema_name}/{table_name}/`. All archived files will have `tap`, `schema`, `table` and `archived-by` as S3 metadata keys. When incremental replication is used, the archived files will also have the following S3 metadata keys: `incremental-key`, `incremental-key-min` and `incremental-key-max`. 
 | archive_load_files_s3_prefix        | String  |            | (Default: "archive") When `archive_load_files` is enabled, the archived files will be placed in the archive S3 bucket under this prefix.
 | archive_load_files_s3_bucket        | String  |            | (Default: Value of `s3_bucket`) When `archive_load_files` is enabled, the archived files will be placed in this bucket.
-
+| max_memory_threshold                | Number  |            | (Default: 0.0) Force flushing of all streams when total memory consumption is above threshold, e.g. a value of 0.9 will flush all streams when the total memory usage gets above 90%. A value of 0.0 disables the feature. When running this target in a container, e.g. on Kubernetes, make sure to set a memory limit for this feature to work properly.
 ### To run tests:
 
 1. Define the environment variables that are required to run the tests by creating a `.env` file in `tests/integration`, or by exporting the variables below.

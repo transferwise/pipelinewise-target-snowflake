@@ -5,6 +5,7 @@ import io
 import ujson
 import logging
 import os
+import psutil
 import sys
 import copy
 
@@ -34,7 +35,7 @@ logging.getLogger('snowflake.connector').setLevel(logging.WARNING)
 DEFAULT_BATCH_SIZE_ROWS = 100000
 DEFAULT_PARALLELISM = 0  # 0 The number of threads used to flush tables
 DEFAULT_MAX_PARALLELISM = 16  # Don't use more than this number of threads by default when flushing streams in parallel
-
+MAX_MEMORY_THRESHOLD_CHECK_EVERY_N_ROWS = 1000
 
 def add_metadata_columns_to_schema(schema_message):
     """Metadata _sdc columns according to the stitch documentation at
@@ -111,11 +112,13 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
     row_count = {}
     stream_to_sync = {}
     total_row_count = {}
+    total_row_count_all_streams = 0
     batch_size_rows = config.get('batch_size_rows', DEFAULT_BATCH_SIZE_ROWS)
     batch_wait_limit_seconds = config.get('batch_wait_limit_seconds', None)
     flush_timestamp = datetime.utcnow()
     archive_load_files = config.get('archive_load_files', False)
     archive_load_files_data = {}
+    max_memory_threshold = float(config.get('max_memory_threshold', 0))
 
     # Loop over lines from stdin
     for line in lines:
@@ -166,6 +169,7 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
             if primary_key_string not in records_to_load[stream]:
                 row_count[stream] += 1
                 total_row_count[stream] += 1
+                total_row_count_all_streams += 1
 
             # append record
             if config.get('add_metadata_columns') or config.get('hard_delete'):
@@ -189,7 +193,15 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
                         stream_archive_load_files_values['max'] = incremental_key_value
 
             flush = False
-            if row_count[stream] >= batch_size_rows:
+            flush_all_streams = config.get('flush_all_streams')
+
+            if max_memory_threshold and \
+                    total_row_count_all_streams % MAX_MEMORY_THRESHOLD_CHECK_EVERY_N_ROWS == 0 and \
+                    current_memory_consumption_percentage() > max_memory_threshold:
+                flush = True
+                flush_all_streams = True
+                LOGGER.info("Flush triggered by memory threshold")
+            elif row_count[stream] >= batch_size_rows:
                 flush = True
                 LOGGER.info("Flush triggered by batch_size_rows (%s) reached in %s",
                             batch_size_rows, stream)
@@ -201,7 +213,7 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
 
             if flush:
                 # flush all streams, delete records if needed, reset counts and then emit current state
-                if config.get('flush_all_streams'):
+                if flush_all_streams:
                     filter_streams = None
                 else:
                     filter_streams = [stream]
@@ -333,6 +345,29 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
 
     # emit latest state
     emit_state(copy.deepcopy(flushed_state))
+
+
+
+def current_memory_consumption_percentage():
+    return current_memory_usage_bytes() / memory_limit_bytes()
+
+
+def current_memory_usage_bytes():
+    # Try to read cgroup stats first in case we run in a container
+    try:
+        with open('/sys/fs/cgroup/memory/memory.usage_in_bytes', 'r') as f:
+            return int(f.readline().strip())
+    except FileNotFoundError:
+        return psutil.virtual_memory().total - psutil.virtual_memory().available
+
+
+def memory_limit_bytes():
+    # Try to read cgroup stats first in case we run in a container
+    try:
+        with open('/sys/fs/cgroup/memory/memory.limit_in_bytes', 'r') as f:
+            return int(f.readline().strip())
+    except FileNotFoundError:
+        return psutil.virtual_memory().total
 
 
 # pylint: disable=too-many-arguments
