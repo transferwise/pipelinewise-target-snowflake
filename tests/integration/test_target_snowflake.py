@@ -1,6 +1,6 @@
 import datetime
 import gzip
-import ujson
+import json
 import tempfile
 import unittest
 import os
@@ -296,7 +296,7 @@ class TestIntegration(unittest.TestCase):
     def test_invalid_json(self):
         """Receiving invalid JSONs should raise an exception"""
         tap_lines = test_utils.get_test_tap_lines('invalid-json.json')
-        with self.assertRaises(ValueError):
+        with self.assertRaises(json.decoder.JSONDecodeError):
             self.persist_lines_with_cache(tap_lines)
 
     def test_message_order(self):

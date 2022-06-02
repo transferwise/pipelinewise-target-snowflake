@@ -172,5 +172,5 @@ class TestTargetSnowflake(unittest.TestCase):
 
         self.assertEqual(
             buf.getvalue().strip(),
-            '{"bookmarks":{"tap_mysql_test-test_simple_table":{"replication_key":"id",'
-            '"replication_key_value":100,"version":1}}}')
+            '{"bookmarks": {"tap_mysql_test-test_simple_table": {"replication_key": "id", '
+            '"replication_key_value": 100, "version": 1}}}')
