@@ -688,7 +688,7 @@ class DbSync:
 
                 # Run everything in one transaction
                 try:
-                    columns = self.query(queries, max_records=9999)
+                    columns = self.query(queries, max_records=99999)
 
                     if not columns:
                         self.logger.warning('No columns discovered in the schema "%s"',
