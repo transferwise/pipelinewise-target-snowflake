@@ -821,7 +821,7 @@ class DbSync:
             self.logger.info('Table %s exists', table_name_with_schema)
             self.update_columns()
 
-        if self.connection_config.get('disable_refresh_table_pks', None):
+        if not self.connection_config.get('disable_refresh_table_pks', None):
             self._refresh_table_pks()
 
     def _refresh_table_pks(self):
