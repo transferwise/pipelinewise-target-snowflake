@@ -59,8 +59,9 @@ def validate_config(config):
     # Check target schema config
     config_default_target_schema = config.get('default_target_schema', None)
     config_schema_mapping = config.get('schema_mapping', None)
-    if not config_default_target_schema and not config_schema_mapping:
-        errors.append("Neither 'default_target_schema' (string) nor 'schema_mapping' (object) keys set in config.")
+    config_keep_source_schema = config.get('keep_source_schema', None)
+    if not config_default_target_schema and not config_schema_mapping and not config_keep_source_schema:
+        errors.append("Neither 'default_target_schema' (string) nor 'schema_mapping' (object) not 'keep_source_schema' (boolean) keys set in config.")
 
     # Check if archive load files option is using external stages
     archive_load_files = config.get('archive_load_files', False)
@@ -239,11 +240,14 @@ class DbSync:
             #                                           }
             config_default_target_schema = self.connection_config.get('default_target_schema', '').strip()
             config_schema_mapping = self.connection_config.get('schema_mapping', {})
+            config_keep_source_schema = self.connection_config.get('keep_source_schema', False)
 
             stream_name = stream_schema_message['stream']
             stream_schema_name = stream_utils.stream_name_to_dict(stream_name)['schema_name']
             if config_schema_mapping and stream_schema_name in config_schema_mapping:
                 self.schema_name = config_schema_mapping[stream_schema_name].get('target_schema')
+            elif config_keep_source_schema:
+                self.schema_name = stream_schema_name
             elif config_default_target_schema:
                 self.schema_name = config_default_target_schema
 
