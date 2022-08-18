@@ -87,6 +87,8 @@ def column_type(schema_property):
         col_type = 'time'
     elif property_format == 'binary':
         col_type = 'binary'
+    elif property_format == 'singer.decimal' and 'additionalProperties' in schema_property:
+        col_type = 'number{}'.format(schema_property['additionalProperties']['scale_precision'])
     elif 'number' in property_type:
         col_type = 'float'
     elif 'integer' in property_type and 'string' in property_type:
