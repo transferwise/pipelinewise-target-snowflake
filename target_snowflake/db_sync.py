@@ -673,15 +673,25 @@ class DbSync:
                 # data type (i.e. TEXT for all character types, FIXED for all fixed-point numeric types,
                 # and REAL for all floating-point numeric types).
                 # Further info at https://docs.snowflake.net/manuals/sql-reference/sql/show-columns.html
+                #
+                # Added precision and scale which can be extracted from the data_type JSON
                 # ----------------------------------------------------------------------------------------
                 select = """
                     SELECT "schema_name" AS schema_name
                           ,"table_name"  AS table_name
                           ,"column_name" AS column_name
-                          ,CASE PARSE_JSON("data_type"):type::varchar
-                             WHEN 'FIXED' THEN 'NUMBER'
-                             WHEN 'REAL'  THEN 'FLOAT'
-                             ELSE PARSE_JSON("data_type"):type::varchar
+                          CASE PARSE_JSON("data_type"):type::varchar
+                                WHEN 'REAL'  THEN 'FLOAT'
+                                WHEN 'FIXED' THEN 'NUMBER'||
+                                    (
+                                        CASE 
+                                            WHEN PARSE_JSON("data_type"):precision is NOT NULL then '('||PARSE_JSON("data_type"):precision::number||
+                                            ','||
+                                            PARSE_JSON("data_type"):scale::number||')'
+                                        ELSE ''
+                                        END
+                                    )
+                                ELSE PARSE_JSON("data_type"):type::varchar
                            END data_type
                       FROM TABLE(RESULT_SCAN(%(LAST_QID)s))
                 """
