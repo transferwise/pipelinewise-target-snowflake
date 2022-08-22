@@ -681,18 +681,12 @@ class DbSync:
                           ,"table_name"  AS table_name
                           ,"column_name" AS column_name
                           ,CASE PARSE_JSON("data_type"):type::varchar
-                                WHEN 'REAL'  THEN 'FLOAT'
-                                WHEN 'FIXED' THEN 'NUMBER'||
-                                    (
-                                        CASE 
-                                            WHEN PARSE_JSON("data_type"):precision is NOT NULL then '('||PARSE_JSON("data_type"):precision::number||
-                                            ','||
-                                            PARSE_JSON("data_type"):scale::number||')'
-                                        ELSE ''
-                                        END
-                                    )
-                                ELSE PARSE_JSON("data_type"):type::varchar
-                           END data_type
+                             WHEN 'FIXED' THEN 'NUMBER'
+                             WHEN 'REAL'  THEN 'FLOAT'
+                             ELSE PARSE_JSON("data_type"):type::varchar
+                           END AS data_type
+                          ,PARSE_JSON("data_type"):precision::number AS precision
+                          ,PARSE_JSON("data_type"):scale::number AS scale
                       FROM TABLE(RESULT_SCAN(%(LAST_QID)s))
                 """
 
@@ -772,8 +766,26 @@ class DbSync:
                # We need to exclude this conversion otherwise we loose the data that is already populated
                # in the column
                column_type(properties_schema).upper() != 'TIMESTAMP_NTZ' and
-               # Don't alter the table if NUMBER/NUMBER(38,0) as they are identical
-               not(column_type(properties_schema).upper() == 'NUMBER' and columns_dict[name.upper()]['DATA_TYPE'] == 'NUMBER(38,0)')
+               # columns_dict is retrieved from Snowflake SHOW COLUMNS
+               # column_type function returns a mapping from Schema message to that extracted from Snowflake
+               # under the new singer.decimal functionality, column_type can return things like number(x,y)
+               # and the new columns_dict can return NUMBER(38,0) when integers from Schema return simply NUMBER
+               # the following case says:
+               #
+               # Do not alter columns that are simply 'number' at source
+               # but number(38,0) in Snowflake, because columnns defined as simply 'number' are implicitly
+               # created as number(38,0) in Snowflake so no change is required:
+               #
+               # https://docs.snowflake.com/en/sql-reference/data-types-numeric.html#number
+               not(
+                   columns_dict[name.upper()]['PRECISION'] == 38
+                   and
+                   columns_dict[name.upper()]['SCALE'] == 0
+                   and
+                   columns_dict[name.upper()]['DATA_TYPE'] == 'NUMBER'
+                   and 
+                   column_type(properties_schema).upper() == 'NUMBER'
+               )
         ]
 
         for (column_name, column) in columns_to_replace:
