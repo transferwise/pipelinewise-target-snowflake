@@ -771,7 +771,9 @@ class DbSync:
                # a TIMESTAMP_TZ column is already available in the target table (i.e. created by fastsync initial load)
                # We need to exclude this conversion otherwise we loose the data that is already populated
                # in the column
-               column_type(properties_schema).upper() != 'TIMESTAMP_NTZ'
+               column_type(properties_schema).upper() != 'TIMESTAMP_NTZ' and
+               # Don't alter the table if NUMBER/NUMBER(38,0) as they are identical
+               not(column_type(properties_schema).upper() == 'NUMBER' and columns_dict[name.upper()]['DATA_TYPE'] == 'NUMBER(38,0)')
         ]
 
         for (column_name, column) in columns_to_replace:
