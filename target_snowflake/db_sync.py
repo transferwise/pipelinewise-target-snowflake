@@ -680,7 +680,7 @@ class DbSync:
                     SELECT "schema_name" AS schema_name
                           ,"table_name"  AS table_name
                           ,"column_name" AS column_name
-                          CASE PARSE_JSON("data_type"):type::varchar
+                          ,CASE PARSE_JSON("data_type"):type::varchar
                                 WHEN 'REAL'  THEN 'FLOAT'
                                 WHEN 'FIXED' THEN 'NUMBER'||
                                     (
