@@ -87,6 +87,8 @@ def column_type(schema_property):
         col_type = 'time'
     elif property_format == 'binary':
         col_type = 'binary'
+    elif property_format == 'singer.decimal' and 'additionalProperties' in schema_property:
+        col_type = 'number{}'.format(schema_property['additionalProperties']['scale_precision'])
     elif 'number' in property_type:
         col_type = 'float'
     elif 'integer' in property_type and 'string' in property_type:
@@ -671,6 +673,8 @@ class DbSync:
                 # data type (i.e. TEXT for all character types, FIXED for all fixed-point numeric types,
                 # and REAL for all floating-point numeric types).
                 # Further info at https://docs.snowflake.net/manuals/sql-reference/sql/show-columns.html
+                #
+                # Added precision and scale which can be extracted from the data_type JSON
                 # ----------------------------------------------------------------------------------------
                 select = """
                     SELECT "schema_name" AS schema_name
@@ -680,7 +684,9 @@ class DbSync:
                              WHEN 'FIXED' THEN 'NUMBER'
                              WHEN 'REAL'  THEN 'FLOAT'
                              ELSE PARSE_JSON("data_type"):type::varchar
-                           END data_type
+                           END AS data_type
+                          ,PARSE_JSON("data_type"):precision::number AS precision
+                          ,PARSE_JSON("data_type"):scale::number AS scale
                       FROM TABLE(RESULT_SCAN(%(LAST_QID)s))
                 """
 
@@ -694,6 +700,15 @@ class DbSync:
                         self.logger.warning('No columns discovered in the schema "%s"',
                                             f"{self.connection_config['dbname']}.{schema}")
                     else:
+                        # Parse into number(p,s) if required
+                        for c in columns:
+                            if (c['DATA_TYPE'] == 'NUMBER' 
+                                and 
+                                not(c['PRECISION'] is None and c['SCALE'] is None)
+                                and
+                                not(c['PRECISION'] == 38 and c['SCALE'] == 0) # Implicit INTEGER/NUMBER in SF
+                            ):
+                                c['DATA_TYPE'] = f"NUMBER({c['PRECISION']},{c['SCALE']})"
                         table_columns.extend(columns)
 
                 # Catch exception when schema not exists and SHOW COLUMNS throws a ProgrammingError
