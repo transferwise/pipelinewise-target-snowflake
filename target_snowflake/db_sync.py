@@ -700,6 +700,15 @@ class DbSync:
                         self.logger.warning('No columns discovered in the schema "%s"',
                                             f"{self.connection_config['dbname']}.{schema}")
                     else:
+                        # Parse into number(p,s) if required
+                        for c in columns:
+                            if (c['DATA_TYPE'] == 'NUMBER' 
+                                and 
+                                not(c['PRECISION'] is None and c['SCALE'] is None)
+                                and
+                                not(c['PRECISION'] == 38 and c['SCALE'] == 0) # Implicit INTEGER/NUMBER in SF
+                            ):
+                                c['DATA_TYPE'] = f"NUMBER({c['PRECISION']},{c['SCALE']})"
                         table_columns.extend(columns)
 
                 # Catch exception when schema not exists and SHOW COLUMNS throws a ProgrammingError
@@ -765,27 +774,7 @@ class DbSync:
                # a TIMESTAMP_TZ column is already available in the target table (i.e. created by fastsync initial load)
                # We need to exclude this conversion otherwise we loose the data that is already populated
                # in the column
-               column_type(properties_schema).upper() != 'TIMESTAMP_NTZ' and
-               # columns_dict is retrieved from Snowflake SHOW COLUMNS
-               # column_type function returns a mapping from Schema message to that extracted from Snowflake
-               # under the new singer.decimal functionality, column_type can return things like number(x,y)
-               # and the new columns_dict can return NUMBER(38,0) when integers from Schema return simply NUMBER
-               # the following case says:
-               #
-               # Do not alter columns that are simply 'number' at source
-               # but number(38,0) in Snowflake, because columnns defined as simply 'number' are implicitly
-               # created as number(38,0) in Snowflake so no change is required:
-               #
-               # https://docs.snowflake.com/en/sql-reference/data-types-numeric.html#number
-               not(
-                   columns_dict[name.upper()]['PRECISION'] == 38
-                   and
-                   columns_dict[name.upper()]['SCALE'] == 0
-                   and
-                   columns_dict[name.upper()]['DATA_TYPE'] == 'NUMBER'
-                   and 
-                   column_type(properties_schema).upper() == 'NUMBER'
-               )
+               column_type(properties_schema).upper() != 'TIMESTAMP_NTZ'
         ]
 
         for (column_name, column) in columns_to_replace:
