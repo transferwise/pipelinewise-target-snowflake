@@ -275,7 +275,7 @@ class TestTargetSnowflake(unittest.TestCase):
 
 
     @patch('target_snowflake.db_sync.DbSync.query')
-    def test_verify_snowpipe_copy2(self, query_patch):
+    def test_verify_snowpipe_copy_on_error(self, query_patch):
         """ Test setting of snowpipe copy command usage """
         query_patch.return_value = [{'type': 'CSV'}]
         target_snowflake.db_sync.SimpleIngestManager = MagicMock()
