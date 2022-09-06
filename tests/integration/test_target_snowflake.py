@@ -486,6 +486,19 @@ class TestIntegration(unittest.TestCase):
 
         # Check if data loaded correctly
         self.assert_three_streams_are_into_snowflake(should_hard_deleted_rows=False)
+    
+    def test_loading_data_via_snowpipe_on_error(self):
+        """ Loading tables using snowpipe with error_on."""
+        tap_lines_without_key = test_utils.get_test_tap_lines(
+            'messages-with-three-streams-no-primary-key.json')
+
+        # Turning on snowpipe + on_error
+        self.config['load_via_snowpipe'] = True
+        self.config['on_error'] = "CONTINUE"
+        self.persist_lines_with_cache(tap_lines_without_key)
+
+        # Check if data loaded correctly
+        self.assert_three_streams_are_into_snowflake(should_hard_deleted_rows=False)
 
     def test_non_db_friendly_columns(self):
         """Loading non-db friendly columns like, camelcase, minus signs, etc."""
