@@ -27,6 +27,7 @@ def get_db_config():
     # AWS IAM and S3 bucket
     config['aws_access_key_id'] = os.environ.get('TARGET_SNOWFLAKE_AWS_ACCESS_KEY')
     config['aws_secret_access_key'] = os.environ.get('TARGET_SNOWFLAKE_AWS_SECRET_ACCESS_KEY')
+    config['aws_session_token'] = os.environ.get('TARGET_SNOWFLAKE_AWS_SESSION_TOKEN')
     config['s3_bucket'] = os.environ.get('TARGET_SNOWFLAKE_S3_BUCKET')
     config['s3_key_prefix'] = os.environ.get('TARGET_SNOWFLAKE_S3_KEY_PREFIX')
     config['s3_acl'] = os.environ.get('TARGET_SNOWFLAKE_S3_ACL')

@@ -34,7 +34,8 @@ logging.getLogger('snowflake.connector').setLevel(logging.WARNING)
 
 DEFAULT_BATCH_SIZE_ROWS = 100000
 DEFAULT_PARALLELISM = 0  # 0 The number of threads used to flush tables
-DEFAULT_MAX_PARALLELISM = 16  # Don't use more than this number of threads by default when flushing streams in parallel
+# Don't use more than this number of threads by default when flushing streams in parallel
+DEFAULT_MAX_PARALLELISM = 16
 
 
 def add_metadata_columns_to_schema(schema_message):
@@ -48,7 +49,8 @@ def add_metadata_columns_to_schema(schema_message):
                                                                             'format': 'date-time'}
     extended_schema_message['schema']['properties']['_sdc_batched_at'] = {'type': ['null', 'string'],
                                                                           'format': 'date-time'}
-    extended_schema_message['schema']['properties']['_sdc_deleted_at'] = {'type': ['null', 'string']}
+    extended_schema_message['schema']['properties']['_sdc_deleted_at'] = {
+        'type': ['null', 'string']}
 
     return extended_schema_message
 
@@ -134,7 +136,8 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
 
         if t == 'RECORD':
             if 'stream' not in o:
-                raise Exception(f"Line is missing required key 'stream': {line}")
+                raise Exception(
+                    f"Line is missing required key 'stream': {line}")
             if o['stream'] not in schemas:
                 raise Exception(
                     f"A record for stream {o['stream']} was encountered before a corresponding schema")
@@ -142,12 +145,14 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
             # Get schema for this record's stream
             stream = o['stream']
 
-            stream_utils.adjust_timestamps_in_record(o['record'], schemas[stream])
+            stream_utils.adjust_timestamps_in_record(
+                o['record'], schemas[stream])
 
             # Validate record
             if config.get('validate_records'):
                 try:
-                    validators[stream].validate(stream_utils.float_to_decimal(o['record']))
+                    validators[stream].validate(
+                        stream_utils.float_to_decimal(o['record']))
                 except Exception as ex:
                     if type(ex).__name__ == "InvalidOperation":
                         raise InvalidValidationOperationException(
@@ -157,7 +162,8 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
                     raise RecordValidationException(f"Record does not pass schema validation. RECORD: {o['record']}") \
                         from ex
 
-            primary_key_string = stream_to_sync[stream].record_primary_key_string(o['record'])
+            primary_key_string = stream_to_sync[stream].record_primary_key_string(
+                o['record'])
             if not primary_key_string:
                 primary_key_string = f'RID-{total_row_count[stream]}'
 
@@ -171,7 +177,8 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
 
             # append record
             if config.get('add_metadata_columns') or config.get('hard_delete'):
-                records_to_load[stream][primary_key_string] = stream_utils.add_metadata_values_to_record(o)
+                records_to_load[stream][primary_key_string] = stream_utils.add_metadata_values_to_record(
+                    o)
             else:
                 records_to_load[stream][primary_key_string] = o['record']
 
@@ -226,7 +233,8 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
 
         elif t == 'SCHEMA':
             if 'stream' not in o:
-                raise Exception(f"Line is missing required key 'stream': {line}")
+                raise Exception(
+                    f"Line is missing required key 'stream': {line}")
 
             stream = o['stream']
             new_schema = stream_utils.float_to_decimal(o['schema'])
@@ -236,7 +244,8 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
             if stream not in schemas or schemas[stream] != new_schema:
 
                 schemas[stream] = new_schema
-                validators[stream] = Draft7Validator(schemas[stream], format_checker=FormatChecker())
+                validators[stream] = Draft7Validator(
+                    schemas[stream], format_checker=FormatChecker())
 
                 # flush records from previous stream SCHEMA
                 # if same stream has been encountered again, it means the schema might have been altered
@@ -266,24 +275,28 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
                 #  1) Set ` 'primary_key_required': false ` in the target-snowflake config.json
                 #  or
                 #  2) Use fastsync [postgres-to-snowflake, mysql-to-snowflake, etc.]
-                #  or 
+                #  or
                 #  3) Use snowpipe, set ` 'load_via_snowpipe': true ` in the target-snowflake config.json
-                if config.get('primary_key_required', 
-                                True if not config.get('load_via_snowpipe') \
-                                else False) \
+                #pylint: disable=simplifiable-if-expression
+                if config.get('primary_key_required',
+                              True if not config.get('load_via_snowpipe')
+                              else False) \
                         and len(o['key_properties']) == 0:
-                    LOGGER.critical("Primary key is set to mandatory but not defined in the [%s] stream", stream)
+                    LOGGER.critical(
+                        "Primary key is set to mandatory but not defined in the [%s] stream", stream)
                     raise Exception("key_properties field is required")
 
                 key_properties[stream] = o['key_properties']
 
                 if config.get('add_metadata_columns') or config.get('hard_delete'):
                     stream_to_sync[stream] = DbSync(config,
-                                                    add_metadata_columns_to_schema(o),
+                                                    add_metadata_columns_to_schema(
+                                                        o),
                                                     table_cache,
                                                     file_format_type)
                 else:
-                    stream_to_sync[stream] = DbSync(config, o, table_cache, file_format_type)
+                    stream_to_sync[stream] = DbSync(
+                        config, o, table_cache, file_format_type)
 
                 if archive_load_files:
                     archive_load_files_data[stream] = {
@@ -292,9 +305,11 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
 
                     # In case of incremental replication, track min/max of the replication key.
                     # Incremental replication is assumed if o['bookmark_properties'][0] is one of the columns.
-                    incremental_key_column_name = stream_utils.get_incremental_key(o)
+                    incremental_key_column_name = stream_utils.get_incremental_key(
+                        o)
                     if incremental_key_column_name:
-                        LOGGER.info("Using %s as incremental_key_column_name", incremental_key_column_name)
+                        LOGGER.info(
+                            "Using %s as incremental_key_column_name", incremental_key_column_name)
                         archive_load_files_data[stream].update(
                             column=incremental_key_column_name,
                             min=None,
@@ -392,7 +407,8 @@ def flush_streams(
             no_compression=config.get('no_compression'),
             delete_rows=config.get('hard_delete'),
             temp_dir=config.get('temp_dir'),
-            archive_load_files=copy.copy(archive_load_files_data.get(stream, None)),
+            archive_load_files=copy.copy(
+                archive_load_files_data.get(stream, None)),
             load_via_snowpipe=can_use_snowpipe[stream],
         ) for stream in streams_to_flush)
 
@@ -408,7 +424,8 @@ def flush_streams(
                 if 'bookmarks' not in flushed_state:
                     flushed_state['bookmarks'] = {}
                 # Copy the stream bookmark from the latest state
-                flushed_state['bookmarks'][stream] = copy.deepcopy(state['bookmarks'][stream])
+                flushed_state['bookmarks'][stream] = copy.deepcopy(
+                    state['bookmarks'][stream])
 
         # If we flush every bucket use the latest state
         else:
@@ -420,6 +437,7 @@ def flush_streams(
 
     # Return with state message with flushed positions
     return flushed_state
+
 
 def _verify_snowpipe_usage(config):
     """ Verifies if the config satisfies the use snowpipe conditions.
@@ -435,8 +453,11 @@ def _verify_snowpipe_usage(config):
 
     if load_via_snowpipe:
         if config.get('primary_key_required', False):
-            LOGGER.critical("Use Primary key is set to mandatory, that can not be done with snowpipe")
-            raise Exception("Can not have a key based transfer through snowpipe")
+            LOGGER.critical(
+                "Use Primary key is set to mandatory, that can not be done with snowpipe")
+            raise Exception(
+                "Can not have a key based transfer through snowpipe")
+
 
 def _set_stream_snowpipe_usage(stream_to_sync, config) -> dict:
     """ If streams have primary primary keys, we can not use snowpipe for them.
@@ -455,7 +476,7 @@ def _set_stream_snowpipe_usage(stream_to_sync, config) -> dict:
     if config.get('load_via_snowpipe', False):
         for stream, db_sync in stream_to_sync.items():
             if len(db_sync.stream_schema_message['key_properties']) == 0 or \
-                config.get('ignore_primary_key', False):
+                    config.get('ignore_primary_key', False):
                 LOGGER.debug("Using snowpipe for the table %s", stream)
                 use_snowpipe[stream] = True
         LOGGER.info("Trying to use snowpipe for every stream. "
@@ -464,12 +485,14 @@ def _set_stream_snowpipe_usage(stream_to_sync, config) -> dict:
 
     return use_snowpipe
 
+
 def load_stream_batch(stream, records, row_count, db_sync, no_compression=False, delete_rows=False,
                       temp_dir=None, archive_load_files=None, load_via_snowpipe=False):
     """Load one batch of the stream into target table"""
     # Load into snowflake
     if row_count[stream] > 0:
-        flush_records(stream, records, db_sync, temp_dir, no_compression, archive_load_files, load_via_snowpipe)
+        flush_records(stream, records, db_sync, temp_dir,
+                      no_compression, archive_load_files, load_via_snowpipe)
 
         # Delete soft-deleted, flagged rows - where _sdc_deleted at is not null
         if delete_rows:
@@ -485,7 +508,7 @@ def flush_records(stream: str,
                   temp_dir: str = None,
                   no_compression: bool = False,
                   archive_load_files: Dict = None,
-                  load_via_snowpipe = False) -> None:
+                  load_via_snowpipe=False) -> None:
     """
     Takes a list of record messages and loads it into the snowflake target table
 
@@ -507,8 +530,7 @@ def flush_records(stream: str,
                                                              db_sync.flatten_schema,
                                                              compression=not no_compression,
                                                              dest_dir=temp_dir,
-                                                             data_flattening_max_level=
-                                                             db_sync.data_flattening_max_level
+                                                             data_flattening_max_level=db_sync.data_flattening_max_level
                                                              )
 
     # Get file stats
@@ -516,7 +538,8 @@ def flush_records(stream: str,
     size_bytes = os.path.getsize(filepath)
 
     # Upload to s3 and load into Snowflake
-    s3_key = db_sync.put_to_stage(filepath, stream, row_count, temp_dir=temp_dir, load_via_snowpipe=load_via_snowpipe)
+    s3_key = db_sync.put_to_stage(
+        filepath, stream, row_count, temp_dir=temp_dir, load_via_snowpipe=load_via_snowpipe)
     if load_via_snowpipe:
         db_sync.load_via_snowpipe(s3_key, stream)
     else:
@@ -528,7 +551,8 @@ def flush_records(stream: str,
     if archive_load_files:
         stream_name_parts = stream_utils.stream_name_to_dict(stream)
         if 'schema_name' not in stream_name_parts or 'table_name' not in stream_name_parts:
-            raise Exception(f"Failed to extract schema and table names from stream '{stream}'")
+            raise Exception(
+                f"Failed to extract schema and table names from stream '{stream}'")
 
         archive_schema = stream_name_parts['schema_name']
         archive_table = stream_name_parts['table_name']

@@ -1,3 +1,4 @@
+from importlib.resources import path
 import io
 import json
 import unittest
@@ -9,9 +10,10 @@ import itertools
 
 from contextlib import redirect_stdout
 from datetime import datetime, timedelta
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 import target_snowflake
+from target_snowflake import db_sync
 
 
 def _mock_record_to_csv_line(record):
@@ -221,3 +223,102 @@ class TestTargetSnowflake(unittest.TestCase):
 
         output = target_snowflake._set_stream_snowpipe_usage(input_stream, min_config)
         self.assertEqual(output, expected_output)
+
+
+    @patch('target_snowflake.db_sync.DbSync.query')
+    def test_verify_snowpipe_copy(self, query_patch):
+        """ Test setting of snowpipe copy command usage """
+        query_patch.return_value = [{'type': 'CSV'}]
+        target_snowflake.db_sync.SimpleIngestManager = MagicMock()
+        target_snowflake.db_sync.SimpleIngestManager().get_history = MagicMock(return_value={"files":[ {"name": "dummy_file01.csv", "rowsInserted": 0, "rowsParsed": 0 } ]
+                                                                                , "pipe": "dummy_pipe"
+                                                                                , "completeResult": "dummy_result"
+                                                                                })
+        
+        dummy_target_schema = "dummy-target-schema"
+        dummy_db_name = "dummy-database"
+        dummy_file_format = "dummy-file-format"
+        dummy_stage = "dummy_schema.dummy_stage"
+        dummy_stream_name = "STREAM1"
+
+        minimal_config = {
+            'account': "dummy-value",
+            'dbname': dummy_db_name,
+            'user': "dummy-value",
+            'password': "dummy-value",
+            'warehouse': "dummy-value",
+            'default_target_schema': dummy_target_schema,
+            'file_format': dummy_file_format,
+            's3_bucket': 'dummy-bucket',
+            'stage': dummy_stage,
+            's3_key_prefix': 'dummy_key_prefix/',
+            'load_via_snowpipe': True
+        }
+
+        s3_config = {}
+        record_stream_name = "dummy_tap_schema-dummy_tap_table"
+        schema_record = json.loads('{"type": "SCHEMA", "stream": "public-table1", "schema": {"definitions": {"sdc_recursive_boolean_array": {"items": {"$ref": "#/definitions/sdc_recursive_boolean_array"}, "type": ["null", "boolean", "array"]}, "sdc_recursive_integer_array": {"items": {"$ref": "#/definitions/sdc_recursive_integer_array"}, "type": ["null", "integer", "array"]}, "sdc_recursive_number_array": {"items": {"$ref": "#/definitions/sdc_recursive_number_array"}, "type": ["null", "number", "array"]}, "sdc_recursive_object_array": {"items": {"$ref": "#/definitions/sdc_recursive_object_array"}, "type": ["null", "object", "array"]}, "sdc_recursive_string_array": {"items": {"$ref": "#/definitions/sdc_recursive_string_array"}, "type": ["null", "string", "array"]}, "sdc_recursive_timestamp_array": {"format": "date-time", "items": {"$ref": "#/definitions/sdc_recursive_timestamp_array"}, "type": ["null", "string", "array"]}}, "properties": {"cid": {"maximum": 2147483647, "minimum": -2147483648, "type": ["integer"]}, "cvarchar": {"type": ["null", "string"]}, "_sdc_deleted_at": {"type": ["null", "string"], "format": "date-time"}}, "type": "object"}, "key_properties": ["cid"], "bookmark_properties": ["lsn"]}')
+        DbSync_obj = db_sync.DbSync({**minimal_config, **s3_config}, schema_record)
+
+
+        input_stream = {"stream1": DbSync_obj}        
+
+        expected_value = f"""create pipe {dummy_db_name}.{dummy_target_schema}.{dummy_stream_name}_s3_pipe as
+                            copy into {dummy_db_name}.{dummy_target_schema}."{dummy_stream_name}" ("_SDC_DELETED_AT", "CID", "CVARCHAR")
+                            from @{dummy_db_name}.{dummy_stage}
+                            file_format = (format_name = {dummy_db_name}.{dummy_file_format} )
+                            ;"""                                                               
+
+        with mock.patch.object(DbSync_obj, 'query') as mock_query:
+            DbSync_obj.load_via_snowpipe("s3://dummy_s3_key","stream1")
+            mock_query.assert_any_call(expected_value)
+
+
+    @patch('target_snowflake.db_sync.DbSync.query')
+    def test_verify_snowpipe_copy2(self, query_patch):
+        """ Test setting of snowpipe copy command usage """
+        query_patch.return_value = [{'type': 'CSV'}]
+        target_snowflake.db_sync.SimpleIngestManager = MagicMock()
+        target_snowflake.db_sync.SimpleIngestManager().get_history = MagicMock(return_value={"files":[ {"name": "dummy_file01.csv", "rowsInserted": 0, "rowsParsed": 0 } ]
+                                                                                , "pipe": "dummy_pipe"
+                                                                                , "completeResult": "dummy_result"
+                                                                                })
+        
+        dummy_target_schema = "dummy-target-schema"
+        dummy_db_name = "dummy-database"
+        dummy_file_format = "dummy-file-format"
+        dummy_stage = "dummy_schema.dummy_stage"
+        dummy_stream_name = "STREAM1"
+
+        minimal_config = {
+            'account': "dummy-value",
+            'dbname': dummy_db_name,
+            'user': "dummy-value",
+            'password': "dummy-value",
+            'warehouse': "dummy-value",
+            'default_target_schema': dummy_target_schema,
+            'file_format': dummy_file_format,
+            's3_bucket': 'dummy-bucket',
+            'stage': dummy_stage,
+            's3_key_prefix': 'dummy_key_prefix/',
+            'load_via_snowpipe': True,
+            'on_error': "CONTINUE"
+        }
+
+        s3_config = {}
+        record_stream_name = "dummy_tap_schema-dummy_tap_table"
+        schema_record = json.loads('{"type": "SCHEMA", "stream": "public-table1", "schema": {"definitions": {"sdc_recursive_boolean_array": {"items": {"$ref": "#/definitions/sdc_recursive_boolean_array"}, "type": ["null", "boolean", "array"]}, "sdc_recursive_integer_array": {"items": {"$ref": "#/definitions/sdc_recursive_integer_array"}, "type": ["null", "integer", "array"]}, "sdc_recursive_number_array": {"items": {"$ref": "#/definitions/sdc_recursive_number_array"}, "type": ["null", "number", "array"]}, "sdc_recursive_object_array": {"items": {"$ref": "#/definitions/sdc_recursive_object_array"}, "type": ["null", "object", "array"]}, "sdc_recursive_string_array": {"items": {"$ref": "#/definitions/sdc_recursive_string_array"}, "type": ["null", "string", "array"]}, "sdc_recursive_timestamp_array": {"format": "date-time", "items": {"$ref": "#/definitions/sdc_recursive_timestamp_array"}, "type": ["null", "string", "array"]}}, "properties": {"cid": {"maximum": 2147483647, "minimum": -2147483648, "type": ["integer"]}, "cvarchar": {"type": ["null", "string"]}, "_sdc_deleted_at": {"type": ["null", "string"], "format": "date-time"}}, "type": "object"}, "key_properties": ["cid"], "bookmark_properties": ["lsn"]}')
+        DbSync_obj = db_sync.DbSync({**minimal_config, **s3_config}, schema_record)
+
+
+        input_stream = {"stream1": DbSync_obj}        
+
+        expected_value = f"""create pipe {dummy_db_name}.{dummy_target_schema}.{dummy_stream_name}_s3_pipe as
+                            copy into {dummy_db_name}.{dummy_target_schema}."{dummy_stream_name}" ("_SDC_DELETED_AT", "CID", "CVARCHAR")
+                            from @{dummy_db_name}.{dummy_stage}
+                            file_format = (format_name = {dummy_db_name}.{dummy_file_format} )
+                            ON_ERROR = CONTINUE;"""                                                               
+
+        with mock.patch.object(DbSync_obj, 'query') as mock_query:
+            DbSync_obj.load_via_snowpipe("s3://dummy_s3_key","stream1")
+            mock_query.assert_any_call(expected_value)

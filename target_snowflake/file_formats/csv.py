@@ -13,13 +13,17 @@ def create_copy_sql(table_name: str,
                     stage_name: str,
                     s3_key: str,
                     file_format_name: str,
-                    columns: List):
+                    columns: List,
+                    on_error: str = None
+                    ):
     """Generate a CSV compatible snowflake COPY INTO command"""
     p_columns = ', '.join([c['name'] for c in columns])
+    on_error_statement = f"ON_ERROR = {on_error}" if on_error else ""
 
     return f"COPY INTO {table_name} ({p_columns}) " \
            f"FROM '@{stage_name}/{s3_key}' " \
-           f"FILE_FORMAT = (format_name='{file_format_name}')"
+           f"FILE_FORMAT = (format_name='{file_format_name}')" \
+           f"{on_error_statement}"
 
 
 def create_merge_sql(table_name: str,

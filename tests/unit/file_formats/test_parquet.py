@@ -56,7 +56,8 @@ class TestParquet(unittest.TestCase):
                                                  s3_key='foo_s3_key.parquet',
                                                  file_format_name='foo_file_format',
                                                  columns=[{'name': 'COL_1', 'json_element_name': 'col_1', 'trans': ''},
-                                                          {'name': 'COL_2', 'json_element_name': 'colTwo', 'trans': ''},
+                                                          {'name': 'COL_2',
+                                                              'json_element_name': 'colTwo', 'trans': ''},
                                                           {'name': 'COL_3', 'json_element_name': 'col_3',
                                                            'trans': 'parse_json'}]),
 
@@ -66,14 +67,35 @@ class TestParquet(unittest.TestCase):
                          ") "
                          "FILE_FORMAT = (format_name='foo_file_format')")
 
+    def test_create_copy_sql_on_error(self):
+        self.assertEqual(parquet.create_copy_sql(table_name='foo_table',
+                                                 stage_name='foo_stage',
+                                                 s3_key='foo_s3_key.parquet',
+                                                 file_format_name='foo_file_format',
+                                                 columns=[{'name': 'COL_1', 'json_element_name': 'col_1', 'trans': ''},
+                                                          {'name': 'COL_2',
+                                                              'json_element_name': 'colTwo', 'trans': ''},
+                                                          {'name': 'COL_3', 'json_element_name': 'col_3',
+                                                           'trans': 'parse_json'}],
+                                                 on_error="CONTINUE"),
+
+                         "COPY INTO foo_table (COL_1, COL_2, COL_3) FROM ("
+                         "SELECT ($1:col_1) COL_1, ($1:colTwo) COL_2, parse_json($1:col_3) COL_3 "
+                         "FROM '@foo_stage/foo_s3_key.parquet'"
+                         ") "
+                         "FILE_FORMAT = (format_name='foo_file_format')"
+                         "ON_ERROR = CONTINUE")
+
     def test_create_merge_sql(self):
         self.assertEqual(parquet.create_merge_sql(table_name='foo_table',
                                                   stage_name='foo_stage',
                                                   s3_key='foo_s3_key.parquet',
                                                   file_format_name='foo_file_format',
                                                   columns=[
-                                                      {'name': 'COL_1', 'json_element_name': 'col_1', 'trans': ''},
-                                                      {'name': 'COL_2', 'json_element_name': 'colTwo', 'trans': ''},
+                                                      {'name': 'COL_1',
+                                                          'json_element_name': 'col_1', 'trans': ''},
+                                                      {'name': 'COL_2',
+                                                          'json_element_name': 'colTwo', 'trans': ''},
                                                       {'name': 'COL_3', 'json_element_name': 'col_3',
                                                        'trans': 'parse_json'}
                                                   ],

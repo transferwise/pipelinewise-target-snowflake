@@ -12,15 +12,18 @@ def create_copy_sql(table_name: str,
                     stage_name: str,
                     s3_key: str,
                     file_format_name: str,
-                    columns: List):
+                    columns: List,
+                    on_error: str = None):
     """Generate a Parquet compatible snowflake COPY INTO command"""
     p_target_columns = ', '.join([c['name'] for c in columns])
     p_source_columns = ', '.join([f"{c['trans']}($1:{c['json_element_name']}) {c['name']}"
                                   for i, c in enumerate(columns)])
+    on_error_statement = f"ON_ERROR = {on_error}" if on_error else ""
 
     return f"COPY INTO {table_name} ({p_target_columns}) " \
            f"FROM (SELECT {p_source_columns} FROM '@{stage_name}/{s3_key}') " \
-           f"FILE_FORMAT = (format_name='{file_format_name}')"
+           f"FILE_FORMAT = (format_name='{file_format_name}')" \
+           f"{on_error_statement}"
 
 
 def create_merge_sql(table_name: str,
