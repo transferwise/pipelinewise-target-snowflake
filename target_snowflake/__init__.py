@@ -115,6 +115,8 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
     batch_wait_limit_seconds = config.get('batch_wait_limit_seconds', None)
     flush_timestamp = datetime.utcnow()
     archive_load_files = config.get('archive_load_files', False)
+    adjust_timestamps = config.get('adjust_timestamps', False)
+    print(f"adjust_timestamps is {adjust_timestamps}")
     archive_load_files_data = {}
 
     # Loop over lines from stdin
@@ -140,7 +142,8 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
             # Get schema for this record's stream
             stream = o['stream']
 
-            stream_utils.adjust_timestamps_in_record(o['record'], schemas[stream])
+            if adjust_timestamps:
+                stream_utils.adjust_timestamps_in_record(o['record'], schemas[stream])
 
             # Validate record
             if config.get('validate_records'):
