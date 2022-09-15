@@ -115,8 +115,7 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
     batch_wait_limit_seconds = config.get('batch_wait_limit_seconds', None)
     flush_timestamp = datetime.utcnow()
     archive_load_files = config.get('archive_load_files', False)
-    adjust_timestamps = config.get('adjust_timestamps', False)
-    print(f"adjust_timestamps is {adjust_timestamps}")
+    adjust_timestamps = config.get('adjust_timestamps', True)
     archive_load_files_data = {}
 
     # Loop over lines from stdin
