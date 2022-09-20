@@ -26,7 +26,8 @@ class TestCsv(unittest.TestCase):
         # Write uncompressed CSV file
         csv_file = tempfile.NamedTemporaryFile(delete=False)
         with open(csv_file.name, 'wb') as f:
-            csv.write_records_to_file(f, records, schema, _mock_record_to_csv_line)
+            csv.write_records_to_file(
+                f, records, schema, _mock_record_to_csv_line)
 
         # Read and validate uncompressed CSV file
         with open(csv_file.name, 'rt') as f:
@@ -45,7 +46,8 @@ class TestCsv(unittest.TestCase):
         # Write gzip compressed CSV file
         csv_file = tempfile.NamedTemporaryFile(delete=False)
         with gzip.open(csv_file.name, 'wb') as f:
-            csv.write_records_to_file(f, records, schema, _mock_record_to_csv_line)
+            csv.write_records_to_file(
+                f, records, schema, _mock_record_to_csv_line)
 
         # Read and validate gzip compressed CSV file
         with gzip.open(csv_file.name, 'rt') as f:
@@ -108,15 +110,32 @@ class TestCsv(unittest.TestCase):
                          "'@foo_stage/foo_s3_key.csv' "
                          "FILE_FORMAT = (format_name='foo_file_format')")
 
-    def test_create_merge_sql(self):
-        self.assertEqual(csv.create_merge_sql(table_name='foo_table',
+    def test_create_copy_sql_on_error(self):
+        self.assertEqual(csv.create_copy_sql(table_name='foo_table',
                                              stage_name='foo_stage',
                                              s3_key='foo_s3_key.csv',
                                              file_format_name='foo_file_format',
-                                             columns=[{'name': 'COL_1', 'trans': ''},
-                                                      {'name': 'COL_2', 'trans': ''},
-                                                      {'name': 'COL_3', 'trans': 'parse_json'}],
-                                             pk_merge_condition='s.COL_1 = t.COL_1'),
+                                             columns=[{'name': 'COL_1'},
+                                                      {'name': 'COL_2'},
+                                                      {'name': 'COL_3',
+                                                       'trans': 'parse_json'}],
+                                             on_error='CONTINUE'),
+
+                         "COPY INTO foo_table (COL_1, COL_2, COL_3) FROM "
+                         "'@foo_stage/foo_s3_key.csv' "
+                         "FILE_FORMAT = (format_name='foo_file_format')"
+                         "ON_ERROR = CONTINUE")
+
+    def test_create_merge_sql(self):
+        self.assertEqual(csv.create_merge_sql(table_name='foo_table',
+                                              stage_name='foo_stage',
+                                              s3_key='foo_s3_key.csv',
+                                              file_format_name='foo_file_format',
+                                              columns=[{'name': 'COL_1', 'trans': ''},
+                                                       {'name': 'COL_2',
+                                                        'trans': ''},
+                                                       {'name': 'COL_3', 'trans': 'parse_json'}],
+                                              pk_merge_condition='s.COL_1 = t.COL_1'),
 
                          "MERGE INTO foo_table t USING ("
                          "SELECT ($1) COL_1, ($2) COL_2, parse_json($3) COL_3 "

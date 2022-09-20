@@ -73,12 +73,14 @@ def validate_config(config):
     config_default_target_schema = config.get('default_target_schema', None)
     config_schema_mapping = config.get('schema_mapping', None)
     if not config_default_target_schema and not config_schema_mapping:
-        errors.append("Neither 'default_target_schema' (string) nor 'schema_mapping' (object) keys set in config.")
+        errors.append(
+            "Neither 'default_target_schema' (string) nor 'schema_mapping' (object) keys set in config.")
 
     # Check if archive load files option is using external stages
     archive_load_files = config.get('archive_load_files', False)
     if archive_load_files and not config.get('s3_bucket', None):
-        errors.append('Archive load files option can be used only with external s3 stages. Please define s3_bucket.')
+        errors.append(
+            'Archive load files option can be used only with external s3 stages. Please define s3_bucket.')
 
     return errors
 
@@ -128,9 +130,11 @@ def safe_column_name(name):
     """Generate SQL friendly column name"""
     return f'"{name}"'.upper()
 
+
 def json_element_name(name):
     """Generate SQL friendly semi structured element reference name"""
     return f'"{name}"'
+
 
 def column_clause(name, schema_property):
     """Generate DDL column name with column type string"""
@@ -212,11 +216,13 @@ class DbSync:
 
         # Exit if config has errors
         if len(config_errors) > 0:
-            self.logger.error('Invalid configuration:\n   * %s', '\n   * '.join(config_errors))
+            self.logger.error('Invalid configuration:\n   * %s',
+                              '\n   * '.join(config_errors))
             sys.exit(1)
 
         if self.connection_config.get('stage', None):
-            stage = stream_utils.stream_name_to_dict(self.connection_config['stage'], separator='.')
+            stage = stream_utils.stream_name_to_dict(
+                self.connection_config['stage'], separator='.')
             if not stage['schema_name']:
                 self.logger.error(
                     "The named external stage object in config has to use the <schema>.<stage_name> format.")
@@ -224,7 +230,8 @@ class DbSync:
 
         self.schema_name = None
         self.grantees = None
-        self.file_format = FileFormat(self.connection_config['file_format'], self.query, file_format_type)
+        self.file_format = FileFormat(
+            self.connection_config['file_format'], self.query, file_format_type)
 
         if not self.connection_config.get('stage') and self.file_format.file_format_type == FileFormatTypes.PARQUET:
             self.logger.error("Table stages with Parquet file format is not suppported. "
@@ -248,13 +255,17 @@ class DbSync:
             #                                                   "target_schema_select_permissions": [ "role_with_select_privs" ]
             #                                               }
             #                                           }
-            config_default_target_schema = self.connection_config.get('default_target_schema', '').strip()
-            config_schema_mapping = self.connection_config.get('schema_mapping', {})
+            config_default_target_schema = self.connection_config.get(
+                'default_target_schema', '').strip()
+            config_schema_mapping = self.connection_config.get(
+                'schema_mapping', {})
 
             stream_name = stream_schema_message['stream']
-            stream_schema_name = stream_utils.stream_name_to_dict(stream_name)['schema_name']
+            stream_schema_name = stream_utils.stream_name_to_dict(stream_name)[
+                'schema_name']
             if config_schema_mapping and stream_schema_name in config_schema_mapping:
-                self.schema_name = config_schema_mapping[stream_schema_name].get('target_schema')
+                self.schema_name = config_schema_mapping[stream_schema_name].get(
+                    'target_schema')
             elif config_default_target_schema:
                 self.schema_name = config_default_target_schema
 
@@ -280,12 +291,14 @@ class DbSync:
             #                                                                   "target_schema_select_permissions": [ "role_with_select_privs" ]
             #                                                               }
             #                                                           }
-            self.grantees = self.connection_config.get('default_target_schema_select_permissions')
+            self.grantees = self.connection_config.get(
+                'default_target_schema_select_permissions')
             if config_schema_mapping and stream_schema_name in config_schema_mapping:
                 self.grantees = config_schema_mapping[stream_schema_name].get('target_schema_select_permissions',
                                                                               self.grantees)
 
-            self.data_flattening_max_level = self.connection_config.get('data_flattening_max_level', 0)
+            self.data_flattening_max_level = self.connection_config.get(
+                'data_flattening_max_level', 0)
             self.flatten_schema = flattening.flatten_schema(stream_schema_message['schema'],
                                                             max_level=self.data_flattening_max_level)
 
@@ -294,6 +307,8 @@ class DbSync:
         # Use table stage
         else:
             self.upload_client = SnowflakeUploadClient(connection_config, self)
+
+        self.snowpipe_on_error = self.connection_config.get('on_error')
 
     def open_connection(self):
         """Open snowflake connection"""
@@ -349,7 +364,8 @@ class DbSync:
                     # update the LAST_QID
                     params['LAST_QID'] = qid
 
-                    self.logger.info("Running query: '%s' with Params %s", q, params)
+                    self.logger.info(
+                        "Running query: '%s' with Params %s", q, params)
 
                     cur.execute(q, params)
                     qid = cur.sfqid
@@ -384,9 +400,11 @@ class DbSync:
         """Generate a unique PK string in the record"""
         if len(self.stream_schema_message['key_properties']) == 0:
             return None
-        flatten = flattening.flatten_record(record, self.flatten_schema, max_level=self.data_flattening_max_level)
+        flatten = flattening.flatten_record(
+            record, self.flatten_schema, max_level=self.data_flattening_max_level)
         try:
-            key_props = [str(flatten[p]) for p in self.stream_schema_message['key_properties']]
+            key_props = [str(flatten[p])
+                         for p in self.stream_schema_message['key_properties']]
         except Exception as exc:
             pks = self.stream_schema_message['key_properties']
             fields = list(flatten.keys())
@@ -394,11 +412,13 @@ class DbSync:
                                               f"Available fields: {fields}") from exc
         return ','.join(key_props)
 
-    def _generate_s3_key_prefix(self,stream, use_snowpipe):
+    def _generate_s3_key_prefix(self, stream, use_snowpipe):
         """ If loading via snowpipe then the table_name is added to the s3 prefix """
-        s3_key_prefix = self.connection_config.get('s3_key_prefix', '').replace('/','')
-        schema_table_name = self.table_name(stream, None, False).lower().replace('"','').replace('.','__')
-        path_arr = ["{}/".format(s3_key_prefix),]
+        s3_key_prefix = self.connection_config.get(
+            's3_key_prefix', '').replace('/', '')
+        schema_table_name = self.table_name(
+            stream, None, False).lower().replace('"', '').replace('.', '__')
+        path_arr = ["{}/".format(s3_key_prefix), ]
         if use_snowpipe:
             path_arr.append("{}/".format(schema_table_name))
 
@@ -432,17 +452,21 @@ class DbSync:
         source_bucket = self.connection_config.get('s3_bucket')
 
         # Get archive s3_bucket from config, or use same bucket if not specified
-        archive_bucket = self.connection_config.get('archive_load_files_s3_bucket', source_bucket)
+        archive_bucket = self.connection_config.get(
+            'archive_load_files_s3_bucket', source_bucket)
 
         # Determine prefix to use in archive s3 bucket
         default_archive_prefix = 'archive'
-        archive_prefix = self.connection_config.get('archive_load_files_s3_prefix', default_archive_prefix)
+        archive_prefix = self.connection_config.get(
+            'archive_load_files_s3_prefix', default_archive_prefix)
         prefixed_archive_key = f'{archive_prefix}/{s3_archive_key}'
 
         copy_source = f'{source_bucket}/{s3_source_key}'
 
-        self.logger.info('Copying %s to archive location %s', copy_source, prefixed_archive_key)
-        self.upload_client.copy_object(copy_source, archive_bucket, prefixed_archive_key, s3_archive_metadata)
+        self.logger.info('Copying %s to archive location %s',
+                         copy_source, prefixed_archive_key)
+        self.upload_client.copy_object(
+            copy_source, archive_bucket, prefixed_archive_key, s3_archive_metadata)
 
     def get_stage_name(self, stream):
         """Generate snowflake stage name"""
@@ -457,7 +481,8 @@ class DbSync:
         """Load a supported file type from snowflake stage into target table"""
         stream_schema_message = self.stream_schema_message
         stream = stream_schema_message['stream']
-        self.logger.info("Loading %d rows into '%s'", count, self.table_name(stream, False))
+        self.logger.info("Loading %d rows into '%s'", count,
+                         self.table_name(stream, False))
 
         # Get list if columns with types
         columns_with_trans = [
@@ -477,13 +502,13 @@ class DbSync:
                 # Insert or Update with MERGE command if primary key defined
                 if len(self.stream_schema_message['key_properties']) > 0:
                     merge_sql = self.file_format.formatter.create_merge_sql(table_name=self.table_name(stream, False),
-                                                                            stage_name=self.get_stage_name(stream),
+                                                                            stage_name=self.get_stage_name(
+                                                                                stream),
                                                                             s3_key=s3_key,
-                                                                            file_format_name=
-                                                                                self.connection_config['file_format'],
+                                                                            file_format_name=self.connection_config[
+                                                                                'file_format'],
                                                                             columns=columns_with_trans,
-                                                                            pk_merge_condition=
-                                                                                self.primary_key_merge_condition())
+                                                                            pk_merge_condition=self.primary_key_merge_condition())
                     self.logger.debug('Running query: %s', merge_sql)
                     cur.execute(merge_sql)
 
@@ -496,11 +521,13 @@ class DbSync:
                 # Insert only with COPY command if no primary key
                 else:
                     copy_sql = self.file_format.formatter.create_copy_sql(table_name=self.table_name(stream, False),
-                                                                          stage_name=self.get_stage_name(stream),
+                                                                          stage_name=self.get_stage_name(
+                                                                              stream),
                                                                           s3_key=s3_key,
-                                                                          file_format_name=
-                                                                            self.connection_config['file_format'],
-                                                                          columns=columns_with_trans)
+                                                                          file_format_name=self.connection_config[
+                                                                              'file_format'],
+                                                                          columns=columns_with_trans,
+                                                                          on_error=self.snowpipe_on_error)
                     self.logger.debug('Running query: %s', copy_sql)
                     cur.execute(copy_sql)
 
@@ -510,45 +537,58 @@ class DbSync:
                         inserts = results[0].get('rows_loaded', 0)
 
                 self.logger.info('Loading into %s: %s',
-                    self.table_name(stream, False),
-                    json.dumps({'inserts': inserts, 'updates': updates, 'size_bytes': size_bytes}))
+                                 self.table_name(stream, False),
+                                 json.dumps({'inserts': inserts, 'updates': updates, 'size_bytes': size_bytes}))
 
-    def load_via_snowpipe(self, s3_key, stream):
+    def load_via_snowpipe(self, s3_key, stream): #pylint: disable=too-many-locals
         """ Performs data transfer from the stage to snowflake using snowpipe. """
 
         def _generate_pipe_name(dbname, schema_table_name):
-            stripped_db_name = dbname.replace('"','')
-            stripped_table_name = schema_table_name.replace('"','')
+            stripped_db_name = dbname.replace('"', '')
+            stripped_table_name = schema_table_name.replace('"', '')
             return f"{stripped_db_name}.{stripped_table_name}_s3_pipe"
 
         def _generate_pipe_args(pipe_name, schema_table_name, columns_with_trans):
             pipe_args = dict(
-                pipe_name= pipe_name,
-                db_name = self.connection_config['dbname'],
-                obj_name = schema_table_name,
-                stage = self.connection_config['stage'],
-                file_format = self.connection_config['file_format'],
-                cols = ', '.join([c['name'] for c in columns_with_trans]),
-                )
+                pipe_name=pipe_name,
+                db_name=self.connection_config['dbname'],
+                obj_name=schema_table_name,
+                stage=self.connection_config['stage'],
+                file_format=self.connection_config['file_format'],
+                on_error=f"ON_ERROR = {self.snowpipe_on_error}"
+                if self.snowpipe_on_error else "",
+                cols=', '.join([c['name'] for c in columns_with_trans]),
+            )
             return pipe_args
 
         def _load_private_key():
-            key_path = getattr(self.connection_config, "private_key_path", "/rsa_key.p8")
-            password = getattr(self.connection_config, "private_key_password", None)
+            key_path = getattr(self.connection_config,
+                               "private_key_path", "/rsa_key.p8")
+            password = getattr(self.connection_config,
+                               "private_key_password", None)
             with open(key_path, 'rb') as pem_in:
-                private_key_obj = load_pem_private_key(pem_in.read(),password=password,backend=default_backend())
+                private_key_obj = load_pem_private_key(
+                    pem_in.read(), password=password, backend=default_backend())
 
-            private_key_text = private_key_obj.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()).decode('utf-8')
+            private_key_text = private_key_obj.private_bytes(
+                Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()).decode('utf-8')
             return private_key_text
 
         def _increment_value(exponentially=False):
-                previous = 0
-                current = 1
-                while True:
-                    yield 2**(current + previous) if exponentially  \
-                        else current + previous + 30
-                    current = current + previous
-                    previous = current - previous
+            previous = 0
+            current = 1
+            while True:
+                yield 2**(current + previous) if exponentially  \
+                    else current + previous + 30
+                current = current + previous
+                previous = current - previous
+
+        def _create_copy_command(pipe_args):
+            return """create pipe {pipe_name} as
+                            copy into {db_name}.{obj_name} ({cols})
+                            from @{db_name}.{stage}
+                            file_format = (format_name = {db_name}.{file_format} )
+                            {on_error};""".format(**pipe_args)
 
         self.logger.info("Loading data using Snowpipe.")
         # Get list if columns with types and transformation
@@ -563,14 +603,11 @@ class DbSync:
         db_name = self.connection_config['dbname']
 
         pipe_name = _generate_pipe_name(db_name, schema_table_name)
-        pipe_args = _generate_pipe_args(pipe_name, schema_table_name, columns_with_trans)
+        pipe_args = _generate_pipe_args(
+            pipe_name, schema_table_name, columns_with_trans)
 
-        create_pipe_sql = """create pipe {pipe_name} as
-                            copy into {db_name}.{obj_name} ({cols})
-                            from @{db_name}.{stage}
-                            file_format = (format_name = {db_name}.{file_format} );""".format(**pipe_args)
+        create_pipe_sql = _create_copy_command(pipe_args)
         drop_pipe_sql = f"drop pipe if exists {pipe_name};"
-
         # Create snowpipe
         try:
             self.logger.debug("Creating snowpipe - %s.", pipe_name)
@@ -585,31 +622,34 @@ class DbSync:
             # primary key not present in the records, perform copy
             self.query(create_pipe_sql)
         except ProgrammingError as error:
-            self.logger.error("An error was encountered while creating the snowpipe, %s", error)
+            self.logger.error(
+                "An error was encountered while creating the snowpipe, %s", error)
 
         #  Private key encription required to perform snowpipe data transfer
         private_key_text = _load_private_key()
 
         ingest_manager = SimpleIngestManager(account=self.connection_config['account'].split('.')[0],
-                                        host=self.connection_config['account']+'.snowflakecomputing.com',
-                                        user=self.connection_config['user'],
-                                        pipe=pipe_name,
-                                        scheme='https',
-                                        port=443,
-                                        private_key=private_key_text)
+                                             host=self.connection_config['account'] +
+                                             '.snowflakecomputing.com',
+                                             user=self.connection_config['user'],
+                                             pipe=pipe_name,
+                                             scheme='https',
+                                             port=443,
+                                             private_key=private_key_text)
 
         # List of files, but wrapped into a class
         staged_file_list = [StagedFile(s3_key, None)]
 
-        #ingest files using snowpipe
+        # ingest files using snowpipe
         retries = self.connection_config.get('max_retry', 5)
         wait_time = _increment_value(exponentially=True)
         while True:
             try:
-                self.logger.debug("Starting to ingest file via snowpipe, retries left %s", retries)
+                self.logger.debug(
+                    "Starting to ingest file via snowpipe, retries left %s", retries)
                 resp = ingest_manager.ingest_files(staged_file_list)
                 self.logger.info("Snowpipe has recived the files and will now start loading: %s",
-                                resp['responseCode'])
+                                 resp['responseCode'])
                 break
             except HTTPError as e:
                 # HTTP error, wait and retry, exit if still fails
@@ -617,22 +657,22 @@ class DbSync:
                 time.sleep(next(wait_time))
                 retries -= 1
                 if not retries:
-                    self.logger.critcal("Max retry limit reached, Failed to load data using snowpipe")
+                    self.logger.critcal(
+                        "Max retry limit reached, Failed to load data using snowpipe")
                     sys.exit(1)
 
         # Needs to wait for a while to perform transfer, delete pipe after transfer
         wait_time = _increment_value()
         while True:
             history_resp = ingest_manager.get_history()
-
             if len(history_resp['files']) > 0:
                 self.logger.info('''Ingest Report for snowpipe : %s
                                     STATUS: %s
                                     rowsInserted(rowsParsed): %s(%s)''',
-                                    history_resp['pipe'],
-                                    history_resp['completeResult'],
-                                    history_resp['files'][0]['rowsInserted'],
-                                    history_resp['files'][0]['rowsParsed'])
+                                 history_resp['pipe'],
+                                 history_resp['completeResult'],
+                                 history_resp['files'][0]['rowsInserted'],
+                                 history_resp['files'][0]['rowsParsed'])
                 self.query(drop_pipe_sql)
                 break
             else:
@@ -666,7 +706,8 @@ class DbSync:
             primary_key = [f"PRIMARY KEY({pk_list})"]
 
         p_temp = 'TEMP ' if is_temporary else ''
-        p_table_name = self.table_name(stream_schema_message['stream'], is_temporary)
+        p_table_name = self.table_name(
+            stream_schema_message['stream'], is_temporary)
         p_columns = ', '.join(columns + primary_key)
         p_extra = 'data_retention_time_in_days = 0 ' if is_temporary else 'data_retention_time_in_days = 1 '
         return f'CREATE {p_temp}TABLE IF NOT EXISTS {p_table_name} ({p_columns}) {p_extra}'
@@ -674,7 +715,8 @@ class DbSync:
     def grant_usage_on_schema(self, schema_name, grantee):
         """Grant usage on schema"""
         query = f"GRANT USAGE ON SCHEMA {schema_name} TO ROLE {grantee}"
-        self.logger.info("Granting USAGE privilege on '%s' schema to '%s'... %s", schema_name, grantee, query)
+        self.logger.info(
+            "Granting USAGE privilege on '%s' schema to '%s'... %s", schema_name, grantee, query)
         self.query(query)
 
     # pylint: disable=invalid-name
@@ -708,21 +750,26 @@ class DbSync:
 
         # table_cache is an optional pre-collected list of available objects in snowflake
         if self.table_cache:
-            schema_rows = list(filter(lambda x: x['SCHEMA_NAME'] == schema_name.upper(), self.table_cache))
+            schema_rows = list(
+                filter(lambda x: x['SCHEMA_NAME'] == schema_name.upper(), self.table_cache))
         # Query realtime if not pre-collected
         else:
-            schema_rows = self.query(f"SHOW SCHEMAS LIKE '{schema_name.upper()}'")
+            schema_rows = self.query(
+                f"SHOW SCHEMAS LIKE '{schema_name.upper()}'")
 
         if len(schema_rows) == 0:
             query = f"CREATE SCHEMA IF NOT EXISTS {schema_name}"
-            self.logger.info("Schema '%s' does not exist. Creating... %s", schema_name, query)
+            self.logger.info(
+                "Schema '%s' does not exist. Creating... %s", schema_name, query)
             self.query(query)
 
-            self.grant_privilege(schema_name, self.grantees, self.grant_usage_on_schema)
+            self.grant_privilege(schema_name, self.grantees,
+                                 self.grant_usage_on_schema)
 
             # Refresh columns cache if required
             if self.table_cache:
-                self.table_cache = self.get_table_columns(table_schemas=[self.schema_name])
+                self.table_cache = self.get_table_columns(
+                    table_schemas=[self.schema_name])
 
     def get_tables(self, table_schemas=None):
         """Get list of tables of certain schema(s) from snowflake metadata"""
@@ -753,7 +800,8 @@ class DbSync:
                     if not re.match(r'002043 \(02000\):.*\n.*does not exist.*', str(sys.exc_info()[1])):
                         raise exc
         else:
-            raise Exception("Cannot get table columns. List of table schemas empty")
+            raise Exception(
+                "Cannot get table columns. List of table schemas empty")
 
         return tables
 
@@ -808,7 +856,8 @@ class DbSync:
                         raise exc
 
         else:
-            raise Exception("Cannot get table columns. List of table schemas empty")
+            raise Exception(
+                "Cannot get table columns. List of table schemas empty")
 
         return table_columns
 
@@ -826,14 +875,16 @@ class DbSync:
         if self.table_cache:
             all_table_columns = self.table_cache
         else:
-            all_table_columns = self.get_table_columns(table_schemas=[self.schema_name])
+            all_table_columns = self.get_table_columns(
+                table_schemas=[self.schema_name])
 
         # Find the specific table
         columns = list(filter(lambda x: x['SCHEMA_NAME'] == self.schema_name.upper() and
-                                        f'"{x["TABLE_NAME"].upper()}"' == table_name,
+                              f'"{x["TABLE_NAME"].upper()}"' == table_name,
                               all_table_columns))
 
-        columns_dict = {column['COLUMN_NAME'].upper(): column for column in columns}
+        columns_dict = {
+            column['COLUMN_NAME'].upper(): column for column in columns}
 
         columns_to_add = [
             column_clause(
@@ -854,15 +905,15 @@ class DbSync:
             ))
             for (name, properties_schema) in self.flatten_schema.items()
             if name.upper() in columns_dict and
-               columns_dict[name.upper()]['DATA_TYPE'].upper() != column_type(properties_schema).upper() and
+            columns_dict[name.upper()]['DATA_TYPE'].upper() != column_type(properties_schema).upper() and
 
-               # Don't alter table if TIMESTAMP_NTZ detected as the new required column type
-               #
-               # Target-snowflake maps every data-time JSON types to TIMESTAMP_NTZ but sometimes
-               # a TIMESTAMP_TZ column is already available in the target table (i.e. created by fastsync initial load)
-               # We need to exclude this conversion otherwise we loose the data that is already populated
-               # in the column
-               column_type(properties_schema).upper() != 'TIMESTAMP_NTZ'
+            # Don't alter table if TIMESTAMP_NTZ detected as the new required column type
+            #
+            # Target-snowflake maps every data-time JSON types to TIMESTAMP_NTZ but sometimes
+            # a TIMESTAMP_TZ column is already available in the target table (i.e. created by fastsync initial load)
+            # We need to exclude this conversion otherwise we loose the data that is already populated
+            # in the column
+            column_type(properties_schema).upper() != 'TIMESTAMP_NTZ'
         ]
 
         for (column_name, column) in columns_to_replace:
@@ -872,7 +923,8 @@ class DbSync:
 
         # Refresh table cache if required
         if self.table_cache and (columns_to_add or columns_to_replace):
-            self.table_cache = self.get_table_columns(table_schemas=[self.schema_name])
+            self.table_cache = self.get_table_columns(
+                table_schemas=[self.schema_name])
 
     def drop_column(self, column_name, stream):
         """Drops column from an existing table"""
@@ -905,7 +957,7 @@ class DbSync:
 
         if self.table_cache:
             found_tables = list(filter(lambda x: x['SCHEMA_NAME'] == self.schema_name.upper() and
-                                                 f'"{x["TABLE_NAME"].upper()}"' == table_name,
+                                       f'"{x["TABLE_NAME"].upper()}"' == table_name,
                                        self.table_cache))
         else:
             found_tables = [table for table in (self.get_tables([self.schema_name.upper()]))
@@ -913,14 +965,17 @@ class DbSync:
 
         if len(found_tables) == 0:
             query = self.create_table_query()
-            self.logger.info('Table %s does not exist. Creating...', table_name_with_schema)
+            self.logger.info(
+                'Table %s does not exist. Creating...', table_name_with_schema)
             self.query(query)
 
-            self.grant_privilege(self.schema_name, self.grantees, self.grant_select_on_all_tables_in_schema)
+            self.grant_privilege(
+                self.schema_name, self.grantees, self.grant_select_on_all_tables_in_schema)
 
             # Refresh columns cache if required
             if self.table_cache:
-                self.table_cache = self.get_table_columns(table_schemas=[self.schema_name])
+                self.table_cache = self.get_table_columns(
+                    table_schemas=[self.schema_name])
         else:
             self.logger.info('Table %s exists', table_name_with_schema)
             self.update_columns()
