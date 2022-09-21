@@ -64,7 +64,7 @@ def flatten_schema(d, parent_key=None, sep='__', level=0, max_level=0):
         if len(list(g)) > 1:
             raise ValueError(f'Duplicate column name produced in schema: {k}')
 
-    return dict(sorted_items)
+    return dict(items)
 
 
 def _should_json_dump_value(key, value, schema=None):
