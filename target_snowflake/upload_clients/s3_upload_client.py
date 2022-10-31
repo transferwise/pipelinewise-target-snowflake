@@ -53,7 +53,7 @@ class S3UploadClient(BaseUploadClient):
             s3_client = aws_session.client('s3',
                                   region_name=config.get('s3_region_name'),
                                   endpoint_url=config.get('s3_endpoint_url'),
-                                  config=Config(proxies=json.loads(s3_proxies))
+                                  config=Config(proxies=s3_proxies)
                                           )
         return s3_client
 
