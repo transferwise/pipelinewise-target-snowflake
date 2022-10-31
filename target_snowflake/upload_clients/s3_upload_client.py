@@ -3,6 +3,7 @@ S3 Upload Client
 """
 import os
 import boto3
+from botocore.config import Config
 import datetime
 
 from snowflake.connector.encryption_util import SnowflakeEncryptionUtil
@@ -27,6 +28,7 @@ class S3UploadClient(BaseUploadClient):
         aws_access_key_id = config.get('aws_access_key_id') or os.environ.get('AWS_ACCESS_KEY_ID')
         aws_secret_access_key = config.get('aws_secret_access_key') or os.environ.get('AWS_SECRET_ACCESS_KEY')
         aws_session_token = config.get('aws_session_token') or os.environ.get('AWS_SESSION_TOKEN')
+        s3_proxies = config.get('s3_proxies')
 
         # AWS credentials based authentication
         if aws_access_key_id and aws_secret_access_key:
@@ -39,10 +41,24 @@ class S3UploadClient(BaseUploadClient):
         else:
             aws_session = boto3.session.Session(profile_name=aws_profile)
 
+        
         # Create the s3 client
-        return aws_session.client('s3',
+        if s3_proxies is None:
+            s3_client = aws_session.client('s3',
                                   region_name=config.get('s3_region_name'),
-                                  endpoint_url=config.get('s3_endpoint_url'))
+                                  endpoint_url=config.get('s3_endpoint_url'),
+                                          )
+        else:
+            if s3_proxies == "{}":
+                s3_proxies = {}
+            else:
+                s3_proxies = dict(s3_proxies)
+            s3_client = aws_session.client('s3',
+                                  region_name=config.get('s3_region_name'),
+                                  endpoint_url=config.get('s3_endpoint_url'),
+                                  config=Config(proxies=dict(s3_proxies))
+                                          )
+        return s3_client
 
     def upload_file(self, file, stream, temp_dir=None):
         """Upload file to an external snowflake stage on s3"""
