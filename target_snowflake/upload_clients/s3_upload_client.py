@@ -5,7 +5,6 @@ import os
 import boto3
 from botocore.config import Config
 import datetime
-import json
 
 from snowflake.connector.encryption_util import SnowflakeEncryptionUtil
 from snowflake.connector.storage_client import SnowflakeFileEncryptionMaterial
