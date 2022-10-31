@@ -179,6 +179,7 @@ Full list of options in `config.json`:
 | adjust_timestamps                   | Boolean |            | (Default: True) When set to false, bypasses the checking of timestamp and time values and setting them to the MAX values in Snowflake. This is useful if incoming data values are definitely date/time/datetime values and no parse testing is required.
 | archive_load_files_s3_prefix        | String  |            | (Default: "archive") When `archive_load_files` is enabled, the archived files will be placed in the archive S3 bucket under this prefix.
 | archive_load_files_s3_bucket        | String  |            | (Default: Value of `s3_bucket`) When `archive_load_files` is enabled, the archived files will be placed in this bucket.
+| s3_proxies        | Object  | No           | (Default: None) If not set then http_proxy and https_proxy and other environmental settings will dictate which proxy is used. If this is set then you can specify a proxy for the S3 Upload connection to use, or set to `{}` to force the S3 Uploader to bypass a proxy entirely
 
 ### To run tests:
 
