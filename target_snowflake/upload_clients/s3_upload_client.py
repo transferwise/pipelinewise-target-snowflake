@@ -5,6 +5,7 @@ import os
 import boto3
 from botocore.config import Config
 import datetime
+import json
 
 from snowflake.connector.encryption_util import SnowflakeEncryptionUtil
 from snowflake.connector.storage_client import SnowflakeFileEncryptionMaterial
@@ -49,14 +50,10 @@ class S3UploadClient(BaseUploadClient):
                                   endpoint_url=config.get('s3_endpoint_url'),
                                           )
         else:
-            if s3_proxies == "{}":
-                s3_proxies = {}
-            else:
-                s3_proxies = dict(s3_proxies)
             s3_client = aws_session.client('s3',
                                   region_name=config.get('s3_region_name'),
                                   endpoint_url=config.get('s3_endpoint_url'),
-                                  config=Config(proxies=dict(s3_proxies))
+                                  config=Config(proxies=json.loads(s3_proxies))
                                           )
         return s3_client
 
