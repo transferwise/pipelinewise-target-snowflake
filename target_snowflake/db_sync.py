@@ -299,6 +299,9 @@ class DbSync:
             warehouse=self.connection_config['warehouse'],
             role=self.connection_config.get('role', None),
             autocommit=True,
+            authenticator='username_password_mfa',
+            client_store_temporary_credential=True,
+            client_request_mfa_token=True,
             session_parameters={
                 # Quoted identifiers should be case sensitive
                 'QUOTED_IDENTIFIERS_IGNORE_CASE': 'FALSE',
