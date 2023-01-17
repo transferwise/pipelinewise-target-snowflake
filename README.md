@@ -1,4 +1,4 @@
-# pipelinewise-target-snowflake
+# pipelinewise-target-snowflake-key-auth
 
 [![PyPI version](https://badge.fury.io/py/pipelinewise-target-snowflake.svg)](https://badge.fury.io/py/pipelinewise-target-snowflake)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/pipelinewise-target-snowflake.svg)](https://pypi.org/project/pipelinewise-target-snowflake/)
@@ -24,7 +24,7 @@ It's recommended to use a virtualenv:
 
 ```bash
   python3 -m venv venv
-  pip install pipelinewise-target-snowflake
+  pip install pipelinewise-target-snowflake-key-auth
 ```
 
 or

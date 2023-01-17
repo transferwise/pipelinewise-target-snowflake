@@ -5,13 +5,13 @@ from setuptools import find_packages, setup
 with open('README.md') as f:
     long_description = f.read()
 
-setup(name="pipelinewise-target-snowflake",
+setup(name="pipelinewise-target-snowflake-key-auth",
       version="2.2.0",
-      description="Singer.io target for loading data to Snowflake - PipelineWise compatible",
+      description="Singer.io target for loading data to Snowflake - PipelineWise compatible - Forked from Pipelinewise to add compatibility with key pair auth for Snowflake",
       long_description=long_description,
       long_description_content_type='text/markdown',
       author="Wise",
-      url='https://github.com/transferwise/pipelinewise-target-snowflake',
+      url='github.com/JamieSplitit/pipelinewise-target-snowflake-key-auth',
       classifiers=[
           'License :: OSI Approved :: Apache Software License',
           'Programming Language :: Python :: 3 :: Only',
