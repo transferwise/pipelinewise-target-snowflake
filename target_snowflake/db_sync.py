@@ -343,14 +343,14 @@ class DbSync:
             self.logger.info('Connecting using key pair auth')
 
             key = get_secure_parameter(
-                connection_params["snowflake_private_key_aws_parameter_name"],
-                region_name=connection_params["aws_region_name"],
-                session_profile_name=connection_params.get("aws_profile"),
+                self.connection_config["snowflake_private_key_aws_parameter_name"],
+                region_name=self.connection_config["aws_region_name"],
+                session_profile_name=self.connection_config.get("aws_profile"),
             )
             key_code = get_secure_parameter(
-                connection_params["snowflake_private_key_code_aws_parameter_name"],
-                region_name=connection_params["aws_region_name"],
-                session_profile_name=connection_params.get("aws_profile"),
+                self.connection_config["snowflake_private_key_code_aws_parameter_name"],
+                region_name=self.connection_config["aws_region_name"],
+                session_profile_name=self.connection_config.get("aws_profile"),
             )
             p_key = serialization.load_pem_private_key(
                 bytes(key, "utf-8"), password=key_code.encode(), backend=default_backend()
