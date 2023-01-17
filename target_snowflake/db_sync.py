@@ -60,9 +60,11 @@ def validate_config(config):
         'account',
         'dbname',
         'user',
-        'password',
         'warehouse',
-        'file_format'
+        'file_format',
+        'aws_region_name',
+        'snowflake_private_key_aws_parameter_name',
+        'snowflake_private_key_code_aws_parameter_name'
     ]
 
     required_config_keys = []
