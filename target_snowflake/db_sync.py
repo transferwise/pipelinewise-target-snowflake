@@ -1,9 +1,13 @@
 import json
 import sys
+
+import boto3
 import snowflake.connector
 import re
 import time
 
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization
 from typing import List, Dict, Union, Tuple, Set
 from singer import get_logger
 from target_snowflake import flattening
@@ -14,6 +18,29 @@ from target_snowflake.exceptions import TooManyRecordsException, PrimaryKeyNotFo
 from target_snowflake.upload_clients.s3_upload_client import S3UploadClient
 from target_snowflake.upload_clients.snowflake_upload_client import SnowflakeUploadClient
 
+
+def get_secure_parameter(param_name: str, region_name: str, session_profile_name: str = None):
+    """
+    This function reads a secure parameter from AWS' SSM service.
+    The request must be passed a valid parameter name, as well as
+    temporary credentials which can be used to access the parameter.
+    The parameter's value is returned.
+    """
+    session = boto3.session.Session(profile_name=session_profile_name)
+    ssm = session.client("ssm", region_name=region_name)
+
+    # Get the requested parameter
+    response = ssm.get_parameters(
+        Names=[
+            param_name,
+        ],
+        WithDecryption=True,
+    )
+
+    # Store the credentials in a variable
+    param_value = response["Parameters"][0]["Value"]
+
+    return param_value
 
 def validate_config(config):
     """Validate configuration"""
@@ -291,9 +318,8 @@ class DbSync:
         if self.stream_schema_message:
             stream = self.stream_schema_message['stream']
 
-        return snowflake.connector.connect(
+        connection_params = dict(
             user=self.connection_config['user'],
-            password=self.connection_config['password'],
             account=self.connection_config['account'],
             database=self.connection_config['dbname'],
             warehouse=self.connection_config['warehouse'],
@@ -308,6 +334,35 @@ class DbSync:
                                               table=self.table_name(stream, False, True))
             }
         )
+        if connection_params.get('password'):
+            self.logger.info('Connecting using basic auth')
+            connection_params['password'] = self.connection_config['password']
+        elif connection_params.get('private_key_aws_parameter_name'):
+            self.logger.info('Connecting using key pair auth')
+
+            key = get_secure_parameter(
+                connection_params["snowflake_private_key_aws_parameter_name"],
+                region_name=connection_params["aws_region_name"],
+                session_profile_name=connection_params.get("aws_profile"),
+            )
+            key_code = get_secure_parameter(
+                connection_params["snowflake_private_key_code_aws_parameter_name"],
+                region_name=connection_params["aws_region_name"],
+                session_profile_name=connection_params.get("aws_profile"),
+            )
+            p_key = serialization.load_pem_private_key(
+                bytes(key, "utf-8"), password=key_code.encode(), backend=default_backend()
+            )
+
+            pkb = p_key.private_bytes(
+                encoding=serialization.Encoding.DER,
+                format=serialization.PrivateFormat.PKCS8,
+                encryption_algorithm=serialization.NoEncryption(),
+            )
+
+            connection_params['private_key'] = pkb
+
+        return snowflake.connector.connect(**connection_params)
 
     def query(self, query: Union[str, List[str]], params: Dict = None, max_records=0) -> List[Dict]:
         """Run an SQL query in snowflake"""
