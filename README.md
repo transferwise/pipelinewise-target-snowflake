@@ -9,7 +9,11 @@
 This is a [PipelineWise](https://transferwise.github.io/pipelinewise) compatible target connector.
 
 ## Custom setup
-- `settings` = `account,dbname,user,warehouse,file_format,role,default_target_schema,aws_region_name,aws_profile,snowflake_private_key_aws_parameter_name,snowflake_private_key_code_aws_parameter_name,data_flattening_max_level:integer`
+- install with `meltano add --custom loader target-snowflake-key-auth`
+  - namespace: target-snowflake-key-auth
+  - pip_url: git+https://github.com/JamieSplitit/pipelinewise-target-snowflake-key-auth.git
+  - executable name: target-snowflake-key-auth
+  - settings: `account,dbname,user,warehouse,file_format,role,default_target_schema,aws_region_name,aws_profile,snowflake_private_key_aws_parameter_name,snowflake_private_key_code_aws_parameter_name,data_flattening_max_level:integer`
 
 ## How to use it
 
