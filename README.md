@@ -8,6 +8,8 @@
 
 This is a [PipelineWise](https://transferwise.github.io/pipelinewise) compatible target connector.
 
+## Custom setup
+- `settings` = 
 ## How to use it
 
 The recommended method of running this target is to use it from [PipelineWise](https://transferwise.github.io/pipelinewise). When running it from PipelineWise you don't need to configure this tap with JSON files and most of things are automated. Please check the related documentation at [Target Snowflake](https://transferwise.github.io/pipelinewise/connectors/targets/snowflake.html)

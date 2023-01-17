@@ -38,7 +38,7 @@ setup(name="pipelinewise-target-snowflake-key-auth",
       },
       entry_points="""
           [console_scripts]
-          target-snowflake=target_snowflake:main
+          target-snowflake-auth-key=target_snowflake:main
       """,
       packages=find_packages(exclude=['tests*']),
       )
