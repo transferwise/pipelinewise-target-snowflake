@@ -1,0 +1,9 @@
+# To prevent CR line endings from Windows computers causing issues in deployments
+*.sh text eol=lf
+*.sql text eol=lf
+*.py text eol=lf
+*.txt text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
+Dockerfile text eol=lf
