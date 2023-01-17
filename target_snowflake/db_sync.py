@@ -339,7 +339,7 @@ class DbSync:
         if self.connection_config.get('password'):
             self.logger.info('Connecting using basic auth')
             connection_params['password'] = self.connection_config['password']
-        elif self.connection_config.get('private_key_aws_parameter_name'):
+        elif self.connection_config.get('snowflake_private_key_aws_parameter_name'):
             self.logger.info('Connecting using key pair auth')
 
             key = get_secure_parameter(
