@@ -34,6 +34,7 @@ logging.getLogger('snowflake.connector').setLevel(logging.WARNING)
 DEFAULT_BATCH_SIZE_ROWS = 100000
 DEFAULT_PARALLELISM = 0  # 0 The number of threads used to flush tables
 DEFAULT_MAX_PARALLELISM = 16  # Don't use more than this number of threads by default when flushing streams in parallel
+DEFAULT_REPLICATION_METHOD = 'append'
 
 
 def add_metadata_columns_to_schema(schema_message):
@@ -308,6 +309,8 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
                         )
 
                 stream_to_sync[stream].create_schema_if_not_exists()
+                if config.get('replication_method') == 'truncate':
+                    stream_to_sync[stream].truncate_table()
                 stream_to_sync[stream].sync_table()
 
                 row_count[stream] = 0

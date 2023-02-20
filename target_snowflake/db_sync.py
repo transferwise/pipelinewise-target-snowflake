@@ -808,6 +808,12 @@ class DbSync:
         self.logger.info('Adding column: %s', add_column)
         self.query(add_column)
 
+    def truncate_table(self):
+        """Truncates the table of all rows"""
+        truncate_table = f"TRUNCATE TABLE {self.table_name(stream, False)}"
+        self.logger.info(f"Truncating table: {self.table_name(stream, False)}")
+        self.query(truncate_table)
+
     def sync_table(self):
         """Creates or alters the target table according to the schema"""
         stream_schema_message = self.stream_schema_message
