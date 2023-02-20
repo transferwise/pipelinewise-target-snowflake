@@ -67,6 +67,10 @@ def validate_config(config):
     if archive_load_files and not config.get('s3_bucket', None):
         errors.append('Archive load files option can be used only with external s3 stages. Please define s3_bucket.')
 
+    replication_method = config.get('replication_method','append')
+    if replication_method not in ['append','truncate']:
+        errors.append(f'Unrecognised replication_method: {replication_method} - valid values are append, truncate')
+
     return errors
 
 
@@ -834,6 +838,9 @@ class DbSync:
                 self.table_cache = self.get_table_columns(table_schemas=[self.schema_name])
         else:
             self.logger.info('Table %s exists', table_name_with_schema)
+            if self.connection_config.get('replication_method') == 'truncate':
+                self.logger.info('Truncating table: %s', table_name_with_schema)
+                self.query(f"TRUNCATE TABLE {table_name_with_schema}")
             self.update_columns()
 
         self._refresh_table_pks()
