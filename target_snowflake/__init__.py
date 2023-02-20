@@ -309,8 +309,6 @@ def persist_lines(config, lines, table_cache=None, file_format_type: FileFormatT
                         )
 
                 stream_to_sync[stream].create_schema_if_not_exists()
-                if config.get('replication_method') == 'truncate':
-                    stream_to_sync[stream].truncate_table()
                 stream_to_sync[stream].sync_table()
 
                 row_count[stream] = 0
