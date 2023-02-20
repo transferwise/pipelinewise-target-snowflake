@@ -67,6 +67,10 @@ def validate_config(config):
     if archive_load_files and not config.get('s3_bucket', None):
         errors.append('Archive load files option can be used only with external s3 stages. Please define s3_bucket.')
 
+    replication_method = config.get('replication_method','append')
+    if replication_method not in ['append','truncate']:
+        errors.append(f'Unrecognised replication_method: {replication_method} - valid values are append, truncate')
+
     return errors
 
 
