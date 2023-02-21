@@ -562,9 +562,9 @@ class DbSync:
             return pipe_args
 
         def _load_private_key():
-            key_path = getattr(self.connection_config,
+            key_path = self.connection_config.get(
                                "private_key_path", "/rsa_key.p8")
-            password = getattr(self.connection_config,
+            password = self.connection_config.get(
                                "private_key_password", None)
             with open(key_path, 'rb') as pem_in:
                 private_key_obj = load_pem_private_key(
