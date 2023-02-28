@@ -36,5 +36,6 @@ docs/_templates/
 # Environment
 .env
 .docker-env
+rsa_key.p8
 snowpipe_tests/
 build/

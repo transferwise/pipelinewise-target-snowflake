@@ -237,7 +237,30 @@ and removing environment complications.
 
 To develop with docker:
 1. Copy the `.docker-env-example` as `.docker-env` and populate it with the needed
-   test credentials.
+   test credentials:
+  ```
+  TARGET_SNOWFLAKE_ACCOUNT=********.us-east-1
+  TARGET_SNOWFLAKE_DBNAME=CI_PIPELINEWISE
+  TARGET_SNOWFLAKE_USER=********
+  TARGET_SNOWFLAKE_PASSWORD=********
+  TARGET_SNOWFLAKE_WAREHOUSE=DEVELOPER_MEDIUM
+  TARGET_SNOWFLAKE_SCHEMA=<any-new-schema-name>
+  TARGET_SNOWFLAKE_AWS_ACCESS_KEY=**********
+  TARGET_SNOWFLAKE_AWS_SECRET_ACCESS_KEY=**********
+  TARGET_SNOWFLAKE_AWS_SESSION_TOKEN=**********
+  TARGET_SNOWFLAKE_S3_BUCKET=test-exo-******
+  TARGET_SNOWFLAKE_S3_KEY_PREFIX=ci_ppw_test/
+  TARGET_SNOWFLAKE_STAGE=CI_PPW.CI_PPW_STAGE
+  TARGET_SNOWFLAKE_FILE_FORMAT_CSV=CI_PPW.CI_PPW_CSV
+  TARGET_SNOWFLAKE_FILE_FORMAT_PARQUET=CI_PPW.CI_PPW_PARQUET
+  TARGET_SNOWFLAKE_PRIVATE_KEY_PATH=/app/rsa_key.p8
+  TARGET_SNOWFLAKE_S3_ACL=
+  CLIENT_SIDE_ENCRYPTION_MASTER_KEY=
+  CLIENT_SIDE_ENCRYPTION_STAGE_OBJECT=
+  ```
+  Also you need to create `rsa_key.p8` file in the root directory of the repository with the private ssh key for the `TARGET_SNOWFLAKE_USER` user. (You can choose another path for the file, but in this case you should change `TARGET_SNOWFLAKE_PRIVATE_KEY_PATH` in the `.docker-env` file.)
+  Short-term AWS credentials can be found on the AWS start page `xxxxxxxxxx.awsapps.com/start`, choosing the appropriate AWS account you want to access and clicking on `Command Line or Programmatic Access`.
+  `TARGET_SNOWFLAKE_S3_ACL`, `CLIENT_SIDE_ENCRYPTION_MASTER_KEY` and `CLIENT_SIDE_ENCRYPTION_STAGE_OBJECT` variables should be present in the configuration but with empty values.
 2. Build the work container with 
 ```
 docker build . -t ppw-snowflake-target
