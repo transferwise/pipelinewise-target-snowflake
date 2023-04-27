@@ -1,3 +1,10 @@
+2.2.1 (2023-04-26)
+-------------------
+
+*Changes*
+- Initial release on mjsqu fork
+- Pre-tagging before Dependabot PR for snowflake-connector-python
+
 2.2.0 (2022-05-12)
 -------------------
 
