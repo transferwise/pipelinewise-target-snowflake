@@ -1,3 +1,9 @@
+2.2.2 (2023-04-27)
+-------------------
+
+*Changes*
+- Update snowflake-connector-python[pandas] requirement from ==2.7.* to >=2.7,<3.1 (Dependabot Alert CVE ID: CVE-2022-42965)
+
 2.2.1 (2023-04-26)
 -------------------
 
