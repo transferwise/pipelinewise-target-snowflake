@@ -1,3 +1,8 @@
+1.15.0+hu (2023-06-20)
+----------------------
+- Changed version naming to conform to PEP standards.
+
+
 1.15.0.hu (2023-06-20)
 ----------------------
 - Changed version naming to conform to PEP standards.
