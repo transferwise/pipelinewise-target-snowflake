@@ -5,7 +5,7 @@ from setuptools import find_packages, setup
 with open('README.md') as f:
     long_description = f.read()
 
-setup(name="pipelinewise-target-snowflake",
+setup(name="oc-pipelinewise-target-snowflake",
       version="2.2.0",
       description="Singer.io target for loading data to Snowflake - PipelineWise compatible",
       long_description=long_description,
