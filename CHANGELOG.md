@@ -1,3 +1,9 @@
+2.2.3 (2023-06-28)
+-------------------
+
+*Changes*
+- Allow retention period in days to be optionally set in the config using the `retention` parameter
+
 2.2.2 (2023-04-27)
 -------------------
 
