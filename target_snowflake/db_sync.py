@@ -71,7 +71,7 @@ def validate_config(config):
     if replication_method not in ['append','truncate']:
         errors.append(f'Unrecognised replication_method: {replication_method} - valid values are append, truncate')
 
-    retention = config.get('retention')
+    retention = config.get('retention',0)
     if (not isinstance(retention,int) or retention < 0):
         errors.append(f'Retention period invalid: {retention} - must be a positive integer indicating the number of days')
 
