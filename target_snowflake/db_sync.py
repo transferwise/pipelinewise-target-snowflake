@@ -71,6 +71,10 @@ def validate_config(config):
     if replication_method not in ['append','truncate']:
         errors.append(f'Unrecognised replication_method: {replication_method} - valid values are append, truncate')
 
+    retention = config.get('retention',0)
+    if (not isinstance(retention,int) or retention < 0):
+        errors.append(f'Retention period invalid: {retention} - must be a positive integer indicating the number of days')
+
     return errors
 
 
@@ -571,8 +575,27 @@ class DbSync:
         p_temp = 'TEMP ' if is_temporary else ''
         p_table_name = self.table_name(stream_schema_message['stream'], is_temporary)
         p_columns = ', '.join(columns + primary_key)
-        p_extra = 'data_retention_time_in_days = 0 ' if is_temporary else 'data_retention_time_in_days = 1 '
-        return f'CREATE {p_temp}TABLE IF NOT EXISTS {p_table_name} ({p_columns}) {p_extra}'
+        retention = ''
+
+        if is_temporary:
+            retention = "data_retention_time_in_days = 0"
+        elif self.connection_config.get('retention'):
+            retention = f"data_retention_time_in_days = {self.connection_config.get('retention')}"
+
+        create_table_statement = (
+            "CREATE "
+            f"{p_temp}"
+            "TABLE IF NOT EXISTS "
+            f"{p_table_name}"
+            " ("
+            f"{p_columns}"
+            ") "
+            f"{retention}"
+        )
+
+        self.logger.debug(create_table_statement)
+
+        return create_table_statement
 
     def grant_usage_on_schema(self, schema_name, grantee):
         """Grant usage on schema"""
