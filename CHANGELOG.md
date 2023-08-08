@@ -1,3 +1,14 @@
+2.3.0 (2023-08-08)
+-------------------
+
+*Changes*
+- Update dependencies:
+    - snowflake-connector-python[pandas]
+    - boto3
+    - pytest
+    - python-dotenv
+
+
 2.2.0 (2022-05-12)
 -------------------
 
