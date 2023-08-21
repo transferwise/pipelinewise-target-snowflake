@@ -10,7 +10,7 @@ pylint:
 
 unit_test:
 	. ./venv/bin/activate ;\
-	pytest tests/unit -vv --cov target_snowflake --cov-fail-under=62
+	pytest tests/unit -vv --cov target_snowflake --cov-fail-under=67
 
 integration_test:
 	. ./venv/bin/activate ;\

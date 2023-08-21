@@ -1,11 +1,10 @@
 import json
 import sys
-from typing import List, Dict, Union
-
 import snowflake.connector
 import re
 import time
 
+from typing import List, Dict, Union, Tuple, Set
 from singer import get_logger
 from target_snowflake import flattening
 from target_snowflake import stream_utils
@@ -234,7 +233,7 @@ class DbSync:
             self.connection_config['file_format'], self.query, file_format_type)
 
         if not self.connection_config.get('stage') and self.file_format.file_format_type == FileFormatTypes.PARQUET:
-            self.logger.error("Table stages with Parquet file format is not suppported. "
+            self.logger.error("Table stages with Parquet file format is not supported. "
                               "Use named stages with Parquet file format or table stages with CSV files format")
             sys.exit(1)
 
@@ -350,7 +349,7 @@ class DbSync:
 
                 # Run every query in one transaction if query is a list of SQL
                 if isinstance(query, list):
-                    self.logger.info('Starting Transaction')
+                    self.logger.debug('Starting Transaction')
                     cur.execute("START TRANSACTION")
                     queries = query
                 else:
@@ -364,8 +363,7 @@ class DbSync:
                     # update the LAST_QID
                     params['LAST_QID'] = qid
 
-                    self.logger.info(
-                        "Running query: '%s' with Params %s", q, params)
+                    self.logger.info("Running query: '%s' with Params %s", q, params)
 
                     cur.execute(q, params)
                     qid = cur.sfqid
@@ -402,14 +400,16 @@ class DbSync:
             return None
         flatten = flattening.flatten_record(
             record, self.flatten_schema, max_level=self.data_flattening_max_level)
-        try:
-            key_props = [str(flatten[p])
-                         for p in self.stream_schema_message['key_properties']]
-        except Exception as exc:
-            pks = self.stream_schema_message['key_properties']
-            fields = list(flatten.keys())
-            raise PrimaryKeyNotFoundException(f"Cannot find {pks} primary key(s) in record. "
-                                              f"Available fields: {fields}") from exc
+        key_props = []
+        for key_prop in self.stream_schema_message['key_properties']:
+            if key_prop not in flatten or flatten[key_prop] is None:
+                raise PrimaryKeyNotFoundException(
+                    f"Primary key '{key_prop}' does not exist in record or is null. "
+                    f"Available fields: {list(flatten.keys())}"
+                )
+
+            key_props.append(str(flatten[key_prop]))
+
         return ','.join(key_props)
 
     def _generate_s3_key_prefix(self, stream, use_snowpipe):
@@ -431,7 +431,6 @@ class DbSync:
 
     def delete_from_stage(self, stream, s3_key):
         """Delete file from snowflake stage"""
-        self.logger.info('Deleting %s from stage', format(s3_key))
         self.upload_client.delete_object(stream, s3_key)
 
     def copy_to_archive(self, s3_source_key, s3_archive_key, s3_archive_metadata):
@@ -479,8 +478,8 @@ class DbSync:
 
     def load_file(self, s3_key, count, size_bytes):
         """Load a supported file type from snowflake stage into target table"""
-        stream_schema_message = self.stream_schema_message
-        stream = stream_schema_message['stream']
+
+        stream = self.stream_schema_message['stream']
         self.logger.info("Loading %d rows into '%s'", count,
                          self.table_name(stream, False))
 
@@ -494,51 +493,70 @@ class DbSync:
             for (name, schema) in self.flatten_schema.items()
         ]
 
+        inserts = 0
+        updates = 0
+
+        # Insert or Update with MERGE command if primary key defined
+        if len(self.stream_schema_message['key_properties']) > 0:
+            try:
+                inserts, updates = self._load_file_merge(
+                    s3_key=s3_key,
+                    stream=stream,
+                    columns_with_trans=columns_with_trans
+                )
+            except Exception as ex:
+                self.logger.error(
+                    'Error while executing MERGE query for table "%s" in stream "%s"',
+                    self.table_name(stream, False), stream
+                )
+                raise ex
+
+        # Insert only with COPY command if no primary key
+        else:
+            try:
+                inserts, updates = (
+                    self._load_file_copy(
+                        s3_key=s3_key,
+                        stream=stream,
+                        columns_with_trans=columns_with_trans
+                    ),
+                    0,
+                )
+            except Exception as ex:
+                self.logger.error(
+                    'Error while executing COPY query for table "%s" in stream "%s"',
+                    self.table_name(stream, False), stream
+                )
+                raise ex
+
+        self.logger.info(
+            'Loading into %s: %s',
+            self.table_name(stream, False),
+            json.dumps({'inserts': inserts, 'updates': updates, 'size_bytes': size_bytes})
+        )
+
+    def _load_file_merge(self, s3_key, stream, columns_with_trans) -> Tuple[int, int]:
+        # MERGE does insert and update
+        inserts = 0
+        updates = 0
         with self.open_connection() as connection:
             with connection.cursor(snowflake.connector.DictCursor) as cur:
-                inserts = 0
-                updates = 0
-
-                # Insert or Update with MERGE command if primary key defined
-                if len(self.stream_schema_message['key_properties']) > 0:
-                    merge_sql = self.file_format.formatter.create_merge_sql(table_name=self.table_name(stream, False),
-                                                                            stage_name=self.get_stage_name(
-                                                                                stream),
-                                                                            s3_key=s3_key,
-                                                                            file_format_name=self.connection_config[
-                                                                                'file_format'],
-                                                                            columns=columns_with_trans,
-                                                                            pk_merge_condition=self.primary_key_merge_condition())
-                    self.logger.debug('Running query: %s', merge_sql)
-                    cur.execute(merge_sql)
-
-                    # Get number of inserted and updated records - MERGE does insert and update
-                    results = cur.fetchall()
-                    if len(results) > 0:
-                        inserts = results[0].get('number of rows inserted', 0)
-                        updates = results[0].get('number of rows updated', 0)
-
-                # Insert only with COPY command if no primary key
-                else:
-                    copy_sql = self.file_format.formatter.create_copy_sql(table_name=self.table_name(stream, False),
-                                                                          stage_name=self.get_stage_name(
-                                                                              stream),
-                                                                          s3_key=s3_key,
-                                                                          file_format_name=self.connection_config[
-                                                                              'file_format'],
-                                                                          columns=columns_with_trans,
-                                                                          on_error=self.snowpipe_on_error)
-                    self.logger.debug('Running query: %s', copy_sql)
-                    cur.execute(copy_sql)
-
-                    # Get number of inserted records - COPY does insert only
-                    results = cur.fetchall()
-                    if len(results) > 0:
-                        inserts = results[0].get('rows_loaded', 0)
-
-                self.logger.info('Loading into %s: %s',
-                                 self.table_name(stream, False),
-                                 json.dumps({'inserts': inserts, 'updates': updates, 'size_bytes': size_bytes}))
+                merge_sql = self.file_format.formatter.create_merge_sql(
+                    table_name=self.table_name(stream, False),
+                    stage_name=self.get_stage_name(stream),
+                    s3_key=s3_key,
+                    file_format_name=self.connection_config['file_format'],
+                    columns=columns_with_trans,
+                    pk_merge_condition=self.primary_key_merge_condition()
+                )
+                self.logger.debug('Running query: %s', merge_sql)
+                cur.execute(merge_sql)
+                # Get number of inserted and updated records
+                results = cur.fetchall()
+                if len(results) > 0:
+                    inserts = results[0].get('number of rows inserted', 0)
+                    updates = results[0].get('number of rows updated', 0)
+        return inserts, updates
 
     def load_via_snowpipe(self, s3_key, stream): #pylint: disable=too-many-locals
         """ Performs data transfer from the stage to snowflake using snowpipe. """
@@ -678,6 +696,26 @@ class DbSync:
             else:
                 self.logger.debug('waiting for snowpipe to transfer data...')
                 time.sleep(next(wait_time))
+
+    def _load_file_copy(self, s3_key, stream, columns_with_trans) -> int:
+        # COPY does insert only
+        inserts = 0
+        with self.open_connection() as connection:
+            with connection.cursor(snowflake.connector.DictCursor) as cur:
+                copy_sql = self.file_format.formatter.create_copy_sql(
+                    table_name=self.table_name(stream, False),
+                    stage_name=self.get_stage_name(stream),
+                    s3_key=s3_key,
+                    file_format_name=self.connection_config['file_format'],
+                    columns=columns_with_trans
+                )
+                self.logger.debug('Running query: %s', copy_sql)
+                cur.execute(copy_sql)
+                # Get number of inserted records - COPY does insert only
+                results = cur.fetchall()
+                if len(results) > 0:
+                    inserts = results[0].get('rows_loaded', 0)
+        return inserts
 
     def primary_key_merge_condition(self):
         """Generate SQL join condition on primary keys for merge SQL statements"""
@@ -839,7 +877,7 @@ class DbSync:
 
                 # Run everything in one transaction
                 try:
-                    columns = self.query(queries)
+                    columns = self.query(queries, max_records=99999)
 
                     if not columns:
                         self.logger.warning('No columns discovered in the schema "%s"',
@@ -968,7 +1006,6 @@ class DbSync:
             self.logger.info(
                 'Table %s does not exist. Creating...', table_name_with_schema)
             self.query(query)
-
             self.grant_privilege(
                 self.schema_name, self.grantees, self.grant_select_on_all_tables_in_schema)
 
@@ -979,3 +1016,64 @@ class DbSync:
         else:
             self.logger.info('Table %s exists', table_name_with_schema)
             self.update_columns()
+
+        self._refresh_table_pks()
+
+    def _refresh_table_pks(self):
+        """
+        Refresh table PK constraints by either dropping or adding PK based on changes to `key_properties` of the
+        stream schema.
+        The non-nullability of PK column is also dropped.
+        """
+        table_name = self.table_name(self.stream_schema_message['stream'], False)
+        current_pks = self._get_current_pks()
+        new_pks = set(pk.upper() for pk in self.stream_schema_message.get('key_properties', []))
+
+        queries = []
+
+        self.logger.debug('Table: %s, Current PKs: %s | New PKs: %s ',
+                          self.stream_schema_message['stream'],
+                          current_pks,
+                          new_pks
+                          )
+
+        if not new_pks and current_pks:
+            self.logger.info('Table "%s" currently has PK constraint, but we need to drop it.', table_name)
+            queries.append(f'alter table {table_name} drop primary key;')
+
+        elif new_pks != current_pks:
+            self.logger.info('Changes detected in pk columns of table "%s", need to refresh PK.', table_name)
+            pk_list = ', '.join([safe_column_name(col) for col in new_pks])
+
+            if current_pks:
+                queries.append(f'alter table {table_name} drop primary key;')
+
+            queries.append(f'alter table {table_name} add primary key({pk_list});')
+
+        # For now, we don't wish to enforce non-nullability on the pk columns
+        for pk in current_pks.union(new_pks):
+            queries.append(f'alter table {table_name} alter column {safe_column_name(pk)} drop not null;')
+
+        self.query(queries)
+
+    def _get_current_pks(self) -> Set[str]:
+        """
+        Finds the stream's current Pk in Snowflake.
+        Returns: Set of pk columns, in upper case. Empty means table has no PK
+        """
+        table_name = self.table_name(self.stream_schema_message['stream'], False)
+
+        show_query = f"show primary keys in table {self.connection_config['dbname']}.{table_name};"
+
+        columns = set()
+        try:
+            columns = self.query(show_query)
+
+        # Catch exception when schema not exists and SHOW TABLES throws a ProgrammingError
+        # Regexp to extract snowflake error code and message from the exception message
+        # Do nothing if schema not exists
+        except snowflake.connector.errors.ProgrammingError as exc:
+            if not re.match(r'002043 \(02000\):.*\n.*does not exist.*', str(sys.exc_info()[1])):
+                raise exc
+
+        return set(col['column_name'] for col in columns)
