@@ -70,11 +70,10 @@ def get_snowflake_statics(config):
     Returns:
         tuple of retrieved items: table_cache, file_format_type
     """
-    table_cache = []
+    table_cache = None    
+    db = DbSync(config)  # pylint: disable=invalid-name
     if not ('disable_table_cache' in config and config['disable_table_cache']):
         LOGGER.info('Getting catalog objects from table cache...')
-
-        db = DbSync(config)  # pylint: disable=invalid-name
         table_cache = db.get_table_columns(
             table_schemas=stream_utils.get_schema_names_from_config(config))
 
