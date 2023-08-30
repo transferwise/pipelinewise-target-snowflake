@@ -478,7 +478,7 @@ def flush_records(stream: str,
         if 'schema_name' not in stream_name_parts or 'table_name' not in stream_name_parts:
             raise Exception(f"Failed to extract schema and table names from stream '{stream}'")
 
-        archive_schema = stream_name_parts['schema_name']
+        archive_schema = stream_name_parts['schema_name'] if stream_name_parts['schema_name'] is not None else db_sync.schema_name
         archive_table = stream_name_parts['table_name']
         archive_tap = archive_load_files['tap']
 
