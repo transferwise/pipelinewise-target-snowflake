@@ -48,7 +48,33 @@ class TestParquet(unittest.TestCase):
                                'key3': ['10000-01-22 12:04:22', '10000-01-22 12:04:22', '10000-01-22 12:04:22'],
                                'key4': ['12:01:01', '13:01:01', '14:01:01'],
                                'key5': ['I\'m good', 'I\'m good too', 'I want to be good'],
-                               'key6': [None, None, None]}))
+                               'key6': [None, None, None]},
+                               dtype='object',
+                              ),
+                            )
+    
+    def test_large_integer(self):
+        """Specific test for dataframes checking that integer values are reproduced exactly."""
+        
+        # Create a test record of a large integer and a null in the same key
+        large_integer = 9223372036854775807
+        
+        test_records = {
+                        '1':
+                          {
+                            'key1':large_integer
+                          },
+                        '2':
+                          {
+                            'key1':None
+                          },
+                        }
+        
+        # Ensure that the large integer is not equal to itself minus 1
+        self.assertNotEqual(
+          large_integer-1
+          ,parquet.records_to_dataframe(records=test_records, schema={})['key1'][0]
+        )
 
     def test_create_copy_sql(self):
         self.assertEqual(parquet.create_copy_sql(table_name='foo_table',
