@@ -854,10 +854,6 @@ class DbSync:
 
             queries.append(f'alter table {table_name} add primary key({pk_list});')
 
-        # For now, we don't wish to enforce non-nullability on the pk columns
-        for pk in current_pks.union(new_pks):
-            queries.append(f'alter table {table_name} alter column {safe_column_name(pk)} drop not null;')
-
         self.query(queries)
 
     def _get_current_pks(self) -> Set[str]:
