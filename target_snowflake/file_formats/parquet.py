@@ -66,7 +66,10 @@ def records_to_dataframe(records: Dict,
         flatten_record = flattening.flatten_record(record, schema, max_level=data_flattening_max_level)
         flattened_records.append(flatten_record)
 
-    return pandas.DataFrame(data=flattened_records, dtype='object',)
+    return pandas.DataFrame(
+              data=flattened_records,
+              dtype='object',
+            )
 
 
 def records_to_file(records: Dict,
