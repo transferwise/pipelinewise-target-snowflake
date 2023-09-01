@@ -707,7 +707,8 @@ class DbSync:
                     stage_name=self.get_stage_name(stream),
                     s3_key=s3_key,
                     file_format_name=self.connection_config['file_format'],
-                    columns=columns_with_trans
+                    columns=columns_with_trans,
+                    on_error=self.snowpipe_on_error
                 )
                 self.logger.debug('Running query: %s', copy_sql)
                 cur.execute(copy_sql)
