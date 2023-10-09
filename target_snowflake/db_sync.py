@@ -455,22 +455,7 @@ class DbSync:
         updates = 0
 
         # Insert or Update with MERGE command if primary key defined
-        if len(self.stream_schema_message['key_properties']) > 0:
-            try:
-                inserts, updates = self._load_file_copy(
-                    s3_key=s3_key,
-                    stream=stream,
-                    columns_with_trans=columns_with_trans
-                )
-            except Exception as ex:
-                self.logger.error(
-                    'Error while executing MERGE query for table "%s" in stream "%s"',
-                    self.table_name(stream, False), stream
-                )
-                raise ex
-
-        # Insert only with COPY command if no primary key
-        else:
+        if len(self.stream_schema_message['key_properties']) >= 0:
             try:
                 inserts, updates = (
                     self._load_file_copy(
