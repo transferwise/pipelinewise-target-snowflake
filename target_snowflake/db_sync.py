@@ -457,7 +457,7 @@ class DbSync:
         # Insert or Update with MERGE command if primary key defined
         if len(self.stream_schema_message['key_properties']) > 0:
             try:
-                inserts, updates = self._load_file_merge(
+                inserts, updates = self._load_file_copy(
                     s3_key=s3_key,
                     stream=stream,
                     columns_with_trans=columns_with_trans
