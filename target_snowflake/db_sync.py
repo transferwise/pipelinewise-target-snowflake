@@ -95,6 +95,10 @@ def column_type(schema_property):
         col_type = 'number'
     elif 'boolean' in property_type:
         col_type = 'boolean'
+    # Default if type is undefined. Most data types that can be
+    # transferred via CSV have a string representation.
+    else:
+        col_type = 'text'
 
     return col_type
 
