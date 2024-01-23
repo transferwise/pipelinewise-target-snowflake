@@ -41,7 +41,7 @@ class S3UploadClient(BaseUploadClient):
         else:
             aws_session = boto3.session.Session(profile_name=aws_profile)
 
-        
+
         # Create the s3 client
         if s3_proxies is None:
             s3_client = aws_session.client('s3',

@@ -181,6 +181,7 @@ Full list of options in `config.json`:
 | archive_load_files_s3_bucket        | String  |            | (Default: Value of `s3_bucket`) When `archive_load_files` is enabled, the archived files will be placed in this bucket.
 | s3_proxies        | Object  | No           | (Default: None) If not set then http_proxy and https_proxy and other environmental settings will dictate which proxy is used. If this is set then you can specify a proxy for the S3 Upload connection to use, or set to `{}` to force the S3 Uploader to bypass a proxy entirely
 | replication_method | String | No | If not set then target-snowflake behaves as normal, with inserts or upserts into an existing table. If this is set to the value `"truncate"` then the target table is truncated before loading commences |
+| retention          | Integer | No | If not set then target-snowflake creates tables with the default retention period for the database. If the value is set then this is the number of days to indicate in the data_retention_time_in_days parameter. |
 
 ### To run tests:
 
