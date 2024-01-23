@@ -71,6 +71,11 @@ def validate_config(config):
     if replication_method not in ['append','truncate']:
         errors.append(f'Unrecognised replication_method: {replication_method} - valid values are append, truncate')
 
+    retention = config.get('retention',0)
+    if (not isinstance(retention,int) or retention < 0):
+        errors.append(f'Retention period invalid: {retention}'
+                      f' - must be a positive integer indicating the number of days')
+
     return errors
 
 
@@ -92,7 +97,7 @@ def column_type(schema_property):
     elif property_format == 'binary':
         col_type = 'binary'
     elif property_format == 'singer.decimal' and 'additionalProperties' in schema_property:
-        col_type = 'number{}'.format(schema_property['additionalProperties']['scale_precision'])
+        col_type = f"number{schema_property['additionalProperties']['scale_precision']}"
     elif 'number' in property_type:
         col_type = 'float'
     elif 'integer' in property_type and 'string' in property_type:
@@ -571,8 +576,27 @@ class DbSync:
         p_temp = 'TEMP ' if is_temporary else ''
         p_table_name = self.table_name(stream_schema_message['stream'], is_temporary)
         p_columns = ', '.join(columns + primary_key)
-        p_extra = 'data_retention_time_in_days = 0 ' if is_temporary else 'data_retention_time_in_days = 1 '
-        return f'CREATE {p_temp}TABLE IF NOT EXISTS {p_table_name} ({p_columns}) {p_extra}'
+        retention = ''
+
+        if is_temporary:
+            retention = "data_retention_time_in_days = 0"
+        elif self.connection_config.get('retention'):
+            retention = f"data_retention_time_in_days = {self.connection_config.get('retention')}"
+
+        create_table_statement = (
+            "CREATE "
+            f"{p_temp}"
+            "TABLE IF NOT EXISTS "
+            f"{p_table_name}"
+            " ("
+            f"{p_columns}"
+            ") "
+            f"{retention}"
+        )
+
+        self.logger.debug(create_table_statement)
+
+        return create_table_statement
 
     def grant_usage_on_schema(self, schema_name, grantee):
         """Grant usage on schema"""
@@ -663,68 +687,68 @@ class DbSync:
     def get_table_columns(self, table_schemas=None):
         """Get list of columns and tables of certain schema(s) from snowflake metadata"""
         table_columns = []
-        if table_schemas:
-            for schema in table_schemas:
-                queries = []
 
-                # Get column data types by SHOW COLUMNS
-                show_columns = f"SHOW COLUMNS IN SCHEMA {self.connection_config['dbname']}.{schema}"
-
-                # Convert output of SHOW COLUMNS to table and insert results into the cache COLUMNS table
-                #
-                # ----------------------------------------------------------------------------------------
-                # Character and numeric columns display their generic data type rather than their defined
-                # data type (i.e. TEXT for all character types, FIXED for all fixed-point numeric types,
-                # and REAL for all floating-point numeric types).
-                # Further info at https://docs.snowflake.net/manuals/sql-reference/sql/show-columns.html
-                #
-                # Added precision and scale which can be extracted from the data_type JSON
-                # ----------------------------------------------------------------------------------------
-                select = """
-                    SELECT "schema_name" AS schema_name
-                          ,"table_name"  AS table_name
-                          ,"column_name" AS column_name
-                          ,CASE PARSE_JSON("data_type"):type::varchar
-                             WHEN 'FIXED' THEN 'NUMBER'
-                             WHEN 'REAL'  THEN 'FLOAT'
-                             ELSE PARSE_JSON("data_type"):type::varchar
-                           END AS data_type
-                          ,PARSE_JSON("data_type"):precision::number AS precision
-                          ,PARSE_JSON("data_type"):scale::number AS scale
-                      FROM TABLE(RESULT_SCAN(%(LAST_QID)s))
-                """
-
-                queries.extend([show_columns, select])
-
-                # Run everything in one transaction
-                try:
-                    columns = self.query(queries, max_records=99999)
-
-                    if not columns:
-                        self.logger.warning('No columns discovered in the schema "%s"',
-                                            f"{self.connection_config['dbname']}.{schema}")
-                    else:
-                        # Parse into number(p,s) if required
-                        for c in columns:
-                            if (c['DATA_TYPE'] == 'NUMBER' 
-                                and 
-                                not(c['PRECISION'] is None and c['SCALE'] is None)
-                                and
-                                not(c['PRECISION'] == 38 and c['SCALE'] == 0) # Implicit INTEGER/NUMBER in SF
-                            ):
-                                c['DATA_TYPE'] = f"NUMBER({c['PRECISION']},{c['SCALE']})"
-                        table_columns.extend(columns)
-
-                # Catch exception when schema not exists and SHOW COLUMNS throws a ProgrammingError
-                # Regexp to extract snowflake error code and message from the exception message
-                # Do nothing if schema not exists
-                except snowflake.connector.errors.ProgrammingError as exc:
-                    if not re.match(r'002003 \(02000\):.*\n.*does not exist or not authorized.*',
-                                    str(sys.exc_info()[1])):
-                        raise exc
-
-        else:
+        if not table_schemas:
             raise Exception("Cannot get table columns. List of table schemas empty")
+
+        for schema in table_schemas:
+            queries = []
+
+            # Get column data types by SHOW COLUMNS
+            show_columns = f"SHOW COLUMNS IN SCHEMA {self.connection_config['dbname']}.{schema}"
+
+            # Convert output of SHOW COLUMNS to table and insert results into the cache COLUMNS table
+            #
+            # ----------------------------------------------------------------------------------------
+            # Character and numeric columns display their generic data type rather than their defined
+            # data type (i.e. TEXT for all character types, FIXED for all fixed-point numeric types,
+            # and REAL for all floating-point numeric types).
+            # Further info at https://docs.snowflake.net/manuals/sql-reference/sql/show-columns.html
+            #
+            # Added precision and scale which can be extracted from the data_type JSON
+            # ----------------------------------------------------------------------------------------
+            select = """
+                SELECT "schema_name" AS schema_name
+                      ,"table_name"  AS table_name
+                      ,"column_name" AS column_name
+                      ,CASE PARSE_JSON("data_type"):type::varchar
+                         WHEN 'FIXED' THEN 'NUMBER'
+                         WHEN 'REAL'  THEN 'FLOAT'
+                         ELSE PARSE_JSON("data_type"):type::varchar
+                       END AS data_type
+                      ,PARSE_JSON("data_type"):precision::number AS precision
+                      ,PARSE_JSON("data_type"):scale::number AS scale
+                  FROM TABLE(RESULT_SCAN(%(LAST_QID)s))
+            """
+
+            queries.extend([show_columns, select])
+
+            # Run everything in one transaction
+            try:
+                columns = self.query(queries, max_records=99999)
+
+                if not columns:
+                    self.logger.warning('No columns discovered in the schema "%s"',
+                                        f"{self.connection_config['dbname']}.{schema}")
+                else:
+                    # Parse into number(p,s) if required
+                    for c in columns:
+                        if (c['DATA_TYPE'] == 'NUMBER'
+                            and
+                            not(c['PRECISION'] is None and c['SCALE'] is None)
+                            and
+                            not(c['PRECISION'] == 38 and c['SCALE'] == 0) # Implicit INTEGER/NUMBER in SF
+                        ):
+                            c['DATA_TYPE'] = f"NUMBER({c['PRECISION']},{c['SCALE']})"
+                    table_columns.extend(columns)
+
+            # Catch exception when schema not exists and SHOW COLUMNS throws a ProgrammingError
+            # Regexp to extract snowflake error code and message from the exception message
+            # Do nothing if schema not exists
+            except snowflake.connector.errors.ProgrammingError as exc:
+                if not re.match(r'002003 \(02000\):.*\n.*does not exist or not authorized.*',
+                                str(sys.exc_info()[1])):
+                    raise exc
 
         return table_columns
 

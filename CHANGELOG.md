@@ -1,3 +1,28 @@
+2.2.4 (2023-08-30)
+-------------------
+
+*Changes*
+- Set `pandas.DataFrame` option `dtype=object` to prevent loss of precision with large integers (Fixes #404)
+
+2.2.3 (2023-06-28)
+-------------------
+
+*Changes*
+- Allow retention period in days to be optionally set in the config using the `retention` parameter
+
+2.2.2 (2023-04-27)
+-------------------
+
+*Changes*
+- Update snowflake-connector-python[pandas] requirement from ==2.7.* to >=2.7,<3.1 (Dependabot Alert CVE ID: CVE-2022-42965)
+
+2.2.1 (2023-04-26)
+-------------------
+
+*Changes*
+- Initial release on mjsqu fork
+- Pre-tagging before Dependabot PR for snowflake-connector-python
+
 2.2.0 (2022-05-12)
 -------------------
 
