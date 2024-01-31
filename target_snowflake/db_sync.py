@@ -72,10 +72,10 @@ def validate_config(config):
 
 def column_type(schema_property):
     """Take a specific schema property and return the snowflake equivalent column type"""
-    property_type = schema_property['type']
-    property_format = schema_property['format'] if 'format' in schema_property else None
+    property_type = schema_property.get('type')
+    property_format = schema_property.get('format')
     col_type = 'text'
-    if 'object' in property_type or 'array' in property_type:
+    if 'object' in property_type or 'array' in property_type or property_type is None:
         col_type = 'variant'
 
     # Every date-time JSON value is currently mapped to TIMESTAMP_NTZ
@@ -101,12 +101,14 @@ def column_type(schema_property):
 
 def column_trans(schema_property):
     """Generate SQL transformed columns syntax"""
-    property_type = schema_property['type']
+    property_type = schema_property.get('type')
     col_trans = ''
     if 'object' in property_type or 'array' in property_type:
         col_trans = 'parse_json'
     elif schema_property.get('format') == 'binary':
         col_trans = 'to_binary'
+    elif property_type is None:
+        col_trans = 'to_variant'
 
     return col_trans
 
