@@ -75,7 +75,7 @@ def column_type(schema_property):
     property_type = schema_property.get('type')
     property_format = schema_property.get('format')
     col_type = 'text'
-    if 'object' in property_type or 'array' in property_type or property_type is None:
+    if property_type is None or 'object' in property_type or 'array' in property_type:
         col_type = 'variant'
 
     # Every date-time JSON value is currently mapped to TIMESTAMP_NTZ
