@@ -103,12 +103,13 @@ def column_trans(schema_property):
     """Generate SQL transformed columns syntax"""
     property_type = schema_property.get('type')
     col_trans = ''
-    if 'object' in property_type or 'array' in property_type:
+
+    if property_type is None:
+        col_trans = 'to_variant'
+    elif 'object' in property_type or 'array' in property_type:
         col_trans = 'parse_json'
     elif schema_property.get('format') == 'binary':
         col_trans = 'to_binary'
-    elif property_type is None:
-        col_trans = 'to_variant'
 
     return col_trans
 
