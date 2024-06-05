@@ -22,7 +22,6 @@ def validate_config(config):
         'account',
         'dbname',
         'user',
-        'password',
         'warehouse',
         's3_bucket',
         'stage',
@@ -33,7 +32,6 @@ def validate_config(config):
         'account',
         'dbname',
         'user',
-        'password',
         'warehouse',
         'file_format'
     ]
@@ -46,6 +44,12 @@ def validate_config(config):
     # Use table stage if none s3_bucket and stage defined
     elif not config.get('s3_bucket', None) and not config.get('stage', None):
         required_config_keys = snowflake_required_config_keys
+    elif not(config.get("use_browser_authentication")) and not(config.get("password")):
+        errors.append("'password' configuration was not provided and it is mandatory when "
+                      "SSO browser authentication is not intended ("
+                      "'use_browser_authentication' is 'False'). Please provide a value "
+                      "for 'password' for basic authentication or "
+                      "set 'use_browser_authentication' to True for SSO browser authentication.")
     else:
         errors.append("Only one of 's3_bucket' or 'stage' keys defined in config. "
                       "Use both of them if you want to use an external stage when loading data into snowflake "
@@ -293,7 +297,7 @@ class DbSync:
 
         return snowflake.connector.connect(
             user=self.connection_config['user'],
-            password=self.connection_config['password'],
+            password=self.connection_config.get('password') if not self.connection_config.get("use_browser_authentication") else None,
             account=self.connection_config['account'],
             database=self.connection_config['dbname'],
             warehouse=self.connection_config['warehouse'],
@@ -306,7 +310,8 @@ class DbSync:
                                               database=self.connection_config['dbname'],
                                               schema=self.schema_name,
                                               table=self.table_name(stream, False, True))
-            }
+            },
+            authenticator="externalbrowser" if self.connection_config.get("use_browser_authentication") else "password"
         )
 
     def query(self, query: Union[str, List[str]], params: Dict = None, max_records=0) -> List[Dict]:
