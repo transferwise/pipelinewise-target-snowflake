@@ -1,3 +1,12 @@
+2.4.0 (2024-06-05)
+-------------------
+
+*Changes*
+- Update dependencies:
+  - snowflake-connector-python[pandas,secure-local-storage]
+- Add support for browser SSO authentication
+
+
 2.3.0 (2023-08-08)
 -------------------
 
