@@ -297,7 +297,7 @@ class DbSync:
 
         return snowflake.connector.connect(
             user=self.connection_config['user'],
-            password=self.connection_config.get('password') if not self.connection_config.get("use_browser_authentication") else None,
+            password=self.connection_config.get('password') if not self.connection_config.get('use_browser_authentication') else None,
             account=self.connection_config['account'],
             database=self.connection_config['dbname'],
             warehouse=self.connection_config['warehouse'],
@@ -311,7 +311,7 @@ class DbSync:
                                               schema=self.schema_name,
                                               table=self.table_name(stream, False, True))
             },
-            authenticator="externalbrowser" if self.connection_config.get("use_browser_authentication") else "password"
+            authenticator='externalbrowser' if self.connection_config.get('use_browser_authentication') else 'snowflake'
         )
 
     def query(self, query: Union[str, List[str]], params: Dict = None, max_records=0) -> List[Dict]:
