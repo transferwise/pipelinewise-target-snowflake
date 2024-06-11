@@ -92,6 +92,16 @@ class TestDBSync(unittest.TestCase):
         config_with_archive_load_files['archive_load_files'] = True
         self.assertGreater(len(validator(config_with_external_stage)), 0)
 
+        # Configuration without password nor use_browser_authentication=True
+        config_without_password_nor_browser_auth = minimal_config.copy()
+        config_without_password_nor_browser_auth.pop("password")
+        self.assertGreater(len(validator(minimal_config)), 0)
+
+        # Configuration without password nor use_browser_authentication=True
+        config_without_password_with_browser_auth = minimal_config.copy()
+        config_without_password_with_browser_auth["use_browser_authentication"] = True
+        self.assertEqual(len(validator(minimal_config)), 0)
+
     def test_column_type_mapping(self):
         """Test JSON type to Snowflake column type mappings"""
         mapper = db_sync.column_type
