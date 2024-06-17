@@ -1,3 +1,40 @@
+2.2.7 Latest
+-------------------
+
+*Changes*
+- Pin numpy to versions < 2 - https://github.com/numpy/numpy/issues/26710
+
+2.2.6 (2024-01-23)
+-------------------
+
+*Changes*
+Dependabot updates to:
+
+python-dotenv
+pipelinewise-singer-python
+pytest
+boto3
+Updates to code to pass pylint validation
+
+2.2.5 (2023-11-28)
+-------------------
+
+*Changes*
+Update to use snowflake-connector-python 3.5.0 which in turn updates the following upstream packages:
+
+pyarrow
+cryptography
+to resolve security issues (CVE-2023-38325)
+cryptography>=41.0.3
+to resolve security issues 2023-11-25 (CVE-2023-47248)
+pyarrow>=14.0.1
+
+Updating to use snowflake 3.5.0 uplifts these packages to:
+
+cryptography>=3.1.0,<42.0.0
+pyarrow (no version specified - so latest - at the time of writing this is 14.0.1)
+
+
 2.2.4 (2023-08-30)
 -------------------
 
