@@ -309,6 +309,40 @@ class DbSync:
 
         self.snowpipe_on_error = self.connection_config.get('on_error')
 
+    def validate_stage_bucket(self, s3_bucket, stage):
+        """Validate that S3 bucket and external stage are correctly stated"""
+        self.logger.info(
+            f"Validate that s3_bucket {s3_bucket} and the {stage} are correctly stated in config"
+        )
+        stage_name = stage.split('.')[1]
+        stage_query = f"SHOW STAGES LIKE '{stage_name}';"
+        self.logger.info(stage_query)
+        results = self.query(stage_query)
+
+        if len(results) > 0:
+            s3_url = results[0].get('url', 0)
+            pattern = r'^s3://([^/]+)/?.*'
+            match = re.match(pattern, s3_url)
+            bucket_name = match.group(1)
+
+            if bucket_name != s3_bucket:
+                self.logger.error(
+                    f"""The s3_bucket {s3_bucket} is incorrect for the stage {stage}.
+                    Please check the configuration settings."""
+                )
+                sys.exit(1)
+
+            self.logger.info(
+                f"The s3_bucket {s3_bucket} is correct for the stage {stage}"
+            )
+        else:
+            self.logger.error(
+                f"""The stage {stage} is not accessible or doesn't exist.
+                Please check the configuration settings"""
+            )
+            sys.exit(1)
+
+
     def open_connection(self):
         """Open snowflake connection"""
         stream = None
@@ -478,6 +512,10 @@ class DbSync:
 
     def load_file(self, s3_key, count, size_bytes):
         """Load a supported file type from snowflake stage into target table"""
+        bucket = self.connection_config.get('s3_bucket', None)
+        stage = self.connection_config.get('stage', None)
+        if stage and bucket:
+            self.validate_stage_bucket(bucket, stage)
 
         stream = self.stream_schema_message['stream']
         self.logger.info("Loading %d rows into '%s'", count,
