@@ -643,6 +643,11 @@ class DbSync:
                             file_format = (format_name = {db_name}.{file_format} )
                             {on_error};""".format(**pipe_args)
 
+        bucket = self.connection_config.get('s3_bucket', None)
+        stage = self.connection_config.get('stage', None)
+        if stage and bucket:
+            self.validate_stage_bucket(bucket, stage)
+
         self.logger.info("Loading data using Snowpipe.")
         # Get list if columns with types and transformation
         columns_with_trans = [
