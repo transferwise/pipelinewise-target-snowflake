@@ -312,11 +312,10 @@ class DbSync:
     def validate_stage_bucket(self, s3_bucket, stage):
         """Validate that S3 bucket and external stage are correctly stated"""
         self.logger.info(
-            f"Validate that s3_bucket {s3_bucket} and the {stage} are correctly stated in config"
+            f"Validating s3_bucket '{s3_bucket}' is stated correctly for the stage '{stage}'"
         )
         stage_name = stage.split('.')[1]
         stage_query = f"SHOW STAGES LIKE '{stage_name}';"
-        self.logger.info(stage_query)
         results = self.query(stage_query)
 
         if len(results) > 0:
@@ -327,18 +326,16 @@ class DbSync:
 
             if bucket_name != s3_bucket:
                 self.logger.error(
-                    f"""The s3_bucket {s3_bucket} is incorrect for the stage {stage}.
-                    Please check the configuration settings."""
+                    f"The s3_bucket '{s3_bucket}' is incorrect for the stage '{stage}'. Check configuration."
                 )
                 sys.exit(1)
 
             self.logger.info(
-                f"The s3_bucket {s3_bucket} is correct for the stage {stage}"
+                f"The s3_bucket '{s3_bucket}' is correct for the stage '{stage}'."
             )
         else:
             self.logger.error(
-                f"""The stage {stage} is not accessible or doesn't exist.
-                Please check the configuration settings"""
+                f"The stage '{stage}' is not accessible or doesn't exist. Check configuration."
             )
             sys.exit(1)
 
