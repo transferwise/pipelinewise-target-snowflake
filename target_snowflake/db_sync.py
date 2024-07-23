@@ -314,7 +314,6 @@ class DbSync:
         self.logger.info(
             f"Validating s3_bucket '{s3_bucket}' is stated correctly for the stage '{stage}'"
         )
-        breakpoint()
         stage_name = stage.split('.')[1]
         stage_query = f"SHOW STAGES LIKE '{stage_name}';"
         results = self.query(stage_query)
