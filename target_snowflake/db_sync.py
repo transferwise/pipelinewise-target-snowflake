@@ -314,12 +314,13 @@ class DbSync:
         self.logger.info(
             f"Validating s3_bucket '{s3_bucket}' is stated correctly for the stage '{stage}'"
         )
+        breakpoint()
         stage_name = stage.split('.')[1]
         stage_query = f"SHOW STAGES LIKE '{stage_name}';"
         results = self.query(stage_query)
 
         if len(results) > 0:
-            s3_url = results[0].get('url', 0)
+            s3_url = results[0].get('url', '')
             pattern = r'^s3://([^/]+)/?.*'
             match = re.match(pattern, s3_url)
             bucket_name = match.group(1)
@@ -509,8 +510,8 @@ class DbSync:
 
     def load_file(self, s3_key, count, size_bytes):
         """Load a supported file type from snowflake stage into target table"""
-        bucket = self.connection_config.get('s3_bucket', None)
-        stage = self.connection_config.get('stage', None)
+        bucket = self.connection_config.get('s3_bucket')
+        stage = self.connection_config.get('stage')
         if stage and bucket:
             self.validate_stage_bucket(bucket, stage)
 
@@ -643,8 +644,8 @@ class DbSync:
                             file_format = (format_name = {db_name}.{file_format} )
                             {on_error};""".format(**pipe_args)
 
-        bucket = self.connection_config.get('s3_bucket', None)
-        stage = self.connection_config.get('stage', None)
+        bucket = self.connection_config.get('s3_bucket')
+        stage = self.connection_config.get('stage')
         if stage and bucket:
             self.validate_stage_bucket(bucket, stage)
 
