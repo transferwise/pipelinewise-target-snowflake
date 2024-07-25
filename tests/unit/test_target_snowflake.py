@@ -271,8 +271,9 @@ class TestTargetSnowflake(unittest.TestCase):
                             ;"""                                                               
 
         with mock.patch.object(DbSync_obj, 'query') as mock_query:
-            DbSync_obj.load_via_snowpipe("s3://dummy_s3_key","stream1")
-            mock_query.assert_any_call(expected_value)
+            with mock.patch.object(DbSync_obj, 'validate_stage_bucket'):
+                DbSync_obj.load_via_snowpipe("s3://dummy_s3_key","stream1")
+                mock_query.assert_any_call(expected_value)
 
 
     @patch('target_snowflake.db_sync.DbSync.query')
@@ -322,5 +323,6 @@ class TestTargetSnowflake(unittest.TestCase):
                             ON_ERROR = CONTINUE;"""                                                               
 
         with mock.patch.object(DbSync_obj, 'query') as mock_query:
-            DbSync_obj.load_via_snowpipe("s3://dummy_s3_key","stream1")
-            mock_query.assert_any_call(expected_value)
+            with mock.patch.object(DbSync_obj, 'validate_stage_bucket'):
+                DbSync_obj.load_via_snowpipe("s3://dummy_s3_key","stream1")
+                mock_query.assert_any_call(expected_value)

@@ -314,17 +314,24 @@ class DbSync:
         self.logger.info(
             f"Validating s3_bucket '{s3_bucket}' is stated correctly for the stage '{stage}'"
         )
-        stage_name = stage.split('.')[1]
+        stage_schema, stage_name = stage.split('.')
         stage_query = f"SHOW STAGES LIKE '{stage_name}';"
         results = self.query(stage_query)
 
         if len(results) > 0:
-            s3_url = results[0].get('url', '')
             pattern = r'^s3://([^/]+)/?.*'
-            match = re.match(pattern, s3_url)
-            bucket_name = match.group(1)
+            valid_flag = False
 
-            if bucket_name != s3_bucket:
+            # in case there're several accessible stages with the same name in one database but different schemas
+            for row in results:
+                if row.get('schema_name', '') == stage_schema:
+                    s3_url = row.get('url', '')
+                    match = re.match(pattern, s3_url)
+                    bucket_name = match.group(1)
+                    if bucket_name == s3_bucket:
+                        valid_flag = True
+
+            if not valid_flag:
                 self.logger.error(
                     f"The s3_bucket '{s3_bucket}' is incorrect for the stage '{stage}'. Check configuration."
                 )
