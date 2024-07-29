@@ -309,6 +309,44 @@ class DbSync:
 
         self.snowpipe_on_error = self.connection_config.get('on_error')
 
+    def validate_stage_bucket(self, s3_bucket, stage):
+        """Validate that S3 bucket and external stage are correctly stated"""
+        self.logger.info(
+            f"Validating s3_bucket '{s3_bucket}' is stated correctly for the stage '{stage}'"
+        )
+        stage_schema, stage_name = stage.split('.')
+        stage_query = f"SHOW STAGES LIKE '{stage_name}';"
+        results = self.query(stage_query)
+
+        if len(results) > 0:
+            pattern = r'^s3://([^/]+)/?.*'
+            valid_flag = False
+
+            # in case there're several accessible stages with the same name in one database but different schemas
+            for row in results:
+                if row.get('schema_name', '') == stage_schema:
+                    s3_url = row.get('url', '')
+                    match = re.match(pattern, s3_url)
+                    bucket_name = match.group(1)
+                    if bucket_name == s3_bucket:
+                        valid_flag = True
+
+            if not valid_flag:
+                self.logger.error(
+                    f"The s3_bucket '{s3_bucket}' is incorrect for the stage '{stage}'. Check configuration."
+                )
+                sys.exit(1)
+
+            self.logger.info(
+                f"The s3_bucket '{s3_bucket}' is correct for the stage '{stage}'."
+            )
+        else:
+            self.logger.error(
+                f"The stage '{stage}' is not accessible or doesn't exist. Check configuration."
+            )
+            sys.exit(1)
+
+
     def open_connection(self):
         """Open snowflake connection"""
         stream = None
@@ -478,6 +516,10 @@ class DbSync:
 
     def load_file(self, s3_key, count, size_bytes):
         """Load a supported file type from snowflake stage into target table"""
+        bucket = self.connection_config.get('s3_bucket')
+        stage = self.connection_config.get('stage')
+        if stage and bucket:
+            self.validate_stage_bucket(bucket, stage)
 
         stream = self.stream_schema_message['stream']
         self.logger.info("Loading %d rows into '%s'", count,
@@ -607,6 +649,11 @@ class DbSync:
                             from @{db_name}.{stage}
                             file_format = (format_name = {db_name}.{file_format} )
                             {on_error};""".format(**pipe_args)
+
+        bucket = self.connection_config.get('s3_bucket')
+        stage = self.connection_config.get('stage')
+        if stage and bucket:
+            self.validate_stage_bucket(bucket, stage)
 
         self.logger.info("Loading data using Snowpipe.")
         # Get list if columns with types and transformation

@@ -1195,15 +1195,15 @@ class TestIntegration(unittest.TestCase):
         },
             {
                 'QUERY_TAG': f'PPW test tap run at {current_time}. Loading into {target_db}.{target_schema}.TEST_TABLE_ONE',
-                'QUERIES': 10
+                'QUERIES': 11
             },
             {
                 'QUERY_TAG': f'PPW test tap run at {current_time}. Loading into {target_db}.{target_schema}.TEST_TABLE_THREE',
-                'QUERIES': 9
+                'QUERIES': 10
             },
             {
                 'QUERY_TAG': f'PPW test tap run at {current_time}. Loading into {target_db}.{target_schema}.TEST_TABLE_TWO',
-                'QUERIES': 9
+                'QUERIES': 10
             }
         ])
 
@@ -1399,3 +1399,13 @@ class TestIntegration(unittest.TestCase):
                                           f' {self.config["default_target_schema"]}.test_simple_table;')
 
         self.assertEqual(8, rows_count[0]['_COUNT'])
+
+    def test_validate_stage_bucket(self):
+        """Incorrect s3 bucket or stage in the configuration should raise an exception"""
+
+        snowflake = DbSync(self.config)
+        with self.assertRaises(SystemExit):
+            snowflake.validate_stage_bucket(s3_bucket='dummy_bucket', stage=self.config['stage'])
+
+        with self.assertRaises(SystemExit):
+            snowflake.validate_stage_bucket(s3_bucket=self.config['s3_bucket'], stage='dummy_schema.dummy_stage')
