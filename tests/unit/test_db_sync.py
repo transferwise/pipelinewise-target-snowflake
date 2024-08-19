@@ -1,6 +1,7 @@
 import json
 import unittest
 import os
+import pytest
 from unittest.mock import patch, call
 from target_snowflake import db_sync
 from target_snowflake.exceptions import PrimaryKeyNotFoundException
@@ -656,3 +657,55 @@ class TestDBSync(unittest.TestCase):
         # Test normal behavior without snowpipe
         s3_key_without_snowpipe = DbSync_obj._generate_s3_key_prefix(record_stream_name, False)
         self.assertEqual(s3_key_without_snowpipe, minimal_config["s3_key_prefix"])
+
+
+    @patch('target_snowflake.db_sync.DbSync.query')
+    def test_validate_stage_bucket(self, query_patch):
+        """ Test stage and bucket validation """
+        LOGGER_NAME = "target_snowflake"
+        query_patch.return_value = [{'type': 'CSV'}]
+        minimal_config = {
+            'account': "dummy-value",
+            'dbname': "dummy-value",
+            'user': "dummy-value",
+            'password': "dummy-value",
+            'warehouse': "dummy-value",
+            'default_target_schema': "dummy-target-schema",
+            'file_format': "dummy-value",
+            's3_bucket': 'dummy-bucket',
+            'stage': 'dummy_schema.dummy_stage',
+            's3_key_prefix': 'dummy_key_prefix/',
+        }
+
+        s3_config = {}
+        # the stage and the bucket are correct
+        dummy_s3_bucket = 'DUMMY-BUCKET'
+        dummy_stage = 'dummy_schema.dummy_stage'
+        DbSync_obj = db_sync.DbSync({**minimal_config, **s3_config})
+        expected_msg = f"INFO:target_snowflake:The s3_bucket '{dummy_s3_bucket}' is correct for the stage '{dummy_stage}'."
+        query_patch.return_value = [{
+            'created_on': '2024-01-01 00:00:00.0',
+            'name': 'DUMMY_STAGE',
+            'database_name': 'DUMMY_DB_NAME',
+            'schema_name': 'DUMMY_sCHEMA',
+            'url': 's3://dummy-bucket'
+        }]
+        with self.assertLogs(logger=LOGGER_NAME, level="INFO") as captured_logs:
+            DbSync_obj.validate_stage_bucket(s3_bucket=dummy_s3_bucket, stage=dummy_stage)
+        self.assertIn(expected_msg, captured_logs.output)
+
+        # bucket is not correctly stated in the configuration
+        incorrect_dummy_s3_bucket = 'incorrect-dummy-bucket'
+        expected_msg = f"ERROR:target_snowflake:The s3_bucket '{incorrect_dummy_s3_bucket}' is incorrect for the stage '{dummy_stage}'. Check configuration."
+        with self.assertLogs(logger=LOGGER_NAME, level="ERROR") as captured_logs:
+            with pytest.raises(SystemExit, match='1'):
+                DbSync_obj.validate_stage_bucket(s3_bucket=incorrect_dummy_s3_bucket, stage=dummy_stage)
+            self.assertIn(expected_msg, captured_logs.output)
+
+        # stage is not accessible
+        query_patch.return_value = []
+        expected_msg = f"ERROR:target_snowflake:The stage '{dummy_stage}' is not accessible or doesn't exist. Check configuration."
+        with self.assertLogs(logger=LOGGER_NAME, level="ERROR") as captured_logs:
+            with pytest.raises(SystemExit, match='1'):
+                DbSync_obj.validate_stage_bucket(s3_bucket=dummy_s3_bucket, stage=dummy_stage)
+            self.assertIn(expected_msg, captured_logs.output)

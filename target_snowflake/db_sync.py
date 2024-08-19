@@ -314,7 +314,7 @@ class DbSync:
         self.logger.info(
             f"Validating s3_bucket '{s3_bucket}' is stated correctly for the stage '{stage}'"
         )
-        stage_schema, stage_name = stage.split('.')
+        stage_schema, stage_name = stage.upper().split('.')
         stage_query = f"SHOW STAGES LIKE '{stage_name}';"
         results = self.query(stage_query)
 
@@ -324,11 +324,11 @@ class DbSync:
 
             # in case there're several accessible stages with the same name in one database but different schemas
             for row in results:
-                if row.get('schema_name', '') == stage_schema:
-                    s3_url = row.get('url', '')
+                if row.get('schema_name', '').upper() == stage_schema:
+                    s3_url = row.get('url', '').lower()
                     match = re.match(pattern, s3_url)
                     bucket_name = match.group(1)
-                    if bucket_name == s3_bucket:
+                    if bucket_name == s3_bucket.lower():
                         valid_flag = True
 
             if not valid_flag:
