@@ -565,7 +565,7 @@ class DbSync:
         p_temp = 'TEMP ' if is_temporary else ''
         p_table_name = self.table_name(stream_schema_message['stream'], is_temporary)
         p_columns = ', '.join(columns + primary_key)
-        p_extra = 'data_retention_time_in_days = 0 ' if is_temporary else 'data_retention_time_in_days = 1 '
+        p_extra = 'data_retention_time_in_days = 0 ' if is_temporary else ''
         return f'CREATE {p_temp}TABLE IF NOT EXISTS {p_table_name} ({p_columns}) {p_extra}'
 
     def grant_usage_on_schema(self, schema_name, grantee):
