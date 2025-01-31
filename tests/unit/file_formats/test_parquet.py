@@ -21,6 +21,7 @@ class TestParquet(unittest.TestCase):
                 'key4': '12:01:01',
                 'key5': 'I\'m good',
                 'key6': None,
+                'key7': 'A tab is a char too',
             },
             '2': {
                 'key1': 2,
@@ -29,6 +30,7 @@ class TestParquet(unittest.TestCase):
                 'key4': '13:01:01',
                 'key5': 'I\'m good too',
                 'key6': None,
+                'key7': 'A\tis a char too',
             },
             '3': {
                 'key1': 3,
@@ -37,6 +39,7 @@ class TestParquet(unittest.TestCase):
                 'key4': '14:01:01',
                 'key5': 'I want to be good',
                 'key6': None,
+                'key7': 'A\t\tis a char too',
             }
         }
 
@@ -48,7 +51,8 @@ class TestParquet(unittest.TestCase):
                                'key3': ['10000-01-22 12:04:22', '10000-01-22 12:04:22', '10000-01-22 12:04:22'],
                                'key4': ['12:01:01', '13:01:01', '14:01:01'],
                                'key5': ['I\'m good', 'I\'m good too', 'I want to be good'],
-                               'key6': [None, None, None]}))
+                               'key6': [None, None, None],
+                               'key7': ['A tab is a char too', 'A\tis a char too', 'A\t\tis a char too'] }))
 
     def test_create_copy_sql(self):
         self.assertEqual(parquet.create_copy_sql(table_name='foo_table',

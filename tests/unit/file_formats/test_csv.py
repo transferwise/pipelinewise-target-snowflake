@@ -62,6 +62,7 @@ class TestCsv(unittest.TestCase):
             'key4': '25:01:01',
             'key5': 'I\'m good',
             'key6': None,
+            'key7': 'tab\tin\tvalue\n\r\0"ὠ',
         }
 
         schema = {
@@ -89,10 +90,13 @@ class TestCsv(unittest.TestCase):
             'key6': {
                 'type': ['null', 'string'], 'format': 'time',
             },
+            'key7':{
+                'type':['null', 'string'],
+            },
         }
 
         self.assertEqual(csv.record_to_csv_line(record, schema),
-                         '"1","2030-01-22","10000-01-22 12:04:22","25:01:01","I\'m good",')
+                         '"1","2030-01-22","10000-01-22 12:04:22","25:01:01","I\'m good",,"tab\tin\tvalue\n\r\0""ὠ"')
 
     def test_create_copy_sql(self):
         self.assertEqual(csv.create_copy_sql(table_name='foo_table',
