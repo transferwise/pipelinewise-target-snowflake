@@ -44,17 +44,16 @@ def validate_config(config):
     # Use table stage if none s3_bucket and stage defined
     elif not config.get('s3_bucket', None) and not config.get('stage', None):
         required_config_keys = snowflake_required_config_keys
-    elif not(config.get("use_browser_authentication")) and not(config.get("password")):
-        errors.append("'password' configuration was not provided and it is mandatory when "
-                      "SSO browser authentication is not intended ("
-                      "'use_browser_authentication' is 'False'). Please provide a value "
-                      "for 'password' for basic authentication or "
-                      "set 'use_browser_authentication' to True for SSO browser authentication.")
+        if not(config.get("use_browser_authentication")) and not(config.get("password")) and not(config.get("private_key")):
+            errors.append("'password' or 'private_key' configuration was not provided and it is mandatory when "
+                          "SSO browser authentication is not intended ("
+                          "'use_browser_authentication' is 'False'). Please provide a value "
+                          "for 'password' or 'private_key' for basic authentication or "
+                          "set 'use_browser_authentication' to True for SSO browser authentication.")
     else:
         errors.append("Only one of 's3_bucket' or 'stage' keys defined in config. "
                       "Use both of them if you want to use an external stage when loading data into snowflake "
                       "or don't use any of them if you want ot use table stages.")
-
     # Check if mandatory keys exist
     for k in required_config_keys:
         if not config.get(k, None):
@@ -289,6 +288,39 @@ class DbSync:
         else:
             self.upload_client = SnowflakeUploadClient(connection_config, self)
 
+
+    def _configure_private_key_auth(self, private_key: str):
+        """Configure private key authentication.
+
+        Args:
+            private_key: RSA private key as raw PEM-encoded string
+
+        Raises:
+            ValueError: If private key is invalid or cannot be loaded
+        """
+        private_key_content = private_key.strip()
+
+        # Validate that the key is in PEM format
+        if not private_key_content.startswith("-----BEGIN"):
+            raise ValueError(
+                "Private key must be in raw PEM format (starting with '-----BEGIN').",
+            )
+
+        # Remove PEM headers/footers and whitespace to extract base64-encoded DER
+        # PEM format is just: -----BEGIN...-----\n<base64 DER>\n-----END...-----
+        key_base64 = re.sub(
+            r"-----BEGIN.*?-----\s*|\s*-----END.*?-----\s*|\s+",
+            "",
+            private_key_content,
+        )
+
+        if not key_base64:
+            raise ValueError(
+                "Private key appears to be empty after removing PEM headers.",
+            )
+
+        return key_base64
+
     def open_connection(self):
         """Open snowflake connection"""
         stream = None
@@ -298,6 +330,7 @@ class DbSync:
         return snowflake.connector.connect(
             user=self.connection_config['user'],
             password=self.connection_config.get('password') if not self.connection_config.get('use_browser_authentication') else None,
+            private_key=self._configure_private_key_auth(self.connection_config.get('private_key')) if not self.connection_config.get('use_browser_authentication') else None,
             account=self.connection_config['account'],
             database=self.connection_config['dbname'],
             warehouse=self.connection_config['warehouse'],

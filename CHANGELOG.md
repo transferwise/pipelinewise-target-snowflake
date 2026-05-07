@@ -1,3 +1,12 @@
+2.5.0 (2026-05-06)
+-------------------
+
+*Changes*
+- Update dependencies:
+  - snowflake-connector-python[pandas,secure-local-storage]
+- Add support for key pair authentication
+
+
 2.4.0 (2024-06-05)
 -------------------
 

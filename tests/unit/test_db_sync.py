@@ -42,6 +42,7 @@ class TestDBSync(unittest.TestCase):
             'dbname': "dummy-value",
             'user': "dummy-value",
             'password': "dummy-value",
+            'private_key': "dummy-value",
             'warehouse': "dummy-value",
             'default_target_schema': "dummy-value",
             'file_format': "dummy-value"
@@ -92,15 +93,18 @@ class TestDBSync(unittest.TestCase):
         config_with_archive_load_files['archive_load_files'] = True
         self.assertGreater(len(validator(config_with_external_stage)), 0)
 
-        # Configuration without password nor use_browser_authentication=True
-        config_without_password_nor_browser_auth = minimal_config.copy()
-        config_without_password_nor_browser_auth.pop("password")
-        self.assertGreater(len(validator(minimal_config)), 0)
+        # Configuration without password nor private_key nor use_browser_authentication=True
+        config_without_password_nor_private_key_nor_browser_auth = minimal_config.copy()
+        config_without_password_nor_private_key_nor_browser_auth.pop("password")
+        config_without_password_nor_private_key_nor_browser_auth.pop("private_key")
+        self.assertGreater(len(validator(config_without_password_nor_private_key_nor_browser_auth)), 0)
 
-        # Configuration without password nor use_browser_authentication=True
-        config_without_password_with_browser_auth = minimal_config.copy()
-        config_without_password_with_browser_auth["use_browser_authentication"] = True
-        self.assertEqual(len(validator(minimal_config)), 0)
+        # Configuration without password nor private_key and use_browser_authentication=True
+        config_without_password_nor_private_key_nor_browser_auth = minimal_config.copy()
+        config_without_password_nor_private_key_nor_browser_auth.pop("password")
+        config_without_password_nor_private_key_nor_browser_auth.pop("private_key")
+        config_without_password_nor_private_key_nor_browser_auth["use_browser_authentication"] = True
+        self.assertEqual(len(validator(config_without_password_nor_private_key_nor_browser_auth)), 0)
 
     def test_column_type_mapping(self):
         """Test JSON type to Snowflake column type mappings"""
@@ -218,6 +222,7 @@ class TestDBSync(unittest.TestCase):
             'dbname': "dummy-value",
             'user': "dummy-value",
             'password': "dummy-value",
+            'private_key': "dummy-value",
             'warehouse': "dummy-value",
             'default_target_schema': "dummy-value",
             'file_format': "dummy-value"
@@ -291,6 +296,7 @@ class TestDBSync(unittest.TestCase):
             'dbname': "dummy-value",
             'user': "dummy-value",
             'password': "dummy-value",
+            'private_key': "dummy-value",
             'warehouse': "dummy-value",
             'default_target_schema': "dummy-value",
             'file_format': "dummy-value"
@@ -350,6 +356,7 @@ class TestDBSync(unittest.TestCase):
             'dbname': "dummy_dbname",
             'user': "dummy_user",
             'password': "dummy_password",
+            'private_key': "dummy_private_key",
             'warehouse': "dummy_warehouse",
             'default_target_schema': "dummy_default_target_schema",
             'file_format': "dummy_file_format",
@@ -388,6 +395,7 @@ class TestDBSync(unittest.TestCase):
             'dbname': "dummy_dbname",
             'user': "dummy_user",
             'password': "dummy_password",
+            'private_key': "dummy_private_key",
             'warehouse': "dummy_warehouse",
             'default_target_schema': "dummy_default_target_schema",
             'file_format': "dummy_file_format",
@@ -423,6 +431,7 @@ class TestDBSync(unittest.TestCase):
             'dbname': "dummy-db",
             'user': "dummy-user",
             'password': "dummy-passwd",
+            'private_key': "dummy-private_key",
             'warehouse': "dummy-wh",
             'default_target_schema': "dummy-schema",
             'file_format': "dummy-file-format"
@@ -471,6 +480,7 @@ class TestDBSync(unittest.TestCase):
             'dbname': "dummy-db",
             'user': "dummy-user",
             'password': "dummy-passwd",
+            'private_key': "dummy-private_key",
             'warehouse': "dummy-wh",
             'default_target_schema': "dummy-schema",
             'file_format': "dummy-file-format"
@@ -542,6 +552,7 @@ class TestDBSync(unittest.TestCase):
             'dbname': "dummy-db",
             'user': "dummy-user",
             'password': "dummy-passwd",
+            'private_key': "dummy-private_key",
             'warehouse': "dummy-wh",
             'default_target_schema': "dummy-schema",
             'file_format': "dummy-file-format"
@@ -591,6 +602,7 @@ class TestDBSync(unittest.TestCase):
             'dbname': "dummy-db",
             'user': "dummy-user",
             'password': "dummy-passwd",
+            'private_key': "dummy-private_key",
             'warehouse': "dummy-wh",
             'default_target_schema': "dummy-schema",
             'file_format': "dummy-file-format"
